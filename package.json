@@ -1,0 +1,34 @@
+{
+  "name": "temp-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "migrate": "migrate-mongo up",
+    "migrate:create": "migrate-mongo create"
+  },
+  "dependencies": {
+    "bullmq": "^5.54.0",
+    "ioredis": "^5.6.1",
+    "mongoose": "^8.15.2",
+    "next": "15.3.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.3.3",
+    "ioredis-mock": "^8.9.0",
+    "jest": "^30.0.0",
+    "migrate-mongo": "^12.1.3",
+    "tailwindcss": "^4"
+  }
+}

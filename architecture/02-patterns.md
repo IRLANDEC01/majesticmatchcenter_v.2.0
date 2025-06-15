@@ -1,0 +1,263 @@
+# Современные паттерны программирования в MajesticMatchCenter
+
+> **Примечание:** Код-база проекта использует JavaScript ES2022 без TypeScript.
+
+## 1. Паттерны React и Next.js
+
+### 1.1 React Server Components (RSC)
+- **Описание**: Компоненты, рендеринг которых происходит на сервере
+- **Преимущества**:
+  - Уменьшение JavaScript бандла на клиенте
+  - Прямой доступ к базе данных без API
+  - Улучшение SEO и начальной загрузки
+- **Применение**: Страницы турниров, семей, игроков, статичные компоненты
+
+### 1.2 Server Actions
+- **Описание**: Серверные функции, вызываемые из форм и обработчиков событий
+- **Преимущества**:
+  - Прогрессивное улучшение (работа без JavaScript)
+  - Валидация на сервере
+  - Оптимистичные обновления UI
+- **Применение**: Формы создания/редактирования, загрузка статистики, управление рейтингом
+
+### 1.3 Container/View/Hook
+- **Описание**: Разделение компонентов на контейнеры (логика), представления (UI) и хуки (состояние)
+- **Структура**:
+  ```
+  components/admin/map-form/
+  ├── MapFormContainer.jsx    # Контейнер с логикой
+  ├── components/             # View компоненты
+  │   └── MapFormView.jsx     # Чистое представление
+  └── hooks/                  # Логика и состояние
+      └── useMapForm.js       # Хук с бизнес-логикой
+  ```
+- **Применение**: Сложные формы, компоненты с богатой логикой
+
+### 1.4 Islands Architecture
+- **Описание**: Статический контент с интерактивными "островками"
+- **Преимущества**:
+  - Минимизация гидратации
+  - Улучшение Core Web Vitals
+  - Приоритизация интерактивности
+- **Применение**: Домашняя страница, страницы турниров, профили игроков
+
+## 2. Паттерны данных и кэширования
+
+### 2.1 Repository Pattern
+- **Описание**: Абстракция доступа к данным через репозитории
+- **Структура**:
+  ```javascript
+  // src/lib/repos/tournament-repo.js
+  export class TournamentRepository {
+    async findById(id) { /* ... */ }
+    async findActive() { /* ... */ }
+    async create(data) { /* ... */ }
+    // ...
+  }
+  ```
+- **Преимущества**:
+  - Централизация логики запросов
+  - Возможность замены ORM/БД
+  - Улучшенная тестируемость
+- **Применение**: Доступ к данным из API и серверных компонентов
+
+### 2.2 CQRS-light
+- **Описание**: Разделение операций чтения и записи
+- **Структура**:
+  ```javascript
+  // Queries (оптимизированы для чтения)
+  export const getTournamentWithParticipants = async (id) => { /* ... */ }
+  
+  // Commands (строгая валидация для записи)
+  export const createTournament = async (data) => { /* ... */ }
+  ```
+- **Применение**: API эндпоинты, серверные компоненты
+
+### 2.3 Redis Caching Strategy
+- **Описание**: Многоуровневое кэширование с использованием Redis
+- **Уровни кэширования**:
+  1. **Browser Cache**: Для статических ресурсов
+  2. **React Query**: Клиентский кэш данных
+  3. **Redis Cache**: Серверный распределенный кэш
+  4. **LRU-fallback**: Для локальной разработки
+- **Инвалидация по тегам**:
+  ```javascript
+  // Кэширование с тегами
+  await cache.set('tournament:123', data, {
+    tags: ['tournament', 'tournament:123']
+  });
+  
+  // Инвалидация по тегу
+  await cache.invalidateByTag('tournament:123');
+  ```
+- **Применение**: API ответы, частые запросы, агрегированные данные
+- **Конфигурация**:
+  - Переключение между Redis и in-memory кэшем через переменную окружения `CACHE_DRIVER=redis|memory`
+  - В dev/test среде используется `lru-cache` (npm-пакет) с настройками `max: 10000` и `ttl: 5 мин` по умолчанию
+  - В production всегда используется Redis для распределенного кэширования
+
+### 2.4 Strategy Pattern
+- **Описание**: Выбор стратегии в зависимости от окружения
+- **Пример**:
+  ```javascript
+  // src/lib/cache/index.js
+  const cacheAdapter = process.env.NODE_ENV === 'production'
+    ? new RedisAdapter(config)
+    : new MemoryAdapter();
+  
+  // src/lib/storage/index.js
+  const storageAdapter = process.env.STORAGE_DRIVER === 's3'
+    ? new S3Storage(config)
+    : new LocalStorage();
+  ```
+- **Применение**: Хранилище файлов, кэширование, аутентификация
+
+## 3. Паттерны безопасности
+
+### 3.1 Defense in Depth
+- **Описание**: Многоуровневая защита приложения
+- **Уровни**:
+  1. **Валидация форм**: Клиентская валидация с Zod
+  2. **API валидация**: Серверная валидация с Zod
+  3. **Mongoose валидация**: Валидация на уровне схемы
+  4. **Бизнес-правила**: Проверки в сервисах
+- **Применение**: Все входные данные от пользователя
+
+### 3.2 EditGuard Pattern
+- **Описание**: Защита от случайных изменений критических данных
+- **Пример**:
+  ```javascript
+  const editGuard = useEditGuard({
+    type: 'tournament',
+    status: tournament.status,
+    allowedStatuses: ['planned', 'active']
+  });
+  
+  // Блокировка редактирования завершенных турниров
+  if (editGuard.isBlocked) {
+    return <SecurityBlockMessage {...editGuard} />;
+  }
+  ```
+- **Применение**: Формы редактирования турниров, карт, семей
+
+### 3.3 Rate Limiting
+- **Описание**: Ограничение частоты запросов к API
+- **Реализация**:
+  ```javascript
+  // src/lib/rate-limiter.js с использованием Redis
+  export const rateLimiter = createRateLimiter({
+    store: new RedisStore({
+      client: redisClient,
+      prefix: 'ratelimit'
+    }),
+    windowMs: 15 * 60 * 1000, // 15 минут
+    max: 100 // Лимит запросов
+  });
+  ```
+- **Применение**: Аутентификация, критические API эндпоинты
+- **Конфигурация**:
+  - В production используется Redis-бэкенд для распределенного rate limiting
+  - В dev/test среде можно использовать memory-store для упрощения разработки
+  - Настраивается через переменную окружения `RATE_LIMIT_STORE=redis|memory`
+
+### 3.4 Image Scanning (Trivy)
+- **Описание**: Автоматическое сканирование Docker-образов на уязвимости
+- **Реализация**: Запускается в CI-пайплайне для проверки всех образов
+- **Преимущества**:
+  - Обнаружение уязвимостей в зависимостях
+  - Проверка соответствия лучшим практикам безопасности
+  - Блокирование деплоя при критических уязвимостях
+- **Применение**: CI/CD процесс, проверка перед деплоем
+
+## 4. Паттерны интеграции
+
+### 4.1 Adapter Pattern
+- **Описание**: Адаптеры для внешних сервисов
+- **Структура**:
+  ```javascript
+  // src/lib/storage/s3-adapter.js
+  export class S3Adapter implements StorageAdapter {
+    async upload(file) { /* ... */ }
+    async download(path) { /* ... */ }
+    async delete(path) { /* ... */ }
+  }
+  ```
+- **Применение**: Хранилище файлов, кэширование, внешние API
+
+### 4.2 Publisher-Subscriber (Redis PubSub)
+- **Описание**: Асинхронная коммуникация через Redis PubSub
+- **Реализация**:
+  ```javascript
+  // Публикация события
+  await redisClient.publish('tournament:completed', JSON.stringify({
+    id: tournament.id,
+    name: tournament.name
+  }));
+  
+  // Подписка на события
+  redisClient.subscribe('tournament:completed');
+  redisClient.on('message', (channel, message) => {
+    if (channel === 'tournament:completed') {
+      const data = JSON.parse(message);
+      // Обработка события
+    }
+  });
+  ```
+- **Применение**: Уведомления, обновление кэша, фоновые задачи
+
+### 4.3 Circuit Breaker
+- **Описание**: Защита от каскадных сбоев внешних сервисов
+- **Реализация**:
+  ```javascript
+  const breaker = new CircuitBreaker(
+    async () => await s3Client.upload(file),
+    {
+      failureThreshold: 3,
+      resetTimeout: 30000
+    }
+  );
+  
+  try {
+    const result = await breaker.fire();
+    return result;
+  } catch (error) {
+    // Fallback логика
+    return await localStorageBackup.upload(file);
+  }
+  ```
+- **Применение**: Интеграции с S3, внешними API, Redis 
+
+### 4.4 Scheduled Jobs с BullMQ
+- **Описание**: Планирование и выполнение фоновых задач с гарантированной доставкой
+- **Преимущества**:
+  - Персистентность задач в Redis
+  - Атомарные операции с блокировками
+  - Автоматические повторы при сбоях
+  - Горизонтальное масштабирование
+- **Структура**:
+  - **Очереди** - раздельные очереди для разных типов задач
+  - **Планировщики** - управление повторяющимися задачами
+  - **Обработчики** - логика выполнения задач
+  - **Мониторинг** - отслеживание выполнения через Bull Board
+- **Применение**:
+  - Автоматическая активация турниров и карт по расписанию
+  - Периодическая очистка временных данных
+  - Генерация отчетов и агрегация статистики 
+
+**Пример структуры для формы создания/редактирования:**
+```
+├── components/
+│   └── admin/
+│       └── map-form/
+│           ├── components/     # Презентационные компоненты
+│           │   ├── MapFormBasicFields.jsx
+│           │   ├── MapFormParticipants.jsx
+│           │   └── MapFormStatistics.jsx
+│           ├── hooks/          # Хуки с логикой
+│           │   ├── useMapForm.js
+│           │   └── useParticipants.js
+│           ├── utils/          # Утилиты
+│           │   └── mapFormHelpers.js
+│           ├── MapFormContainer.jsx  # Контейнер с состоянием
+│           └── MapFormView.jsx       # Презентационный компонент
+``` 
