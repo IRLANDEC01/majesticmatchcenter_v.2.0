@@ -11,4 +11,8 @@
 7. [Сборка, Dockerfile и миграции](07-build-and-migrations.md)
 8. [Усиление безопасности и отказоустойчивости в Production](08-production-hardening.md)
 9. [UI и фронтенд](09-ui-frontend.md)
-10. [Структура проекта](project-structure.md) 
+10. [Структура проекта](project-structure.md)
+
+## 10. Тестирование
+
+- **[Стратегия тестирования](./10-testing-strategy.md)** 

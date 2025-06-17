@@ -1,54 +1,35 @@
 import mongoose from 'mongoose';
 
-/**
- * Глобальная переменная для хранения кешированного подключения.
- * В среде разработки мы хотим избежать повторных подключений при каждом
- * изменении кода, которое вызывает горячую перезагрузку.
- */
-let cached = global.mongoose;
+// Используем глобальную переменную для кэширования соединения
+// Это предотвращает многократные подключения в средах без сервера (serverless)
+let cachedConnection = null;
 
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
+export async function connectToDatabase() {
+  if (cachedConnection && mongoose.connection.readyState === 1) {
+    return cachedConnection;
+  }
+
+  // jest-mongodb-preset предоставляет MONGO_URL. Для локальной разработки/продакшена используем MONGODB_URI.
+  const MONGODB_URI = process.env.MONGO_URL || process.env.MONGODB_URI;
+  if (!MONGODB_URI) {
+    throw new Error('Please define the MONGO_URL or MONGODB_URI environment variable');
+  }
+
+  // Создаем уникальное имя БД для каждого воркера Jest для полной изоляции.
+  const connectOptions = {};
+  if (process.env.JEST_WORKER_ID) {
+    connectOptions.dbName = `test_${process.env.JEST_WORKER_ID}`;
+  }
+
+  mongoose.set('strictQuery', true);
+  cachedConnection = await mongoose.connect(MONGODB_URI, connectOptions);
+  
+  return cachedConnection;
 }
 
-/**
- * Функция для подключения к базе данных MongoDB.
- * Реализует паттерн "синглтон" для управления подключением.
- * @returns {Promise<mongoose>} Промис, который разрешается объектом mongoose.
- */
-async function connectToDatabase() {
-  if (cached.conn) {
-    console.log("=> using cached database connection");
-    return cached.conn;
+export async function disconnectFromDatabase() {
+  if (cachedConnection) {
+    await mongoose.connection.close();
+    cachedConnection = null;
   }
-
-  if (!cached.promise) {
-    const opts = {
-      bufferCommands: false, // Отключаем буферизацию команд
-    };
-
-    const MONGODB_URI = process.env.MONGODB_URI;
-
-    if (!MONGODB_URI) {
-      throw new Error(
-        'Please define the MONGODB_URI environment variable inside .env.local'
-      );
-    }
-
-    console.log("=> using new database connection");
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
-  }
-
-  try {
-    cached.conn = await cached.promise;
-  } catch (e) {
-    cached.promise = null;
-    throw e;
-  }
-
-  return cached.conn;
-}
-
-export default connectToDatabase; 
+} 

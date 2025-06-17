@@ -23,7 +23,7 @@ const playerSchema = new mongoose.Schema({
       message: 'Фамилия может содержать только латинские буквы и быть одним словом.',
     },
   },
-  // Уникальный идентификатор для URL, генерируется из "firstName-lastName"
+  // Уникальный идентификатор для URL, генерируется из имени и фамилии
   slug: {
     type: String,
     unique: true,
@@ -48,6 +48,17 @@ const playerSchema = new mongoose.Schema({
     ref: 'Family',
     default: null,
   },
+  // Статус игрока для управления его жизненным циклом
+  status: {
+    type: String,
+    enum: {
+      values: ['active', 'inactive', 'banned'],
+      message: '{VALUE} не является допустимым статусом.',
+    },
+    default: 'active',
+    required: true,
+    index: true,
+  },
   // Социальные сети игрока
   socialLinks: [socialLinkSchema],
   // SEO-поля
@@ -58,9 +69,8 @@ const playerSchema = new mongoose.Schema({
 });
 
 // Индексы для ускорения поиска.
-// Уникальный составной индекс гарантирует, что не будет двух игроков с одинаковым именем и фамилией.
+// Уникальный составной индекс по имени и фамилии.
 playerSchema.index({ firstName: 1, lastName: 1 }, { unique: true });
-playerSchema.index({ slug: 1 }); // slug также должен быть уникальным
 
 // Вспомогательная функция для капитализации
 const capitalize = (s) => {
@@ -78,11 +88,9 @@ playerSchema.pre('validate', function(next) {
     this.lastName = capitalize(this.lastName);
   }
 
-  // Генерация slug из имени и фамилии, если он еще не создан или имя/фамилия изменились
+  // Генерация slug из имени и фамилии, если они изменились или slug отсутствует
   if (this.isModified('firstName') || this.isModified('lastName') || !this.slug) {
-    const slugFirstName = this.firstName ? this.firstName.toLowerCase() : '';
-    const slugLastName = this.lastName ? this.lastName.toLowerCase() : '';
-    this.slug = `${slugFirstName}-${slugLastName}`;
+    this.slug = `${this.firstName} ${this.lastName}`.toLowerCase().replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '');
   }
   
   next();

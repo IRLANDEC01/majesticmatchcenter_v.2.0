@@ -75,7 +75,6 @@ const familySchema = new mongoose.Schema({
   versionKey: '__v',
 });
 
-familySchema.index({ slug: 1 });
 familySchema.index({ name: 'text', description: 'text' }); // Для полнотекстового поиска
 
 familySchema.pre('validate', function(next) {

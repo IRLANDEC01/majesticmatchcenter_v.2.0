@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
-import dbConnect from '@/lib/db';
-import { mapTemplateRepository } from '@/lib/repos/map-template-repo';
+import { mapTemplateService } from '@/lib/domain/map-templates/map-template-service';
+import { connectToDatabase } from '@/lib/db';
+import { z } from 'zod';
+
+const createTemplateSchema = z.object({
+  name: z.string().min(1, 'Название не может быть пустым.'),
+  description: z.string().optional(),
+  mapImage: z.string().url().optional(),
+});
 
 /**
  * Обработчик GET-запроса для получения всех шаблонов карт.
@@ -8,12 +15,12 @@ import { mapTemplateRepository } from '@/lib/repos/map-template-repo';
  */
 export async function GET() {
   try {
-    await dbConnect();
-    const templates = await mapTemplateRepository.findAll();
-    return NextResponse.json(templates, { status: 200 });
+    await connectToDatabase();
+    const templates = await mapTemplateService.getAllTemplates();
+    return NextResponse.json(templates);
   } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+    console.error('Failed to get map templates:', error);
+    return NextResponse.json({ message: 'Ошибка сервера при получении шаблонов карт' }, { status: 500 });
   }
 }
 
@@ -24,21 +31,21 @@ export async function GET() {
  */
 export async function POST(request) {
   try {
-    await dbConnect();
-    const data = await request.json();
+    await connectToDatabase();
+    const json = await request.json();
 
-    // TODO: Добавить валидацию данных с помощью Zod
+    const validationResult = createTemplateSchema.safeParse(json);
+    if (!validationResult.success) {
+      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
+    }
 
-    const newTemplate = await mapTemplateRepository.create(data);
+    const newTemplate = await mapTemplateService.createTemplate(validationResult.data);
     return NextResponse.json(newTemplate, { status: 201 });
   } catch (error) {
-    console.error('API Error:', error);
-    if (error.name === 'ValidationError') {
-      return NextResponse.json({ message: error.message, errors: error.errors }, { status: 400 });
-    }
+    console.error('Failed to create map template:', error);
     if (error.code === 11000) {
-      return NextResponse.json({ message: 'Шаблон с таким name или slug уже существует.' }, { status: 409 });
+      return NextResponse.json({ message: 'Шаблон карты с таким названием уже существует' }, { status: 409 });
     }
-    return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ message: 'Ошибка сервера при создании шаблона карты' }, { status: 500 });
   }
 } 

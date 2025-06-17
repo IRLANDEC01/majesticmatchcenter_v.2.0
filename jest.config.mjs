@@ -1,26 +1,23 @@
-/** @type {import('jest').Config} */
-const config = {
-  // Указываем среду выполнения тестов
+import nextJest from 'next/jest.js';
+
+// Предоставляем путь к приложению Next.js для загрузки next.config.js и .env
+const createJestConfig = nextJest({ dir: './' });
+
+// Базовая конфигурация Jest, которую мы хотим использовать
+const customJestConfig = {
+  preset: '@shelf/jest-mongodb',
   testEnvironment: 'node',
-
-  // Настройка трансформации файлов с помощью babel-jest
-  transform: {
-    '^.+\\.(js|jsx|mjs)$': 'babel-jest',
-  },
-
-  // Указываем Jest не игнорировать ESM-пакеты при трансформации.
-  // Это ключевой момент для работы с Mongoose 8+.
-  transformIgnorePatterns: [
-    '/node_modules/(?!(mongoose|mongodb|bson|@mongodb-js|mongodb-memory-server|ioredis)/)',
-  ],
-
-  // Настройка псевдонимов путей для соответствия с jsconfig.json
+  setupFilesAfterEnv: ['./jest.setup.js'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  
-  // Файл для настроек перед запуском тестов (моки)
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  // Говорим Jest не трансформировать модули, которые уже являются ESM.
+  // Это ключевое исправление для ошибки 'Must use import to load ES Module'.
+  transformIgnorePatterns: [
+    '/node_modules/(?!(mongoose|mongodb|bson|@mongodb-js|mongodb-memory-server)/)',
+    '^.+\\.module\\.(css|sass|scss)$',
+  ],
 };
 
-export default config; 
+// Экспортируем функцию, которую next/jest может выполнить для создания финальной конфигурации.
+export default createJestConfig(customJestConfig); 
