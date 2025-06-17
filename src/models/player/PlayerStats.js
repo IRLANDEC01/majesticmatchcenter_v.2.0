@@ -74,7 +74,27 @@ const playerStatsSchema = new mongoose.Schema({
   }],
 }, {
   timestamps: true,
-  versionKey: '__v',
+  collection: 'player_stats',
+  versionKey: false,
+  toJSON: {
+    virtuals: true,
+    transform(doc, ret) {
+      delete ret.id;
+    },
+  },
+  toObject: {
+    virtuals: true,
+  },
+});
+
+playerStatsSchema.virtual('kdRatio').get(function () {
+  const deaths = this.overall?.deaths ?? 0;
+  const kills = this.overall?.kills ?? 0;
+
+  if (deaths === 0) {
+    return kills;
+  }
+  return parseFloat((kills / deaths).toFixed(2));
 });
 
 const PlayerStats = mongoose.models.PlayerStats || mongoose.model('PlayerStats', playerStatsSchema);
