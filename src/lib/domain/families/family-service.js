@@ -26,7 +26,7 @@ export class FamilyService {
   /**
    * Получает все семьи.
    * @param {object} [options] - Опции.
-   * @param {boolean} [options.includeInactive=false] - Включить неактивные семьи.
+   * @param {boolean} [options.includeArchived=false] - Включить архивированные семьи.
    * @returns {Promise<Array<object>>}
    */
   async getAllFamilies(options) {
@@ -79,13 +79,14 @@ export class FamilyService {
   }
 
   /**
-   * Деактивирует семью (мягкое удаление).
+   * Архивирует семью (мягкое удаление).
    * @param {string} id - ID семьи.
    * @returns {Promise<object|null>}
    */
-  async deactivateFamily(id) {
-    // Здесь может быть логика проверки, можно ли деактивировать семью.
-    return this.familyRepository.deactivate(id);
+  async archiveFamily(id) {
+    // Здесь может быть логика проверки, можно ли архивировать семью
+    // (например, если она участвует в активном турнире).
+    return this.familyRepository.archiveById(id);
   }
 }
 

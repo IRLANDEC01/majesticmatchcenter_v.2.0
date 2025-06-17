@@ -14,9 +14,11 @@ class FamilyRepository {
   async findById(id) {
     const cacheKey = `family:${id}`;
     const cached = await cache.get(cacheKey);
+    // Если в кэше есть, но он архивирован, считаем, что его нет
+    if (cached?.archivedAt) return null;
     if (cached) return cached;
 
-    const family = await Family.findById(id).lean();
+    const family = await Family.findOne({ _id: id, archivedAt: null }).lean();
     if (family) {
       await cache.set(cacheKey, family, {
         tags: [`family:${id}`, 'families_list'],
@@ -33,9 +35,10 @@ class FamilyRepository {
   async findBySlug(slug) {
     const cacheKey = `family:slug:${slug}`;
     const cached = await cache.get(cacheKey);
+    if (cached?.archivedAt) return null;
     if (cached) return cached;
 
-    const family = await Family.findOne({ slug }).lean();
+    const family = await Family.findOne({ slug, archivedAt: null }).lean();
     if (family) {
       await cache.set(cacheKey, family, {
         tags: [`family:${family._id}`, 'families_list'],
@@ -50,23 +53,18 @@ class FamilyRepository {
    * @returns {Promise<object|null>}
    */
   async findByName(name) {
-    // Поиск по имени не кэшируется отдельно, т.к. менее частый,
-    // но если семья найдена, ее основной кэш по ID может быть обновлен.
-    return Family.findOne({ name }).lean();
+    return Family.findOne({ name, archivedAt: null }).lean();
   }
 
 
   /**
    * Находит все семьи.
    * @param {object} [options] - Опции.
-   * @param {boolean} [options.includeInactive=false] - Включить неактивные семьи.
+   * @param {boolean} [options.includeArchived=false] - Включить архивированные семьи.
    * @returns {Promise<Array<object>>}
    */
-  async findAll({ includeInactive = false } = {}) {
-    const query = {};
-    if (!includeInactive) {
-      query.status = 'active';
-    }
+  async findAll({ includeArchived = false } = {}) {
+    const query = includeArchived ? {} : { archivedAt: null };
     return Family.find(query).lean();
   }
 
@@ -91,26 +89,63 @@ class FamilyRepository {
   async update(id, data) {
     const family = await Family.findByIdAndUpdate(id, data, { new: true }).lean();
     if (family) {
-      await cache.invalidateByTag(`family:${id}`);
-      await cache.invalidateByTag(`family:slug:${family.slug}`);
-      await cache.invalidateByTag('families_list');
+      await this._invalidateCache(family);
     }
     return family;
   }
-
+  
   /**
-   * Деактивирует семью по ID (мягкое удаление).
+   * Архивирует семью по ID.
    * @param {string} id - ID семьи.
    * @returns {Promise<object|null>}
    */
-  async deactivate(id) {
-    const family = await Family.findByIdAndUpdate(id, { status: 'inactive' }, { new: true }).lean();
-    if (family) {
-      await cache.invalidateByTag(`family:${id}`);
-      await cache.invalidateByTag(`family:slug:${family.slug}`);
-      await cache.invalidateByTag('families_list');
+  async archiveById(id) {
+    return this._updateArchiveStatus(id, true);
+  }
+
+  /**
+   * Восстанавливает семью по ID.
+   * @param {string} id - ID семьи.
+   * @returns {Promise<object|null>}
+   */
+  async restoreById(id) {
+    return this._updateArchiveStatus(id, false);
+  }
+
+  /**
+   * Приватный метод для обновления статуса архивации.
+   * @param {string} id - ID семьи.
+   * @param {boolean} isArchived - Архивировать или нет.
+   * @returns {Promise<object|null>}
+   * @private
+   */
+  async _updateArchiveStatus(id, isArchived) {
+    const family = await Family.findById(id);
+    if (!family) return null;
+
+    const alreadyArchived = !!family.archivedAt;
+    if (isArchived === alreadyArchived) {
+      return isArchived ? null : family.toObject();
     }
-    return family;
+    
+    family.archivedAt = isArchived ? new Date() : null;
+    await family.save();
+    
+    await this._invalidateCache(family);
+    
+    return family.toObject();
+  }
+
+  /**
+   * Инвалидирует кэш для семьи.
+   * @param {object} family - Объект семьи.
+   * @private
+   */
+  async _invalidateCache(family) {
+    if (!family) return;
+    await cache.invalidateByTag(`family:${family._id}`);
+    await cache.invalidateByTag(`family:slug:${family.slug}`);
+    await cache.invalidateByTag('families_list');
   }
 }
 

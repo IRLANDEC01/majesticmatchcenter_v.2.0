@@ -25,6 +25,7 @@ describe('Family Model', () => {
     expect(savedFamily.name).toBe('The Winners');
     expect(savedFamily.slug).toBe('the-winners');
     expect(savedFamily.members[0].role).toBe('leader');
+    expect(savedFamily.archivedAt).toBe(null);
   });
 
   it('должен автоматически генерировать slug из name', async () => {

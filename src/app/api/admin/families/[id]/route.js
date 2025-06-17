@@ -14,7 +14,6 @@ const updateFamilySchema = z.object({
   description: z.string().trim().max(5000).optional(),
   logo: z.string().url('Некорректный URL логотипа.').optional(),
   banner: z.string().url('Некорректный URL баннера.').optional(),
-  status: z.enum(['active', 'inactive']).optional(),
 });
 
 /**
@@ -77,7 +76,7 @@ export async function PUT(request, { params }) {
 
 /**
  * DELETE /api/admin/families/[id]
- * Деактивирует семью (мягкое удаление).
+ * Архивирует семью (мягкое удаление).
  */
 export async function DELETE(request, { params }) {
   try {
@@ -87,16 +86,16 @@ export async function DELETE(request, { params }) {
     }
     
     await connectToDatabase();
-    const deactivatedFamily = await familyService.deactivateFamily(params.id);
+    const archivedFamily = await familyService.archiveFamily(params.id);
 
-    if (!deactivatedFamily) {
-      return NextResponse.json({ message: 'Семья не найдена' }, { status: 404 });
+    if (!archivedFamily) {
+      return NextResponse.json({ message: 'Семья не найдена или уже архивирована' }, { status: 404 });
     }
 
-    // Возвращаем деактивированную семью, чтобы клиент видел итоговое состояние
-    return NextResponse.json(deactivatedFamily);
+    // Возвращаем архивированную семью, чтобы клиент видел итоговое состояние
+    return NextResponse.json(archivedFamily);
   } catch (error) {
-    console.error(`Failed to deactivate family ${params.id}:`, error);
-    return NextResponse.json({ message: 'Ошибка сервера при деактивации семьи' }, { status: 500 });
+    console.error(`Failed to archive family ${params.id}:`, error);
+    return NextResponse.json({ message: 'Ошибка сервера при архивации семьи' }, { status: 500 });
   }
 } 

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/db';
-import Tournament from '@/models/tournament/Tournament';
+import { tournamentService } from '@/lib/domain/tournaments/tournament-service.js';
 import { z } from 'zod';
 import mongoose from 'mongoose';
 
@@ -24,7 +23,6 @@ const tournamentCreateSchema = z.object({
 
 export async function POST(request) {
   try {
-    await connectToDatabase();
     const body = await request.json();
 
     const validation = tournamentCreateSchema.safeParse(body);
@@ -32,26 +30,14 @@ export async function POST(request) {
     if (!validation.success) {
       return NextResponse.json({ errors: validation.error.flatten().fieldErrors }, { status: 400 });
     }
-
-    const { name, template, tournamentType, startDate, participants, description } = validation.data;
-
-    const newTournament = new Tournament({
-      name,
-      template,
-      tournamentType,
-      startDate,
-      participants,
-      description,
-    });
-
-    await newTournament.save();
+    
+    // Используем сервисный слой для создания турнира
+    const newTournament = await tournamentService.createTournament(validation.data);
 
     return NextResponse.json(newTournament, { status: 201 });
 
   } catch (error) {
-    if (error.code === 11000) {
-      // Ошибка MongoDB E11000 указывает на нарушение уникального индекса.
-      // В нашей схеме это может быть только поле 'slug'.
+    if (error.message.includes('slug-конфликт')) { // Проверяем сообщение об ошибке
       return NextResponse.json({ message: 'Турнир с таким названием уже существует (slug-конфликт).' }, { status: 409 });
     }
     if (error instanceof z.ZodError) {
@@ -63,9 +49,11 @@ export async function POST(request) {
 }
 
 export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+  const includeArchived = searchParams.get('include_archived') === 'true';
+
   try {
-    await connectToDatabase();
-    const tournaments = await Tournament.find({}).sort({ createdAt: -1 });
+    const tournaments = await tournamentService.getTournaments({ includeArchived });
     return NextResponse.json(tournaments, { status: 200 });
   } catch (error) {
     console.error(error);

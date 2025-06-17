@@ -59,12 +59,11 @@ const familySchema = new mongoose.Schema({
   },
   logo: { type: String, trim: true },
   banner: { type: String, trim: true },
-  // Статус семьи для управления ее жизненным циклом
-  status: {
-    type: String,
-    enum: ['active', 'inactive'],
-    default: 'active',
-    required: true,
+  // Дата архивации семьи. Если значение `null` — семья активна.
+  // Если установлена дата — семья считается удаленной (архивированной).
+  archivedAt: {
+    type: Date,
+    default: null,
     index: true,
   },
   members: [memberSchema],

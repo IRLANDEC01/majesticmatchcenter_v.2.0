@@ -101,6 +101,13 @@ const tournamentSchema = new mongoose.Schema({
     default: 'planned',
     index: true,
   },
+  // Дата архивации для мягкого удаления.
+  archivedAt: {
+    type: Date,
+    default: null,
+    index: true,
+    sparse: true, // Индекс будет создан только для документов с этим полем (не null)
+  },
   // Даты проведения
   startDate: {
     type: Date,

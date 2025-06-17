@@ -6,8 +6,7 @@ const mockFamilyRepository = {
   findAll: jest.fn(),
   findById: jest.fn(),
   update: jest.fn(),
-  delete: jest.fn(),
-  deactivate: jest.fn(),
+  archiveById: jest.fn(),
 };
 
 beforeEach(() => {
@@ -24,10 +23,11 @@ describe('FamilyService', () => {
     expect(mockFamilyRepository.create).toHaveBeenCalledWith(familyData);
   });
 
-  it('getAllFamilies должен вызывать repo.findAll', async () => {
+  it('getAllFamilies должен вызывать repo.findAll с опциями', async () => {
     mockFamilyRepository.findAll.mockResolvedValue([]);
-    await service.getAllFamilies();
-    expect(mockFamilyRepository.findAll).toHaveBeenCalled();
+    const options = { includeArchived: true };
+    await service.getAllFamilies(options);
+    expect(mockFamilyRepository.findAll).toHaveBeenCalledWith(options);
   });
 
   it('getFamilyById должен вызывать repo.findById', async () => {
@@ -64,12 +64,12 @@ describe('FamilyService', () => {
     expect(mockFamilyRepository.update).toHaveBeenCalledWith(familyId, expectedUpdate);
   });
 
-  it('deactivateFamily должен вызывать repo.deactivate', async () => {
-    const familyId = 'family-id-to-deactivate';
-    mockFamilyRepository.deactivate.mockResolvedValue({ _id: familyId, status: 'inactive' });
+  it('archiveFamily должен вызывать repo.archiveById', async () => {
+    const familyId = 'family-id-to-archive';
+    mockFamilyRepository.archiveById.mockResolvedValue({ _id: familyId, archivedAt: new Date() });
     
-    await service.deactivateFamily(familyId);
+    await service.archiveFamily(familyId);
     
-    expect(mockFamilyRepository.deactivate).toHaveBeenCalledWith(familyId);
+    expect(mockFamilyRepository.archiveById).toHaveBeenCalledWith(familyId);
   });
 }); 

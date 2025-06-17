@@ -85,13 +85,44 @@ describe('FamilyRepository', () => {
         expect(foundFamily.name).toBe(familyData.name);
       }
     });
+
+    it('не должен находить архивированную семью по слагу', async () => {
+      const family = await familyRepository.create({ name: 'Archived Slug', displayLastName: 'Archived' });
+      await familyRepository.archiveById(family._id);
+      const found = await familyRepository.findBySlug(family.slug);
+      expect(found).toBeNull();
+    });
   });
 
   describe('findAll', () => {
-    it('должен возвращать все созданные семьи', async () => {
+    beforeEach(async () => {
+      // Очистка перед каждым тестом в этом блоке
+      await Family.deleteMany({});
+    });
+
+    it('должен возвращать все неархивированные семьи', async () => {
       await familyRepository.create({ name: 'Family One', displayLastName: 'One' });
       await familyRepository.create({ name: 'Family Two', displayLastName: 'Two' });
       const families = await familyRepository.findAll();
+      expect(families).toHaveLength(2);
+    });
+
+    it('должен возвращать только неархивированные семьи по умолчанию', async () => {
+      await familyRepository.create({ name: 'Active Fam', displayLastName: 'Active' });
+      const archivedFam = await familyRepository.create({ name: 'Archived Fam', displayLastName: 'Archived' });
+      await familyRepository.archiveById(archivedFam._id);
+      
+      const families = await familyRepository.findAll();
+      expect(families).toHaveLength(1);
+      expect(families[0].name).toBe('Active Fam');
+    });
+
+    it('должен возвращать все семьи, включая архивированные, с опцией', async () => {
+      await familyRepository.create({ name: 'Active Fam Two', displayLastName: 'ActiveTwo' });
+      const archivedFam = await familyRepository.create({ name: 'Archived Fam Two', displayLastName: 'ArchivedTwo' });
+      await familyRepository.archiveById(archivedFam._id);
+      
+      const families = await familyRepository.findAll({ includeArchived: true });
       expect(families).toHaveLength(2);
     });
   });
@@ -114,34 +145,51 @@ describe('FamilyRepository', () => {
     });
   });
 
-  describe('deactivate', () => {
-    it('должен деактивировать семью и инвалидировать кэш', async () => {
-      const family = await familyRepository.create({ name: 'ToDeactivate', displayLastName: 'Deactivate' });
-      if (!family) throw new Error('Test setup failed: family not created');
+  describe('archiveById and restoreById', () => {
+    it('должен архивировать семью и инвалидировать кэш', async () => {
+      const family = await familyRepository.create({ name: 'ToArchive', displayLastName: 'Archive' });
       
       const familyId = family._id;
       const familySlug = family.slug;
 
-      const deactivatedFamily = await familyRepository.deactivate(familyId);
+      const archivedFamily = await familyRepository.archiveById(familyId);
 
-      if (deactivatedFamily) {
-        expect(deactivatedFamily.status).toBe('inactive');
-      }
+      expect(archivedFamily).not.toBeNull();
+      expect(archivedFamily.archivedAt).toBeInstanceOf(Date);
 
-      const foundAfterDeactivation = await Family.findById(familyId);
-      expect(foundAfterDeactivation).not.toBeNull();
-      if (foundAfterDeactivation) {
-        expect(foundAfterDeactivation.status).toBe('inactive');
-      }
+      const foundAfterArchive = await Family.findById(familyId);
+      expect(foundAfterArchive).not.toBeNull();
+      expect(foundAfterArchive.archivedAt).toBeInstanceOf(Date);
 
       expect(cache.invalidateByTag).toHaveBeenCalledWith(`family:${familyId.toString()}`);
       expect(cache.invalidateByTag).toHaveBeenCalledWith(`family:slug:${familySlug}`);
       expect(cache.invalidateByTag).toHaveBeenCalledWith('families_list');
     });
 
-    it('должен возвращать null, если семья для деактивации не найдена', async () => {
+    it('должен восстанавливать архивированную семью', async () => {
+      const family = await familyRepository.create({ name: 'ToRestore', displayLastName: 'Restore' });
+      await familyRepository.archiveById(family._id);
+
+      const restoredFamily = await familyRepository.restoreById(family._id);
+      expect(restoredFamily).not.toBeNull();
+      expect(restoredFamily.archivedAt).toBeNull();
+
+      const foundAfterRestore = await Family.findById(family._id);
+      expect(foundAfterRestore).not.toBeNull();
+      expect(foundAfterRestore.archivedAt).toBeNull();
+    });
+
+    it('не должен находить семью для архивации, если она уже архивирована', async () => {
+      const family = await familyRepository.create({ name: 'AlreadyArchived', displayLastName: 'Archived' });
+      await familyRepository.archiveById(family._id);
+      
+      const result = await familyRepository.archiveById(family._id);
+      expect(result).toBeNull();
+    });
+
+    it('должен возвращать null, если семья для архивации не найдена', async () => {
       const nonExistentId = new mongoose.Types.ObjectId();
-      const result = await familyRepository.deactivate(nonExistentId);
+      const result = await familyRepository.archiveById(nonExistentId);
       expect(result).toBeNull();
     });
   });

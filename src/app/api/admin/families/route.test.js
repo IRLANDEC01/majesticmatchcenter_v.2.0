@@ -76,9 +76,11 @@ describe('API /api/admin/families', () => {
       expect(body).toEqual([]);
     });
 
-    it('должен возвращать только активные семьи по умолчанию', async () => {
+    it('должен возвращать только неархивированные семьи по умолчанию', async () => {
       await new Family({ name: 'Active Family', displayLastName: 'Active' }).save();
-      await new Family({ name: 'Inactive Family', displayLastName: 'Inactive', status: 'inactive' }).save();
+      const archivedFamily = await new Family({ name: 'Archived Family', displayLastName: 'Archived' }).save();
+      archivedFamily.archivedAt = new Date();
+      await archivedFamily.save();
 
       const request = new Request('http://localhost/api/admin/families');
       const response = await GET(request);
@@ -89,11 +91,13 @@ describe('API /api/admin/families', () => {
       expect(body[0].name).toContain('Active Family');
     });
 
-    it('должен возвращать все семьи при `include_inactive=true`', async () => {
+    it('должен возвращать все семьи при `include_archived=true`', async () => {
       await new Family({ name: 'First Family', displayLastName: 'First' }).save();
-      await new Family({ name: 'Second Family', displayLastName: 'Second', status: 'inactive' }).save();
+      const archivedFamily = await new Family({ name: 'Second Family', displayLastName: 'Second' }).save();
+      archivedFamily.archivedAt = new Date();
+      await archivedFamily.save();
 
-      const request = new Request('http://localhost/api/admin/families?include_inactive=true');
+      const request = new Request('http://localhost/api/admin/families?include_archived=true');
       const response = await GET(request);
       const body = await response.json();
 

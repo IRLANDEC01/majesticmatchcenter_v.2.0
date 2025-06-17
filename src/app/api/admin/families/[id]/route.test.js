@@ -30,6 +30,14 @@ describe('/api/admin/families/[id]', () => {
       expect(response.status).toBe(200);
     });
 
+    it('должен возвращать 404, если семья архивирована', async () => {
+      const testFamily = await Family.create({ name: 'Archived Family GET', displayLastName: 'Test' });
+      await testFamily.updateOne({ $set: { archivedAt: new Date() } });
+      
+      const response = await GET(null, { params: { id: testFamily._id.toString() } });
+      expect(response.status).toBe(404);
+    });
+
     it('должен возвращать 400 при невалидном ID', async () => {
       const response = await GET(null, { params: { id: 'invalid-id' } });
       expect(response.status).toBe(400);
@@ -82,24 +90,30 @@ describe('/api/admin/families/[id]', () => {
 
   // DELETE Tests
   describe('DELETE', () => {
-    it('должен деактивировать семью и возвращать статус 200', async () => {
+    it('должен архивировать семью и возвращать статус 200', async () => {
       const testFamily = await Family.create({ name: 'Test Family DELETE', displayLastName: 'Test' });
       const response = await DELETE(null, { params: { id: testFamily._id.toString() } });
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body.status).toBe('inactive');
+      expect(body.archivedAt).toBeDefined();
 
       const dbFamily = await Family.findById(testFamily._id);
       expect(dbFamily).not.toBeNull();
-      if (dbFamily) {
-        expect(dbFamily.status).toBe('inactive');
-      }
+      expect(dbFamily.archivedAt).toBeInstanceOf(Date);
     });
 
-    it('должен возвращать 404 при попытке деактивировать несуществующую семью', async () => {
+    it('должен возвращать 404 при попытке архивировать несуществующую семью', async () => {
       const nonExistentId = new mongoose.Types.ObjectId();
       const response = await DELETE(null, { params: { id: nonExistentId.toString() } });
+      expect(response.status).toBe(404);
+    });
+
+    it('должен возвращать 404 при попытке архивировать уже архивированную семью', async () => {
+      const testFamily = await Family.create({ name: 'Already Archived Family', displayLastName: 'Test' });
+      await DELETE(null, { params: { id: testFamily._id.toString() } }); // First DELETE
+      
+      const response = await DELETE(null, { params: { id: testFamily._id.toString() } }); // Second DELETE
       expect(response.status).toBe(404);
     });
   });

@@ -15,16 +15,16 @@ const createFamilySchema = z.object({
 /**
  * GET /api/admin/families
  * Возвращает все семьи.
- * Поддерживает query-параметр `include_inactive=true` для включения неактивных.
+ * Поддерживает query-параметр `include_archived=true` для включения архивированных.
  */
 export async function GET(request) {
   try {
     await connectToDatabase();
     
     const { searchParams } = new URL(request.url);
-    const includeInactive = searchParams.get('include_inactive') === 'true';
+    const includeArchived = searchParams.get('include_archived') === 'true';
 
-    const families = await familyService.getAllFamilies({ includeInactive });
+    const families = await familyService.getAllFamilies({ includeArchived });
     return NextResponse.json(families);
   } catch (error) {
     console.error('Failed to get families:', error);
