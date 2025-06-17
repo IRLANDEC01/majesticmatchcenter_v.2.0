@@ -9,8 +9,8 @@
     "lint": "next lint",
     "migrate": "migrate-mongo up",
     "migrate:create": "migrate-mongo create",
-    "test": "jest",
-    "test:watch": "jest --watch"
+    "test": "cross-env CACHE_DRIVER=memory jest",
+    "test:watch": "cross-env CACHE_DRIVER=memory jest --watch"
   },
   "dependencies": {
     "bullmq": "^5.8.2",
@@ -33,6 +33,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "babel-jest": "^30.0.0",
+    "cross-env": "^7.0.3",
     "eslint": "^9",
     "eslint-config-next": "15.3.3",
     "ioredis-mock": "^8.9.0",

@@ -22,6 +22,14 @@ describe('/api/admin/players/[id]', () => {
       const response = await GET(null, { params: { id: nonExistentId.toString() } });
       expect(response.status).toBe(404);
     });
+
+    it('должен возвращать 404, если игрок архивирован', async () => {
+      const testPlayer = await new Player({ firstName: 'ArchivedPlayer', lastName: 'Test' }).save();
+      await testPlayer.updateOne({ $set: { archivedAt: new Date() } });
+
+      const response = await GET(null, { params: { id: testPlayer._id.toString() } });
+      expect(response.status).toBe(404);
+    });
   });
 
   describe('PUT', () => {
@@ -68,25 +76,35 @@ describe('/api/admin/players/[id]', () => {
   });
 
   describe('DELETE', () => {
-    it('должен деактивировать игрока (статус inactive) и возвращать 200', async () => {
+    it('должен архивировать игрока и возвращать 200', async () => {
       const testPlayer = await new Player({ firstName: 'PlayerApiTestDelete', lastName: 'Test' }).save();
       const response = await DELETE(null, { params: { id: testPlayer._id.toString() } });
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body.status).toBe('inactive');
+      expect(body.archivedAt).toBeDefined();
+      expect(new Date(body.archivedAt)).toBeInstanceOf(Date);
 
       const dbPlayer = await Player.findById(testPlayer._id);
       expect(dbPlayer).not.toBeNull();
       if (dbPlayer) {
-        expect(dbPlayer.status).toBe('inactive');
+        expect(dbPlayer.archivedAt).toBeInstanceOf(Date);
       }
     });
 
-    it('должен возвращать 404 при попытке деактивировать несуществующего игрока', async () => {
+    it('должен возвращать 404 при попытке архивировать несуществующего игрока', async () => {
         const nonExistentId = new mongoose.Types.ObjectId();
         const response = await DELETE(null, { params: { id: nonExistentId.toString() } });
         expect(response.status).toBe(404);
+    });
+
+    it('должен возвращать 404 при попытке архивировать уже архивированного игрока', async () => {
+      const testPlayer = await new Player({ firstName: 'AlreadyArchived', lastName: 'Test' }).save();
+      await DELETE(null, { params: { id: testPlayer._id.toString() } });
+
+      // Повторный вызов
+      const response = await DELETE(null, { params: { id: testPlayer._id.toString() } });
+      expect(response.status).toBe(404);
     });
   });
 }); 

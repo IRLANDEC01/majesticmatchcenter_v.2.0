@@ -78,35 +78,31 @@ describe('PlayerRepository', () => {
   });
 
   describe('findAll', () => {
-    it('должен возвращать всех созданных игроков', async () => {
+    it('должен возвращать всех неархивированных игроков', async () => {
       await playerRepository.create(player1Data);
       await playerRepository.create(player2Data);
       const players = await playerRepository.findAll();
       expect(players).toHaveLength(2);
     });
 
-    it('должен возвращать только активных игроков по умолчанию', async () => {
+    it('должен возвращать только неархивированных игроков по умолчанию', async () => {
       await playerRepository.create(player1Data);
-      const inactivePlayer = await playerRepository.create(player2Data);
-      if (!inactivePlayer) {
-        throw new Error("Player creation failed in test setup");
-      }
-      await Player.findByIdAndUpdate(inactivePlayer._id, { status: 'inactive' });
+      const playerToArchive = await playerRepository.create(player2Data);
+      
+      await playerRepository.archiveById(playerToArchive._id);
 
       const players = await playerRepository.findAll();
       expect(players).toHaveLength(1);
       expect(players[0].lastName).toBe(player1Data.lastName);
     });
 
-    it('должен возвращать всех игроков, включая неактивных, если указана опция', async () => {
+    it('должен возвращать всех игроков, включая архивированных, если указана опция', async () => {
       await playerRepository.create(player1Data);
-      const inactivePlayer = await playerRepository.create(player2Data);
-      if (!inactivePlayer) {
-        throw new Error("Player creation failed in test setup");
-      }
-      await Player.findByIdAndUpdate(inactivePlayer._id, { status: 'inactive' });
+      const playerToArchive = await playerRepository.create(player2Data);
+      
+      await playerRepository.archiveById(playerToArchive._id);
 
-      const players = await playerRepository.findAll({ includeInactive: true });
+      const players = await playerRepository.findAll({ includeArchived: true });
       expect(players).toHaveLength(2);
     });
   });
@@ -129,27 +125,51 @@ describe('PlayerRepository', () => {
     });
   });
 
-  describe('deactivate', () => {
-    it('должен менять статус игрока на inactive и инвалидировать кэш', async () => {
+  describe('archiveById and restoreById', () => {
+    it('archiveById должен устанавливать `archivedAt` и инвалидировать кэш', async () => {
       const player = await playerRepository.create(player1Data);
-      if (!player) {
-        throw new Error("Player creation failed in test setup");
-      }
       
-      const deactivatedPlayer = await playerRepository.deactivate(player._id);
-      expect(deactivatedPlayer).not.toBeNull();
-      if (deactivatedPlayer) {
-        expect(deactivatedPlayer.status).toBe('inactive');
-      }
+      const archivedPlayer = await playerRepository.archiveById(player._id);
+      
+      expect(archivedPlayer).not.toBeNull();
+      expect(archivedPlayer.archivedAt).toBeInstanceOf(Date);
       
       const foundPlayer = await Player.findById(player._id);
+      expect(foundPlayer.archivedAt).toBeInstanceOf(Date);
+
+      expect(cache.invalidateByTag).toHaveBeenCalledWith(`player:${player._id}`);
+      expect(cache.invalidateByTag).toHaveBeenCalledWith(`player:slug:${foundPlayer.slug}`);
+      expect(cache.invalidateByTag).toHaveBeenCalledWith('players_list');
+    });
+
+    it('findById не должен находить архивированного игрока', async () => {
+      const player = await playerRepository.create(player1Data);
+      await playerRepository.archiveById(player._id);
+
+      const foundPlayer = await playerRepository.findById(player._id);
+      expect(foundPlayer).toBeNull();
+    });
+
+    it('restoreById должен устанавливать `archivedAt` в null', async () => {
+      const player = await playerRepository.create(player1Data);
+      await playerRepository.archiveById(player._id);
+      
+      const restoredPlayer = await playerRepository.restoreById(player._id);
+      expect(restoredPlayer).not.toBeNull();
+      expect(restoredPlayer.archivedAt).toBeNull();
+
+      const foundPlayer = await playerRepository.findById(player._id);
       expect(foundPlayer).not.toBeNull();
-      if(foundPlayer) {
-        expect(foundPlayer.status).toBe('inactive');
-        expect(cache.invalidateByTag).toHaveBeenCalledWith(`player:${player._id}`);
-        expect(cache.invalidateByTag).toHaveBeenCalledWith(`player:slug:${foundPlayer.slug}`);
-        expect(cache.invalidateByTag).toHaveBeenCalledWith('players_list');
-      }
+      expect(foundPlayer.archivedAt).toBeNull();
+    });
+
+    it('archiveById должен возвращать null, если игрок уже архивирован', async () => {
+      const player = await playerRepository.create(player1Data);
+      await playerRepository.archiveById(player._id);
+
+      // Повторная архивация
+      const result = await playerRepository.archiveById(player._id);
+      expect(result).toBeNull();
     });
   });
 }); 

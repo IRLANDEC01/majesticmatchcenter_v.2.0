@@ -7,8 +7,7 @@ const mockPlayerRepository = {
   findById: jest.fn(),
   findBySlug: jest.fn(),
   update: jest.fn(),
-  deactivate: jest.fn(),
-  ban: jest.fn(),
+  archiveById: jest.fn(),
 };
 
 beforeEach(() => {
@@ -29,7 +28,7 @@ describe('PlayerService', () => {
 
   it('getAllPlayers должен вызывать repo.findAll с опциями', async () => {
     mockPlayerRepository.findAll.mockResolvedValue([]);
-    const options = { includeInactive: true };
+    const options = { includeArchived: true };
     await service.getAllPlayers(options);
     expect(mockPlayerRepository.findAll).toHaveBeenCalledWith(options);
   });
@@ -56,10 +55,10 @@ describe('PlayerService', () => {
     expect(mockPlayerRepository.update).toHaveBeenCalledWith(id, playerData);
   });
 
-  it('deactivatePlayer должен вызывать repo.deactivate', async () => {
-    const id = 'player-to-deactivate';
-    mockPlayerRepository.deactivate.mockResolvedValue({ _id: id, status: 'inactive' });
-    await service.deactivatePlayer(id);
-    expect(mockPlayerRepository.deactivate).toHaveBeenCalledWith(id);
+  it('archivePlayer должен вызывать repo.archiveById', async () => {
+    const id = 'player-to-archive';
+    mockPlayerRepository.archiveById.mockResolvedValue({ _id: id, archivedAt: new Date() });
+    await service.archivePlayer(id);
+    expect(mockPlayerRepository.archiveById).toHaveBeenCalledWith(id);
   });
 }); 

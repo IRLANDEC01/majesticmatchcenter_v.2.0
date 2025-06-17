@@ -26,7 +26,7 @@ export class PlayerService {
   /**
    * Получает всех игроков.
    * @param {object} [options] - Опции.
-   * @param {boolean} [options.includeInactive=false] - Включить неактивных игроков.
+   * @param {boolean} [options.includeArchived=false] - Включить архивированных игроков.
    * @returns {Promise<Array<object>>}
    */
   async getAllPlayers(options) {
@@ -64,14 +64,14 @@ export class PlayerService {
   }
 
   /**
-   * Деактивирует игрока.
+   * Архивирует игрока.
    * @param {string} id - ID игрока.
    * @returns {Promise<object|null>}
    */
-  async deactivatePlayer(id) {
+  async archivePlayer(id) {
     // В будущем здесь может быть логика, например, проверка,
-    // можно ли деактивировать этого игрока (например, если он капитан активной семьи).
-    return this.playerRepository.deactivate(id);
+    // можно ли архивировать этого игрока (например, если он капитан активной семьи).
+    return this.playerRepository.archiveById(id);
   }
 }
 

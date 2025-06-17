@@ -48,16 +48,13 @@ const playerSchema = new mongoose.Schema({
     ref: 'Family',
     default: null,
   },
-  // Статус игрока для управления его жизненным циклом
-  status: {
-    type: String,
-    enum: {
-      values: ['active', 'inactive', 'banned'],
-      message: '{VALUE} не является допустимым статусом.',
-    },
-    default: 'active',
-    required: true,
-    index: true,
+  // Дата архивации игрока. Если значение `null` — игрок активен.
+  // Если установлена дата — игрок считается удаленным (архивированным).
+  // Этот подход используется для "мягкого удаления".
+  archivedAt: {
+    type: Date,
+    default: null,
+    index: true, // Индекс для быстрого отсеивания архивированных записей
   },
   // Социальные сети игрока
   socialLinks: [socialLinkSchema],

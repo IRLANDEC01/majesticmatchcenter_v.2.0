@@ -14,9 +14,12 @@ class PlayerRepository {
   async findById(id) {
     const cacheKey = `player:${id}`;
     const cached = await cache.get(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      if (cached.archivedAt) return null;
+      return cached;
+    }
 
-    const player = await Player.findById(id).lean();
+    const player = await Player.findOne({ _id: id, archivedAt: null }).lean();
     if (player) {
       await cache.set(cacheKey, player, {
         tags: [`player:${id}`, 'players_list'],
@@ -32,10 +35,13 @@ class PlayerRepository {
    */
   async findBySlug(slug) {
     const cacheKey = `player:slug:${slug}`;
-    const cached = await cache.get(cacheKey);
-    if (cached) return cached;
+    const cachedPlayer = await cache.get(cacheKey);
+    if (cachedPlayer) {
+      if (cachedPlayer.archivedAt) return null;
+      return cachedPlayer;
+    }
 
-    const player = await Player.findOne({ slug }).lean();
+    const player = await Player.findOne({ slug, archivedAt: null }).lean();
     if (player) {
       await cache.set(cacheKey, player, {
         tags: [`player:${player._id}`, 'players_list'],
@@ -47,13 +53,13 @@ class PlayerRepository {
   /**
    * Находит всех игроков.
    * @param {object} [options] - Опции.
-   * @param {boolean} [options.includeInactive=false] - Включить неактивных игроков.
+   * @param {boolean} [options.includeArchived=false] - Включить архивированных игроков.
    * @returns {Promise<Array<object>>}
    */
-  async findAll({ includeInactive = false } = {}) {
+  async findAll({ includeArchived = false } = {}) {
     const query = {};
-    if (!includeInactive) {
-      query.status = 'active';
+    if (!includeArchived) {
+      query.archivedAt = null;
     }
     return Player.find(query).lean();
   }
@@ -86,12 +92,42 @@ class PlayerRepository {
   }
 
   /**
-   * Деактивирует игрока (мягкое удаление).
+   * Архивирует игрока (мягкое удаление).
    * @param {string} id - ID игрока.
    * @returns {Promise<object|null>}
    */
-  async deactivate(id) {
-    const player = await Player.findByIdAndUpdate(id, { status: 'inactive' }, { new: true }).lean();
+  async archiveById(id) {
+    return this._updateArchiveStatus(id, true);
+  }
+
+  /**
+   * Восстанавливает игрока из архива.
+   * @param {string} id - ID игрока.
+   * @returns {Promise<object|null>}
+   */
+  async restoreById(id) {
+    return this._updateArchiveStatus(id, false);
+  }
+  
+  /**
+   * Вспомогательный приватный метод для обновления статуса архивации.
+   * @param {string} id - ID игрока.
+   * @param {boolean} isArchived - Архивировать или восстановить.
+   * @returns {Promise<object|null>}
+   * @private
+   */
+  async _updateArchiveStatus(id, isArchived) {
+    const filter = {
+      _id: id,
+      archivedAt: isArchived ? null : { $ne: null },
+    };
+
+    const update = {
+      $set: { archivedAt: isArchived ? new Date() : null },
+    };
+
+    const player = await Player.findOneAndUpdate(filter, update, { new: true }).lean();
+
     if (player) {
       await cache.invalidateByTag(`player:${id}`);
       await cache.invalidateByTag(`player:slug:${player.slug}`);

@@ -14,7 +14,6 @@ const updatePlayerSchema = z.object({
   bio: z.string().trim().max(5000).optional(),
   avatar: z.string().url('Некорректный URL аватара.').optional(),
   currentFamily: z.string().nullable().optional(), // Может быть ID или null
-  status: z.enum(['active', 'inactive', 'banned']).optional(),
 });
 
 /**
@@ -77,7 +76,7 @@ export async function PUT(request, { params }) {
 
 /**
  * DELETE /api/admin/players/[id]
- * Деактивирует игрока (мягкое удаление).
+ * Архивирует игрока (мягкое удаление).
  */
 export async function DELETE(request, { params }) {
   try {
@@ -88,15 +87,15 @@ export async function DELETE(request, { params }) {
     
     await connectToDatabase();
     
-    const deactivatedPlayer = await playerService.deactivatePlayer(params.id);
+    const archivedPlayer = await playerService.archivePlayer(params.id);
 
-    if (!deactivatedPlayer) {
-      return NextResponse.json({ message: 'Игрок не найден' }, { status: 404 });
+    if (!archivedPlayer) {
+      return NextResponse.json({ message: 'Игрок не найден или уже архивирован' }, { status: 404 });
     }
 
-    return NextResponse.json(deactivatedPlayer);
+    return NextResponse.json(archivedPlayer);
   } catch (error) {
-    console.error(`Failed to deactivate player ${params.id}:`, error);
-    return NextResponse.json({ message: 'Ошибка сервера при деактивации игрока' }, { status: 500 });
+    console.error(`Failed to archive player ${params.id}:`, error);
+    return NextResponse.json({ message: 'Ошибка сервера при архивации игрока' }, { status: 500 });
   }
 } 
