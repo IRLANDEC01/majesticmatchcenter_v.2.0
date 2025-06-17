@@ -2,14 +2,15 @@ import { z } from 'zod';
 import { mapRepo } from '@/lib/repos/maps/map-repo';
 import { tournamentRepo } from '@/lib/repos/tournaments/tournament-repo.js';
 import { mapTemplateRepo } from '@/lib/repos/map-templates/map-template-repo.js';
-import { RatingService } from '@/lib/domain/ratings/rating-service';
-import { StatisticsService } from '@/lib/domain/statistics/statistics-service';
+import { familyRepo } from '@/lib/repos/families/family-repo.js';
+import { playerRepo } from '@/lib/repos/players/player-repo.js';
+import { ratingService } from '@/lib/domain/ratings/rating-service';
+import { statisticsService } from '@/lib/domain/statistics/statistics-service';
 import { AchievementService } from '@/lib/domain/achievements/achievement-service';
-import { ValidationError, NotFoundError } from '@/lib/errors';
+import { ValidationError, NotFoundError, AppError } from '@/lib/errors';
 
-const ratingService = new RatingService();
-const statisticsService = new StatisticsService();
-const achievementService = new AchievementService();
+// Services are now injected, not instantiated here.
+const achievementService = new AchievementService(); // This one remains as it's not refactored yet.
 
 const mapSchema = z.object({
   name: z.string().trim().min(1, 'Название карты обязательно.'),
@@ -18,15 +19,41 @@ const mapSchema = z.object({
   startDateTime: z.coerce.date({ required_error: 'Дата и время начала обязательны.' }),
 });
 
+const completionSchema = z.object({
+  winnerId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID победителя.'),
+  mvpId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID MVP.'),
+  ratingChanges: z.array(z.object({
+    familyId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val)),
+    change: z.number().nonnegative(),
+  })).optional(),
+  statistics: z.array(z.any()).optional(),
+});
+
 /**
  * Сервис для управления бизнес-логикой, связанной с картами.
  * инкапсулирует логику работы с репозиторием карт.
  */
 class MapService {
-  constructor(repos) {
+  constructor(repos, services) {
     this.repo = repos.mapRepo;
     this.tournamentRepo = repos.tournamentRepo;
     this.mapTemplateRepo = repos.mapTemplateRepo;
+    this.familyRepo = repos.familyRepo;
+    this.playerRepo = repos.playerRepo;
+
+    this.ratingService = services.ratingService;
+    this.statisticsService = services.statisticsService;
+    this.achievementService = services.achievementService;
+
+    // Привязываем контекст this ко всем методам, чтобы избежать его потери
+    this.getAllMaps = this.getAllMaps.bind(this);
+    this.getMapById = this.getMapById.bind(this);
+    this.createMap = this.createMap.bind(this);
+    this.updateMap = this.updateMap.bind(this);
+    this.completeMap = this.completeMap.bind(this);
+    this.rollbackMapCompletion = this.rollbackMapCompletion.bind(this);
+    this.archiveMap = this.archiveMap.bind(this);
+    this.unarchiveMap = this.unarchiveMap.bind(this);
   }
 
   /**
@@ -107,33 +134,57 @@ class MapService {
    * @param {Array<object>} [completionData.statistics] - Опциональная статистика игроков из JSON.
    * @returns {Promise<import('@/models/map/Map').Map>}
    */
-  async completeMap(mapId, { winnerId, mvpId, ratingChanges, statistics }) {
-    if (!winnerId || !mvpId) {
-      throw new Error('Winner and MVP must be selected to complete a map.');
+  async completeMap(mapId, completionData) {
+    const validationResult = completionSchema.safeParse(completionData);
+    if (!validationResult.success) {
+      throw new ValidationError('Ошибка валидации при завершении карты', validationResult.error.flatten().fieldErrors);
+    }
+    const { winnerId, mvpId, ratingChanges, statistics } = validationResult.data;
+
+    const map = await this.repo.findById(mapId);
+
+    if (!map) {
+      throw new NotFoundError(`Карта с ID ${mapId} не найдена.`);
+    }
+    if (map.status !== 'active') {
+      throw new AppError(`Нельзя завершить карту со статусом '${map.status}'. Карта должна быть активна.`, 409);
     }
 
-    // 1. Обновляем саму карту
+    const [winner, mvp] = await Promise.all([
+      this.familyRepo.findById(winnerId),
+      this.playerRepo.findById(mvpId),
+    ]);
+    
+    if (!winner) throw new NotFoundError(`Семья-победитель с ID ${winnerId} не найдена.`);
+    if (!mvp) throw new NotFoundError(`Игрок MVP с ID ${mvpId} не найден.`);
+
+
+    // 1. Обновляем рейтинги семей (если данные предоставлены)
+    if (ratingChanges && ratingChanges.length > 0) {
+      await this.ratingService.updateFamilyRatings(mapId, ratingChanges);
+    }
+
+    // 2. Обрабатываем статистику и рейтинг игроков (если данные предоставлены)
+    if (statistics && statistics.length > 0) {
+      const allPlayerIds = map.participantFamilies.flatMap(pf => pf.players);
+      const participants = await this.playerRepo.findAll({ filter: { _id: { $in: allPlayerIds } } });
+      
+      const statsWithPlayerIds = await this.statisticsService.parseAndApplyMapStats(mapId, map.tournament, statistics, participants);
+      await this.ratingService.updatePlayerRatings(mapId, statsWithPlayerIds);
+    }
+    
+    // 3. Обновляем саму карту
     const updatedMapData = {
       status: 'completed',
       winner: winnerId,
       mvp: mvpId,
-      ratingChanges, // Сохраняем для истории и отката
+      // ratingChanges are not stored on the map document itself anymore.
     };
     const completedMap = await this.repo.update(mapId, updatedMapData);
 
-    // 2. Обновляем рейтинги семей (если данные предоставлены)
-    if (ratingChanges && ratingChanges.length > 0) {
-      await ratingService.updateFamilyRatings(mapId, ratingChanges);
-    }
-
-    // 3. Обрабатываем статистику и рейтинг игроков (если данные предоставлены)
-    if (statistics && statistics.length > 0) {
-      await statisticsService.processAndApplyStatistics(mapId, statistics);
-      await ratingService.updatePlayerRatings(mapId, statistics);
-    }
 
     // 4. Генерируем достижения
-    await achievementService.processMapCompletionAchievements(mapId, completedMap, statistics || []);
+    // await this.achievementService.processMapCompletionAchievements(mapId, completedMap, statistics || []);
 
     return completedMap;
   }
@@ -144,17 +195,25 @@ class MapService {
    * @returns {Promise<import('@/models/map/Map').Map>}
    */
   async rollbackMapCompletion(mapId) {
+    const map = await this.repo.findById(mapId);
+    if (!map) {
+      throw new NotFoundError(`Карта с ID ${mapId} не найдена.`);
+    }
+
+    if (map.status !== 'completed') {
+      throw new AppError(`Откатить можно только завершенную карту. Текущий статус: '${map.status}'.`, 409);
+    }
+
     // 1. Откатываем все связанные данные
-    await ratingService.rollbackMapRatings(mapId);
-    await statisticsService.rollbackStatistics(mapId);
-    await achievementService.rollbackMapAchievements(mapId);
+    await this.ratingService.rollbackMapRatings(mapId);
+    await this.statisticsService.rollbackMapStats(mapId);
+    // await this.achievementService.rollbackMapAchievements(mapId);
 
     // 2. Сбрасываем состояние карты
     const rolledBackMapData = {
       status: 'active',
       winner: null,
       mvp: null,
-      ratingChanges: [],
     };
     const rolledBackMap = await this.repo.update(mapId, rolledBackMapData);
 
@@ -178,8 +237,17 @@ class MapService {
   }
 }
 
-export const mapService = new MapService({
-  mapRepo,
-  tournamentRepo,
-  mapTemplateRepo,
-}); 
+export const mapService = new MapService(
+  {
+    mapRepo,
+    tournamentRepo,
+    mapTemplateRepo,
+    familyRepo,
+    playerRepo,
+  },
+  {
+    ratingService,
+    statisticsService,
+    achievementService,
+  }
+); 

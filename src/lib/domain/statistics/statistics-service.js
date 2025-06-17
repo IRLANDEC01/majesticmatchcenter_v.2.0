@@ -1,7 +1,21 @@
 /**
  * Сервис для управления статистикой игроков и семей.
  */
+import { playerRepository } from '@/lib/repos/players/player-repo';
+import { playerStatsRepository } from '@/lib/repos/statistics/player-stats-repo';
+import { playerMapParticipationRepository } from '@/lib/repos/statistics/player-map-participation-repo';
+
 export class StatisticsService {
+  constructor({
+    playerRepo,
+    playerStatsRepo,
+    playerMapParticipationRepo,
+  }) {
+    this.playerRepo = playerRepo;
+    this.playerStatsRepo = playerStatsRepo;
+    this.playerMapParticipationRepo = playerMapParticipationRepo;
+  }
+
   /**
    * Обновляет статистику игроков на основе данных с карты.
    * @param {string} mapId - ID карты.
@@ -30,30 +44,67 @@ export class StatisticsService {
   }
 
   /**
-   * Откатывает изменения статистики, связанные с картой.
+   * Парсит "сырую" статистику матча, находит соответствующих игроков и обновляет их документы со статистикой.
    * @param {string} mapId - ID карты.
+   * @param {string} tournamentId - ID родительского турнира.
+   * @param {Array<object>} rawStats - Массив с "сырой" статистикой из JSON-файла.
+   * @param {Array<object>} mapParticipants - Участники карты для сопоставления имен игроков.
+   * @returns {Promise<Array<object>>} Промис, который разрешается в обработанную статистику с добавленными ID игроков.
    */
-  async rollbackMapStats(mapId) {
-    // TODO: Реализовать логику
-    // 1. Найти всех участников карты
-    // 2. Вычесть статистику из PlayerStats и FamilyStats
-    console.log(`Rolling back stats for map ${mapId}...`);
-    return Promise.resolve();
+  async parseAndApplyMapStats(mapId, tournamentId, rawStats, mapParticipants) {
+    const playerLookup = new Map(
+      mapParticipants.map(p => [`${p.firstName}${p.lastName}`, p._id.toString()])
+    );
+
+    const statsWithPlayerIds = [];
+    const updatePromises = [];
+
+    for (const rawStat of rawStats) {
+      const lookupKey = `${rawStat.firstName}${rawStat.lastName}`;
+      const playerId = playerLookup.get(lookupKey);
+
+      if (playerId) {
+        const statWithId = { ...rawStat, playerId };
+        statsWithPlayerIds.push(statWithId);
+
+        const { weaponStats, ...overallChange } = rawStat;
+        overallChange.mapsPlayed = 1;
+
+        updatePromises.push(
+          this.playerStatsRepo.applyOverallStatsChange(playerId, overallChange, 1),
+          this.playerMapParticipationRepo.create({
+            ...rawStat,
+            playerId,
+            mapId,
+            tournamentId,
+          })
+        );
+      } else {
+        console.warn(`Игрок "${rawStat.firstName} ${rawStat.lastName}" из файла статистики не найден среди участников карты.`);
+      }
+    }
+
+    await Promise.all(updatePromises);
+
+    return statsWithPlayerIds;
   }
 
   /**
-   * Парсит JSON-статистику и обновляет данные игроков.
-   * @param {string} mapId - ID карты, за которую обновляется статистика.
-   * @param {Array<object>} statistics - Массив объектов со статистикой по каждому игроку.
+   * Откатывает все изменения статистики игроков, связанные с определенной картой.
+   * @param {string} mapId - ID карты для отката.
    * @returns {Promise<void>}
    */
-  async processAndApplyStatistics(mapId, statistics) {
-    // TODO: Реализовать основную логику.
-    // 1. Пройти по массиву.
-    // 2. Для каждого игрока найти его в БД по `firstName` и `lastName`.
-    // 3. Атомарно инкрементировать `PlayerStats` (общие и по оружию).
-    // 4. Создать запись в `PlayerMapParticipation` с "замороженной" статистикой за эту карту.
-    console.log(`[StatisticsService] TODO: Process statistics for map ${mapId}`, statistics);
+  async rollbackMapStats(mapId) {
+    const participationRecords = await this.playerMapParticipationRepo.findAndDeleteByMapId(mapId);
+
+    const rollbackPromises = participationRecords.map(record => {
+      const { weaponStats, ...overallChange } = record;
+      overallChange.mapsPlayed = 1;
+
+      return this.playerStatsRepo.applyOverallStatsChange(record.playerId, overallChange, -1);
+    });
+
+    await Promise.all(rollbackPromises);
   }
 
   /**
@@ -70,4 +121,8 @@ export class StatisticsService {
   }
 }
 
-export const statisticsService = new StatisticsService(); 
+export const statisticsService = new StatisticsService({
+  playerRepo: playerRepository,
+  playerStatsRepo: playerStatsRepository,
+  playerMapParticipationRepo: playerMapParticipationRepository,
+}); 

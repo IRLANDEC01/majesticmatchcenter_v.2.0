@@ -42,11 +42,13 @@ class PlayerRepository {
   /**
    * Находит всех игроков.
    * @param {object} [options] - Опции.
+   * @param {object} [options.filter={}] - MongoDB-фильтр.
    * @param {boolean} [options.includeArchived=false] - Включить архивированных игроков.
    * @returns {Promise<Array<object>>}
    */
-  async findAll({ includeArchived = false } = {}) {
-    return Player.find().setOptions({ includeArchived }).lean();
+  async findAll({ filter = {}, includeArchived = false } = {}) {
+    const query = includeArchived ? filter : { ...filter, archivedAt: null };
+    return Player.find(query).setOptions({ includeArchived }).lean();
   }
 
   /**
@@ -113,6 +115,27 @@ class PlayerRepository {
     }
     return player;
   }
+
+  /**
+   * Атомарно увеличивает рейтинг игрока.
+   * @param {string} playerId - ID игрока.
+   * @param {number} amount - Величина, на которую нужно увеличить рейтинг.
+   * @returns {Promise<void>}
+   */
+  async incrementRating(playerId, amount) {
+    if (amount === 0) return;
+
+    const player = await Player.findByIdAndUpdate(
+      playerId,
+      { $inc: { rating: amount } },
+      { new: true }
+    ).lean();
+
+    if (player) {
+      await cache.invalidateByTag(`player:${player._id}`);
+      await cache.invalidateByTag('players_list');
+    }
+  }
 }
 
-export const playerRepository = new PlayerRepository(); 
+export const playerRepo = new PlayerRepository();

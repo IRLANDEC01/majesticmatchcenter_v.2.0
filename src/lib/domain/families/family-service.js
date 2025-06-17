@@ -1,4 +1,4 @@
-import { familyRepository } from '@/lib/repos/families/family-repo.js';
+import { familyRepo } from '@/lib/repos/families/family-repo.js';
 import FamilyStats from '@/models/family/FamilyStats.js';
 import { DuplicateError, NotFoundError, ValidationError } from '@/lib/errors';
 import { z } from 'zod';
@@ -22,7 +22,7 @@ export class FamilyService {
    * @private
    */
   async _validateNameUniqueness(name, currentFamilyId = null) {
-    const existingFamily = await familyRepository.findByName(name);
+    const existingFamily = await familyRepo.findByName(name);
     if (existingFamily && (!currentFamilyId || existingFamily._id.toString() !== currentFamilyId)) {
       throw new DuplicateError('Семья с таким названием уже существует.');
     }
@@ -42,7 +42,7 @@ export class FamilyService {
 
     await this._validateNameUniqueness(validatedData.name);
     
-    const newFamily = await familyRepository.create(validatedData);
+    const newFamily = await familyRepo.create(validatedData);
     if (newFamily) {
       // После успешного создания семьи, создаем для нее документ статистики
       await FamilyStats.create({ familyId: newFamily._id });
@@ -57,7 +57,7 @@ export class FamilyService {
    * @returns {Promise<Array<object>>}
    */
   async getAllFamilies(options) {
-    return familyRepository.findAll(options);
+    return familyRepo.findAll(options);
   }
 
   /**
@@ -69,7 +69,7 @@ export class FamilyService {
    * @throws {NotFoundError} Если семья не найдена или архивирована (и не запрошена).
    */
   async getFamilyById(id, { includeArchived = false } = {}) {
-    const family = await familyRepository.findById(id);
+    const family = await familyRepo.findById(id);
 
     if (!family || (!includeArchived && family.archivedAt)) {
       throw new NotFoundError('Семья не найдена.');
@@ -98,7 +98,7 @@ export class FamilyService {
       await this._validateNameUniqueness(validatedData.name, id);
     }
 
-    const updatedFamily = await familyRepository.update(id, validatedData);
+    const updatedFamily = await familyRepo.update(id, validatedData);
 
     if (!updatedFamily) {
       throw new NotFoundError('Семья для обновления не найдена.');
@@ -117,7 +117,7 @@ export class FamilyService {
   async addMember(familyId, playerId, role) {
     const memberData = { player: playerId, role };
     // Используем оператор $push для добавления в массив
-    return familyRepository.update(familyId, { $push: { members: memberData } });
+    return familyRepo.update(familyId, { $push: { members: memberData } });
   }
 
   /**
@@ -128,7 +128,7 @@ export class FamilyService {
    */
   async removeMember(familyId, playerId) {
     // Используем оператор $pull для удаления из массива по ID игрока
-    return familyRepository.update(familyId, { $pull: { members: { player: playerId } } });
+    return familyRepo.update(familyId, { $pull: { members: { player: playerId } } });
   }
 
   /**
@@ -139,7 +139,7 @@ export class FamilyService {
   async archiveFamily(id) {
     // Здесь может быть логика проверки, можно ли архивировать семью
     // (например, если она участвует в активном турнире).
-    return familyRepository.archive(id);
+    return familyRepo.archive(id);
   }
 
   /**
@@ -148,7 +148,7 @@ export class FamilyService {
    * @returns {Promise<object|null>}
    */
   async unarchiveFamily(id) {
-    return familyRepository.unarchive(id);
+    return familyRepo.unarchive(id);
   }
 }
 

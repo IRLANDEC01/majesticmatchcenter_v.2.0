@@ -132,6 +132,26 @@ class FamilyRepository {
   }
 
   /**
+   * Атомарно увеличивает рейтинг семьи.
+   * @param {string} familyId - ID семьи.
+   * @param {number} amount - Величина, на которую нужно увеличить рейтинг.
+   * @returns {Promise<void>}
+   */
+  async incrementRating(familyId, amount) {
+    if (amount === 0) return;
+
+    const family = await Family.findByIdAndUpdate(
+      familyId,
+      { $inc: { rating: amount } },
+      { new: true }
+    ).lean();
+
+    if (family) {
+      await this._invalidateCache(family);
+    }
+  }
+
+  /**
    * Инвалидирует кэш для семьи.
    * @param {object} family - Объект семьи.
    * @private
@@ -144,4 +164,4 @@ class FamilyRepository {
   }
 }
 
-export const familyRepository = new FamilyRepository(); 
+export const familyRepo = new FamilyRepository(); 

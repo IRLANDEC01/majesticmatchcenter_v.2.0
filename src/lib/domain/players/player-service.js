@@ -1,4 +1,4 @@
-import { playerRepository } from '@/lib/repos/players/player-repo.js';
+import { playerRepo } from '@/lib/repos/players/player-repo.js';
 import PlayerStats from '@/models/player/PlayerStats.js';
 
 /**
@@ -12,7 +12,7 @@ class PlayerService {
    * @returns {Promise<object>}
    */
   async createPlayer(playerData) {
-    const newPlayer = await playerRepository.create(playerData);
+    const newPlayer = await playerRepo.create(playerData);
     if (newPlayer) {
       await PlayerStats.create({ playerId: newPlayer._id });
     }
@@ -26,7 +26,7 @@ class PlayerService {
    * @returns {Promise<Array<object>>}
    */
   async getAllPlayers(options) {
-    return playerRepository.findAll(options);
+    return playerRepo.findAll(options);
   }
 
   /**
@@ -35,7 +35,7 @@ class PlayerService {
    * @returns {Promise<object|null>}
    */
   async getPlayerById(id) {
-    return playerRepository.findById(id);
+    return playerRepo.findById(id);
   }
 
   /**
@@ -44,7 +44,7 @@ class PlayerService {
    * @returns {Promise<object|null>}
    */
   async getPlayerBySlug(slug) {
-    return playerRepository.findBySlug(slug);
+    return playerRepo.findBySlug(slug);
   }
 
   /**
@@ -56,7 +56,7 @@ class PlayerService {
   async updatePlayer(id, playerData) {
     // Здесь может быть логика, запрещающая изменять определенные поля,
     // например, имя или фамилию после создания.
-    return playerRepository.update(id, playerData);
+    return playerRepo.update(id, playerData);
   }
 
   /**
@@ -67,7 +67,7 @@ class PlayerService {
   async archivePlayer(id) {
     // В будущем здесь может быть логика, например, проверка,
     // можно ли архивировать этого игрока (например, если он капитан активной семьи).
-    return playerRepository.archive(id);
+    return playerRepo.archive(id);
   }
 
   /**
@@ -76,7 +76,7 @@ class PlayerService {
    * @returns {Promise<object|null>}
    */
   async unarchivePlayer(id) {
-    return playerRepository.unarchive(id);
+    return playerRepo.unarchive(id);
   }
 }
 
