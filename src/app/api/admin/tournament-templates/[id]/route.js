@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { tournamentTemplateService } from '@/lib/domain/tournament-templates/tournament-template-service';
 import { connectToDatabase } from '@/lib/db';
 import { z } from 'zod';
+import TournamentTemplate from '@/models/tournament/TournamentTemplate';
+import { tournamentTemplateRepo } from '@/lib/repos/tournament-templates/tournament-template-repo';
+import { handleApiError } from '@/lib/api/handle-api-error';
 
 const updateTemplateSchema = z.object({
   name: z.string().min(1, 'Название не может быть пустым.').optional(),
@@ -28,7 +31,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const updatedTemplate = await tournamentTemplateService.updateTemplate(id, validationResult.data);
+    const updatedTemplate = await tournamentTemplateRepo.update(params.id, validationResult.data);
 
     if (!updatedTemplate) {
       return NextResponse.json({ message: 'Шаблон турнира не найден' }, { status: 404 });
@@ -36,10 +39,6 @@ export async function PUT(request, { params }) {
 
     return NextResponse.json(updatedTemplate);
   } catch (error) {
-    console.error(`Failed to update tournament template ${params.id}:`, error);
-    if (error.code === 11000) {
-      return NextResponse.json({ message: 'Шаблон турнира с таким названием уже существует' }, { status: 409 });
-    }
-    return NextResponse.json({ message: 'Ошибка сервера при обновлении шаблона турнира' }, { status: 500 });
+    return handleApiError(error);
   }
 } 

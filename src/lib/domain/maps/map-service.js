@@ -2,9 +2,13 @@ import { mapRepo } from '@/lib/repos/maps/map-repo';
 import Map from '@/models/map/Map';
 import Tournament from '@/models/tournament/Tournament.js';
 import { mapTemplateRepository } from '@/lib/repos/map-templates/map-template-repo.js';
-import { ratingService } from '@/lib/domain/ratings/rating-service';
-import { statisticsService } from '@/lib/domain/statistics/statistics-service';
-import { achievementService } from '@/lib/domain/achievements/achievement-service';
+import { RatingService } from '@/lib/domain/ratings/rating-service';
+import { StatisticsService } from '@/lib/domain/statistics/statistics-service';
+import { AchievementService } from '@/lib/domain/achievements/achievement-service';
+
+const ratingService = new RatingService();
+const statisticsService = new StatisticsService();
+const achievementService = new AchievementService();
 
 /**
  * Сервис для управления бизнес-логикой, связанной с картами.
@@ -57,51 +61,62 @@ class MapService {
    * Завершает карту, обновляет статистики и рейтинги.
    * @param {string} mapId - ID карты.
    * @param {object} completionData - Данные для завершения.
-   * @param {string} completionData.winnerId - ID победителя.
-   * @param {string} completionData.mvpPlayerId - ID MVP.
-   * @param {object[]} [completionData.statistics] - Опциональная статистика.
-   * @param {object[]} [completionData.familyRatingChanges] - Опциональные изменения рейтинга семей.
+   * @param {string} completionData.winnerId - ID победившей семьи/команды.
+   * @param {string} completionData.mvpId - ID самого ценного игрока.
+   * @param {Array<{familyId: string, change: number}>} [completionData.ratingChanges] - Опциональные изменения рейтинга семей.
+   * @param {Array<object>} [completionData.statistics] - Опциональная статистика игроков из JSON.
+   * @returns {Promise<import('@/models/map/Map').Map>}
    */
-  async completeMap(mapId, { winnerId, mvpPlayerId, statistics, familyRatingChanges }) {
-    // TODO: Добавить валидацию, что карта в статусе 'active'
-
-    if (statistics) {
-      await ratingService.updatePlayerRatingsFromStats(mapId, statistics);
-      await statisticsService.updatePlayerStatsFromMap(mapId, statistics);
-      await achievementService.createMapAchievements(mapId, mvpPlayerId, statistics);
+  async completeMap(mapId, { winnerId, mvpId, ratingChanges, statistics }) {
+    if (!winnerId || !mvpId) {
+      throw new Error('Winner and MVP must be selected to complete a map.');
     }
-    
-    if (familyRatingChanges) {
-      await ratingService.updateFamilyRatings(mapId, familyRatingChanges);
-    }
-    
-    await statisticsService.updateFamilyStatsFromMap(mapId, winnerId);
 
-    const updatedMap = await this.repo.update(mapId, {
+    // 1. Обновляем саму карту
+    const updatedMapData = {
       status: 'completed',
       winner: winnerId,
-      mvp: mvpPlayerId,
-    });
+      mvp: mvpId,
+      ratingChanges, // Сохраняем для истории и отката
+    };
+    const completedMap = await this.repo.update(mapId, updatedMapData);
 
-    return updatedMap;
+    // 2. Обновляем рейтинги семей (если данные предоставлены)
+    if (ratingChanges && ratingChanges.length > 0) {
+      await ratingService.updateFamilyRatings(mapId, ratingChanges);
+    }
+
+    // 3. Обрабатываем статистику и рейтинг игроков (если данные предоставлены)
+    if (statistics && statistics.length > 0) {
+      await statisticsService.processAndApplyStatistics(mapId, statistics);
+      await ratingService.updatePlayerRatings(mapId, statistics);
+    }
+
+    // 4. Генерируем достижения
+    await achievementService.processMapCompletionAchievements(mapId, completedMap, statistics || []);
+
+    return completedMap;
   }
 
   /**
-   * Откатывает результаты завершенной карты.
-   * @param {string} mapId - ID карты.
+   * Откатывает завершение карты, возвращая ее в активное состояние.
+   * @param {string} mapId - ID карты для отката.
+   * @returns {Promise<import('@/models/map/Map').Map>}
    */
   async rollbackMapCompletion(mapId) {
-    // TODO: Добавить валидацию, что карта в статусе 'completed'
-    
+    // 1. Откатываем все связанные данные
     await ratingService.rollbackMapRatings(mapId);
-    await statisticsService.rollbackMapStats(mapId);
-    await achievementService.deleteMapAchievements(mapId);
+    await statisticsService.rollbackStatistics(mapId);
+    await achievementService.rollbackMapAchievements(mapId);
 
-    const rolledBackMap = await this.repo.update(mapId, {
+    // 2. Сбрасываем состояние карты
+    const rolledBackMapData = {
       status: 'active',
       winner: null,
       mvp: null,
-    });
+      ratingChanges: [],
+    };
+    const rolledBackMap = await this.repo.update(mapId, rolledBackMapData);
 
     return rolledBackMap;
   }

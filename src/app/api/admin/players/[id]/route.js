@@ -3,6 +3,7 @@ import { playerService } from '@/lib/domain/players/player-service';
 import { connectToDatabase } from '@/lib/db';
 import { z } from 'zod';
 import mongoose from 'mongoose';
+import { handleApiError } from '@/lib/api/handle-api-error';
 
 const MongooseID = z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
   message: 'Некорректный ID.',
@@ -46,30 +47,20 @@ export async function GET(request, { params }) {
  */
 export async function PUT(request, { params }) {
   try {
-    const idValidation = MongooseID.safeParse(params.id);
-    if (!idValidation.success) {
-      return NextResponse.json({ message: 'Некорректный ID игрока' }, { status: 400 });
-    }
-    
-    await connectToDatabase();
-    const json = await request.json();
+    const validationResult = updatePlayerSchema.safeParse(await request.json());
 
-    const validationResult = updatePlayerSchema.safeParse(json);
     if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
+      return NextResponse.json({ errors: validationResult.error.flatten() }, { status: 400 });
     }
 
     const updatedPlayer = await playerService.updatePlayer(params.id, validationResult.data);
+
     if (!updatedPlayer) {
       return NextResponse.json({ message: 'Игрок не найден' }, { status: 404 });
     }
 
     return NextResponse.json(updatedPlayer);
   } catch (error) {
-    console.error(`Failed to update player ${params.id}:`, error);
-    if (error.code === 11000) {
-      return NextResponse.json({ message: 'Игрок с таким именем и фамилией уже существует' }, { status: 409 });
-    }
-    return NextResponse.json({ message: 'Ошибка сервера при обновлении игрока' }, { status: 500 });
+    return handleApiError(error);
   }
 } 
