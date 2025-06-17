@@ -27,22 +27,70 @@ class PlayerStatsRepository {
   async applyOverallStatsChange(playerId, statsChange, multiplier = 1) {
     await this.findOrCreateByPlayerId(playerId);
 
-    const updateQuery = { $inc: {} };
+    const { weaponStats, ...simpleStats } = statsChange;
+    const bulkOps = [];
 
-    for (const key in statsChange) {
-      if (key !== 'weaponStats' && typeof statsChange[key] === 'number') {
-        updateQuery.$inc[`overall.${key}`] = statsChange[key] * multiplier;
+    // 1. Подготовка операции для простых полей (kills, deaths и т.д.)
+    const simpleUpdate = { $inc: {} };
+    for (const key in simpleStats) {
+      if (typeof simpleStats[key] === 'number') {
+        simpleUpdate.$inc[`overall.${key}`] = simpleStats[key] * multiplier;
       }
     }
-    
-    // Логика обновления weaponStats сложна и будет обработана отдельно.
-    // Пока мы обновляем только простые числовые поля.
 
-    if (Object.keys(updateQuery.$inc).length > 0) {
-      await PlayerStats.updateOne({ playerId }, updateQuery);
+    if (Object.keys(simpleUpdate.$inc).length > 0) {
+      bulkOps.push({
+        updateOne: {
+          filter: { playerId },
+          update: simpleUpdate,
+        },
+      });
     }
 
-    // TODO: Реализовать атомарное обновление для массива weaponStats.
+    // 2. Подготовка операций для сложного массива weaponStats
+    if (weaponStats && Array.isArray(weaponStats)) {
+      weaponStats.forEach((weapon) => {
+        // Операция для обновления существующего оружия
+        bulkOps.push({
+          updateOne: {
+            filter: { playerId, 'overall.weaponStats.weapon': weapon.weapon },
+            update: {
+              $inc: {
+                'overall.weaponStats.$.shotsFired': (weapon.shotsFired || 0) * multiplier,
+                'overall.weaponStats.$.hits': (weapon.hits || 0) * multiplier,
+                'overall.weaponStats.$.kills': (weapon.kills || 0) * multiplier,
+                'overall.weaponStats.$.damage': (weapon.damage || 0) * multiplier,
+                'overall.weaponStats.$.headshots': (weapon.headshots || 0) * multiplier,
+              },
+            },
+          },
+        });
+
+        // Операция для добавления нового оружия, если оно не найдено
+        bulkOps.push({
+          updateOne: {
+            filter: { playerId, 'overall.weaponStats.weapon': { $ne: weapon.weapon } },
+            update: {
+              $addToSet: {
+                'overall.weaponStats': {
+                  weapon: weapon.weapon,
+                  shotsFired: weapon.shotsFired || 0,
+                  hits: weapon.hits || 0,
+                  kills: weapon.kills || 0,
+                  damage: weapon.damage || 0,
+                  headshots: weapon.headshots || 0,
+                  // headshotAccuracy не хранится, т.к. это вычисляемое поле
+                },
+              },
+            },
+          },
+        });
+      });
+    }
+
+    if (bulkOps.length > 0) {
+      await PlayerStats.bulkWrite(bulkOps);
+    }
   }
 }
 
