@@ -15,10 +15,12 @@ const createPlayerSchema = z.object({
  * GET /api/admin/players
  * Возвращает всех игроков.
  */
-export async function GET() {
+export async function GET(request) {
   try {
     await connectToDatabase();
-    const players = await playerService.getAllPlayers();
+    const { searchParams } = new URL(request.url);
+    const includeArchived = searchParams.get('include_archived') === 'true';
+    const players = await playerService.getAllPlayers({ includeArchived });
     return NextResponse.json(players);
   } catch (error) {
     console.error('Failed to get players:', error);
@@ -33,7 +35,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     await connectToDatabase();
-    const json = request.body || await request.json();
+    const json = await request.json();
 
     const validationResult = createPlayerSchema.safeParse(json);
     if (!validationResult.success) {

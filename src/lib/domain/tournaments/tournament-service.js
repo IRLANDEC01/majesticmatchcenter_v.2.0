@@ -7,7 +7,7 @@ class TournamentService {
    * @param {object} tournamentData - Данные для создания турнира.
    * @returns {Promise<object>} - Созданный объект турнира.
    */
-  async createTournament(tournamentData) {
+  async create(tournamentData) {
     const { template: templateId } = tournamentData;
 
     if (!templateId) {
@@ -30,11 +30,11 @@ class TournamentService {
     return tournamentRepo.create(newTournamentData);
   }
 
-  async getTournaments(options) {
+  async getAll(options) {
     return tournamentRepo.findAll(options);
   }
 
-  async getTournamentById(id, options) {
+  async getById(id, options) {
     return tournamentRepo.findById(id, options);
   }
 

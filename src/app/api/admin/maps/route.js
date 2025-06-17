@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { mapRepo } from '@/lib/repos/maps/map-repo';
+import { mapService } from '@/lib/domain/maps/map-service';
 import { connectToDatabase } from '@/lib/db';
 import { z } from 'zod';
-import Map from '@/models/map/Map';
 
 const createMapSchema = z.object({
   name: z.string().min(1, 'Название не может быть пустым.'),
@@ -19,7 +18,7 @@ const createMapSchema = z.object({
 export async function GET() {
   try {
     await connectToDatabase();
-    const maps = await mapRepo.getAll();
+    const maps = await mapService.getAllMaps();
     return NextResponse.json(maps);
   } catch (error) {
     console.error('Failed to get maps:', error);
@@ -41,10 +40,9 @@ export async function POST(request) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const newMap = new Map(validationResult.data);
-    await newMap.save();
+    const newMap = await mapService.createMap(validationResult.data);
     
-    return NextResponse.json(newMap.toObject(), { status: 201 });
+    return NextResponse.json(newMap, { status: 201 });
   } catch (error) {
     if (error.code === 11000) {
       return NextResponse.json({ message: 'Карта с таким slug уже существует' }, { status: 409 });

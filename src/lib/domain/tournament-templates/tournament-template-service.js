@@ -15,11 +15,13 @@ class TournamentTemplateService {
 
   /**
    * Получает все шаблоны турниров.
-   * @param {boolean} populateMapTemplates - Флаг для populate связанных шаблонов карт.
+   * @param {object} [options] - Опции для получения шаблонов.
+   * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
+   * @param {boolean} [options.populateMapTemplates=false] - Флаг для populate связанных шаблонов карт.
    * @returns {Promise<Array<object>>} - Массив шаблонов турниров.
    */
-  async getAllTemplates(populateMapTemplates = false) {
-    return tournamentTemplateRepo.findAll(populateMapTemplates);
+  async getAllTemplates(options = {}) {
+    return tournamentTemplateRepo.findAll(options);
   }
 
   /**

@@ -1,44 +1,40 @@
-import { createMocks } from 'node-mocks-http';
 import { PATCH } from './route';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import MapTemplate from '@/models/map/MapTemplate';
+import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 
 describe('API /api/admin/tournament-templates/[id]/archive', () => {
   let testTemplate;
   let mapTemplate;
 
   beforeAll(async () => {
+    await connectToDatabase();
     await TournamentTemplate.init();
     await MapTemplate.init();
   });
 
+  afterAll(async () => {
+    await disconnectFromDatabase();
+  });
+
   beforeEach(async () => {
-    // Сначала создаем зависимость
-    mapTemplate = await MapTemplate.create({ 
-      name: `map-for-tt-${Date.now()}`,
-      slug: `map-for-tt-${Date.now()}` 
-    });
-    
-    // Затем создаем основной объект с этой зависимостью
+    await TournamentTemplate.deleteMany({});
+    await MapTemplate.deleteMany({});
+    mapTemplate = await MapTemplate.create({ name: 'Test Map for Archiving' });
     testTemplate = await TournamentTemplate.create({
-      name: `Test Archive T-Template ${Date.now()}`,
+      name: 'Test Template for Archiving',
       mapTemplates: [mapTemplate._id],
     });
   });
 
-  afterEach(async () => {
-    await TournamentTemplate.deleteMany({});
-    await MapTemplate.deleteMany({});
-  });
-
   it('должен успешно архивировать шаблон', async () => {
-    const { req } = createMocks({
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: { archived: true },
+    const request = new Request(`http://localhost/api/admin/tournament-templates/${testTemplate._id}/archive`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
     });
 
-    const response = await PATCH(req, { params: { id: testTemplate._id.toString() } });
+    const response = await PATCH(request, { params: { id: testTemplate._id.toString() } });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -49,16 +45,15 @@ describe('API /api/admin/tournament-templates/[id]/archive', () => {
   });
 
   it('должен успешно восстанавливать шаблон из архива', async () => {
-    // Сначала архивируем
     await testTemplate.updateOne({ $set: { archivedAt: new Date() } });
 
-    const { req } = createMocks({
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: { archived: false },
+    const request = new Request(`http://localhost/api/admin/tournament-templates/${testTemplate._id}/archive`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: false }),
     });
 
-    const response = await PATCH(req, { params: { id: testTemplate._id.toString() } });
+    const response = await PATCH(request, { params: { id: testTemplate._id.toString() } });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -70,14 +65,14 @@ describe('API /api/admin/tournament-templates/[id]/archive', () => {
   });
 
   it('должен возвращать 404, если шаблон не найден', async () => {
-    const { req } = createMocks({
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: { archived: true },
+    const nonExistentId = '60c72b2f9b1d8e001f8e4c5e';
+    const request = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}/archive`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
     });
 
-    const nonExistentId = '60c72b2f9b1d8e001f8e4c5e';
-    const response = await PATCH(req, { params: { id: nonExistentId } });
+    const response = await PATCH(request, { params: { id: nonExistentId } });
     
     expect(response.status).toBe(404);
   });

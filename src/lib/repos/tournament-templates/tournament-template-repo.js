@@ -8,11 +8,16 @@ import { cache } from '@/lib/cache';
 class TournamentTemplateRepo {
   /**
    * Находит все шаблоны турниров.
-   * @param {boolean} populateMapTemplates - Флаг для populate связанных шаблонов карт.
+   * @param {object} [options] - Опции для поиска.
+   * @param {boolean} [options.populateMapTemplates=false] - Флаг для populate связанных шаблонов карт.
+   * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
    * @returns {Promise<TournamentTemplate[]>}
    */
-  async findAll(populateMapTemplates = false) {
+  async findAll({ populateMapTemplates = false, includeArchived = false } = {}) {
     const query = TournamentTemplate.find();
+    
+    query.setOptions({ includeArchived });
+
     if (populateMapTemplates) {
       query.populate('mapTemplates');
     }

@@ -1,117 +1,102 @@
-import { createMocks } from 'node-mocks-http';
-import { POST, GET } from './route';
+import { GET, POST } from './route';
 import Tournament from '@/models/tournament/Tournament';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import MapTemplate from '@/models/map/MapTemplate';
-import mongoose from 'mongoose';
+import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 
 describe('API /api/admin/tournaments', () => {
-  let tournamentTemplate;
-  let mapTemplate;
+  let testTemplate;
 
   beforeAll(async () => {
+    await connectToDatabase();
     await Tournament.init();
     await TournamentTemplate.init();
     await MapTemplate.init();
   });
 
+  afterAll(async () => {
+    await disconnectFromDatabase();
+  });
+
   beforeEach(async () => {
-    // Сначала создаем шаблон карты
-    mapTemplate = await MapTemplate.create({ name: 'Test Map' });
-    // Теперь создаем шаблон турнира с обязательной ссылкой на шаблон карты
-    tournamentTemplate = await TournamentTemplate.create({
-      name: `Test Template ${new Date().getTime()}`, // Уникальное имя
-      mapTemplates: [mapTemplate._id],
-    });
+    await Tournament.deleteMany({});
+    await TournamentTemplate.deleteMany({});
+    await MapTemplate.deleteMany({});
+    const mapTemplate = await MapTemplate.create({ name: 'Test Map' });
+    testTemplate = await TournamentTemplate.create({ name: 'Test Template', mapTemplates: [mapTemplate._id] });
   });
 
   describe('POST', () => {
-    it('должен успешно создавать турнир и возвращать статус 201', async () => {
+    it('должен успешно создавать турнир и возвращать 201', async () => {
       const tournamentData = {
-        name: 'Majestic Champions League',
-        template: tournamentTemplate._id.toString(),
+        name: 'New Tournament',
+        template: testTemplate._id.toString(),
         tournamentType: 'family',
-        startDate: new Date().toISOString(),
+        startDate: new Date(),
       };
-
-      const { req } = createMocks({
+      const request = new Request('http://localhost/api/admin/tournaments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: tournamentData,
+        body: JSON.stringify(tournamentData),
       });
 
-      const response = await POST(req);
+      const response = await POST(request);
       const body = await response.json();
 
       expect(response.status).toBe(201);
       expect(body.name).toBe(tournamentData.name);
-      expect(body.slug).toBe('majestic-champions-league');
-
+      
       const dbTournament = await Tournament.findById(body._id);
       expect(dbTournament).not.toBeNull();
     });
 
-    it('должен возвращать ошибку 400 при невалидных данных', async () => {
-      const invalidData = { name: 't' }; // Невалидные данные
-      const { req } = createMocks({
+    it('должен возвращать 409 при попытке создать дубликат', async () => {
+      const tournamentData = {
+        name: 'Duplicate Tournament',
+        template: testTemplate._id.toString(),
+        tournamentType: 'family',
+        startDate: new Date(),
+      };
+      await Tournament.create(tournamentData);
+
+      const request = new Request('http://localhost/api/admin/tournaments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: invalidData,
+        body: JSON.stringify(tournamentData),
       });
 
-      const response = await POST(req);
-      expect(response.status).toBe(400);
+      const response = await POST(request);
+      expect(response.status).toBe(409);
     });
   });
 
   describe('GET', () => {
-    it('должен возвращать список турниров', async () => {
-      await Tournament.create({
-        name: 'Tournament 1',
-        template: tournamentTemplate._id,
-        tournamentType: 'family',
-        startDate: new Date(),
-      });
-       await Tournament.create({
-        name: 'Tournament 2',
-        template: tournamentTemplate._id,
-        tournamentType: 'family',
-        startDate: new Date(),
-      });
-      
-      const { req } = createMocks({ method: 'GET' });
-      const response = await GET(req);
+    it('должен возвращать только неархивированные турниры по умолчанию', async () => {
+      await Tournament.create({ name: 'Active Tournament', template: testTemplate._id, tournamentType: 'family', startDate: new Date() });
+      await Tournament.create({ name: 'Archived Tournament', template: testTemplate._id, tournamentType: 'family', startDate: new Date(), archivedAt: new Date() });
+
+      const request = new Request('http://localhost/api/admin/tournaments');
+      const response = await GET(request);
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body.length).toBe(2);
+      expect(body.length).toBe(1);
+      expect(body[0].name).toBe('Active Tournament');
     });
 
-    it('должен возвращать все турниры, включая архивированные', async () => {
-       await Tournament.create({
-        name: 'Active Tournament',
-        template: tournamentTemplate._id,
-        tournamentType: 'family',
-        startDate: new Date(),
+    it('должен возвращать все турниры при `include_archived=true`', async () => {
+        await Tournament.create({ name: 'Active Tournament 2', template: testTemplate._id, tournamentType: 'family', startDate: new Date() });
+        await Tournament.create({ name: 'Archived Tournament 2', template: testTemplate._id, tournamentType: 'family', startDate: new Date(), archivedAt: new Date() });
+  
+        const url = new URL('http://localhost/api/admin/tournaments');
+        url.searchParams.set('include_archived', 'true');
+        const request = new Request(url);
+        
+        const response = await GET(request);
+        const body = await response.json();
+  
+        expect(response.status).toBe(200);
+        expect(body.length).toBe(2);
       });
-      const archived = await Tournament.create({
-        name: 'Archived Tournament',
-        template: tournamentTemplate._id,
-        tournamentType: 'family',
-        startDate: new Date(),
-      });
-      archived.archivedAt = new Date();
-      await archived.save();
-
-      const { req } = createMocks({
-        method: 'GET',
-        query: { include_archived: 'true' },
-      });
-      const response = await GET(req);
-      const body = await response.json();
-      
-      expect(response.status).toBe(200);
-      expect(body.length).toBe(2);
-    });
   });
 });

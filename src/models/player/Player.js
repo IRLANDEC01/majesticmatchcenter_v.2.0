@@ -62,6 +62,8 @@ const playerSchema = new mongoose.Schema({
 }, {
   timestamps: true,
   versionKey: '__v',
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true },
 });
 
 // Индексы для ускорения поиска.
@@ -95,6 +97,24 @@ playerSchema.pre('validate', function(next) {
 // Виртуальное поле для полного имени
 playerSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
+});
+
+// Виртуальное свойство для публичной фамилии
+playerSchema.virtual('publicLastName').get(function() {
+  // Для работы этого свойства необходимо, чтобы при запросе игрока
+  // поле 'currentFamily' было заполнено (populated).
+  if (this.currentFamily && this.currentFamily.displayLastName) {
+    return this.currentFamily.displayLastName;
+  }
+  return this.lastName;
+});
+
+// Хук для автоматического исключения архивированных документов из результатов `find`
+playerSchema.pre(/^find/, function(next) {
+  if (this.getOptions().includeArchived !== true) {
+    this.where({ archivedAt: { $eq: null } });
+  }
+  next();
 });
 
 const Player = mongoose.models.Player || mongoose.model('Player', playerSchema);

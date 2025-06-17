@@ -1,29 +1,32 @@
-import { createMocks } from 'node-mocks-http';
 import { PATCH } from './route';
 import MapTemplate from '@/models/map/MapTemplate';
+import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 
 describe('API /api/admin/map-templates/[id]/archive', () => {
   let testTemplate;
 
   beforeAll(async () => {
+    await connectToDatabase();
     await MapTemplate.init();
   });
 
-  beforeEach(async () => {
-    testTemplate = await MapTemplate.create({
-      name: 'Test Archive Template',
-      slug: 'test-archive-template'
-    });
+  afterAll(async () => {
+    await disconnectFromDatabase();
   });
 
-  it('должен успешно архивировать шаблон', async () => {
-    const { req } = createMocks({
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: { archived: true },
+  beforeEach(async () => {
+    await MapTemplate.deleteMany({});
+    testTemplate = await MapTemplate.create({ name: 'Test Map Template for Archiving' });
+  });
+
+  it('должен успешно архивировать шаблон карты', async () => {
+    const request = new Request(`http://localhost/api/admin/map-templates/${testTemplate._id}/archive`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
     });
 
-    const response = await PATCH(req, { params: { id: testTemplate._id.toString() } });
+    const response = await PATCH(request, { params: { id: testTemplate._id.toString() } });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -33,17 +36,16 @@ describe('API /api/admin/map-templates/[id]/archive', () => {
     expect(dbTemplate.archivedAt).toBeDefined();
   });
 
-  it('должен успешно восстанавливать шаблон из архива', async () => {
-    // Сначала архивируем
+  it('должен успешно восстанавливать шаблон карты из архива', async () => {
     await testTemplate.updateOne({ $set: { archivedAt: new Date() } });
 
-    const { req } = createMocks({
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: { archived: false },
+    const request = new Request(`http://localhost/api/admin/map-templates/${testTemplate._id}/archive`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: false }),
     });
 
-    const response = await PATCH(req, { params: { id: testTemplate._id.toString() } });
+    const response = await PATCH(request, { params: { id: testTemplate._id.toString() } });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -54,15 +56,15 @@ describe('API /api/admin/map-templates/[id]/archive', () => {
     expect(dbTemplate.archivedAt).toBeUndefined();
   });
 
-  it('должен возвращать 404, если шаблон не найден', async () => {
-    const { req } = createMocks({
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: { archived: true },
+  it('должен возвращать 404, если шаблон карты не найден', async () => {
+    const nonExistentId = '60c72b2f9b1d8e001f8e4c5e';
+    const request = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}/archive`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
     });
 
-    const nonExistentId = '60c72b2f9b1d8e001f8e4c5e';
-    const response = await PATCH(req, { params: { id: nonExistentId } });
+    const response = await PATCH(request, { params: { id: nonExistentId } });
     
     expect(response.status).toBe(404);
   });

@@ -15,7 +15,7 @@ export async function PATCH(request, { params }) {
   try {
     await connectToDatabase();
     const { id } = params;
-    const json = request.body || await request.json();
+    const json = await request.json();
 
     const validationResult = patchSchema.safeParse(json);
     if (!validationResult.success) {

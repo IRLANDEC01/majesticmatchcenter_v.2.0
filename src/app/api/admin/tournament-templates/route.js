@@ -7,7 +7,8 @@ import { z } from 'zod';
 const createTemplateSchema = z.object({
   name: z.string().min(1, 'Название не может быть пустым.'),
   description: z.string().optional(),
-  mapTemplates: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/)).optional(),
+  mapTemplates: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID шаблона карты'))
+    .min(1, 'Сценарий должен содержать хотя бы один шаблон карты.'),
 });
 
 /**
@@ -30,10 +31,14 @@ const createTemplateSchema = z.object({
  *       500:
  *         description: Ошибка сервера
  */
-export async function GET() {
+export async function GET(request) {
   try {
     await connectToDatabase();
-    const templates = await tournamentTemplateService.getAllTemplates(true);
+
+    const { searchParams } = new URL(request.url);
+    const includeArchived = searchParams.get('include_archived') === 'true';
+
+    const templates = await tournamentTemplateService.getAllTemplates({ includeArchived });
     return NextResponse.json(templates);
   } catch (error) {
     console.error('Failed to get tournament templates:', error);
@@ -70,9 +75,8 @@ export async function GET() {
 export async function POST(request) {
   try {
     await connectToDatabase();
-    const json = request.body || await request.json();
+    const json = await request.json();
 
-    // Валидация входных данных с помощью Zod
     const validationResult = createTemplateSchema.safeParse(json);
     if (!validationResult.success) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
@@ -81,11 +85,9 @@ export async function POST(request) {
     const newTemplate = await tournamentTemplateService.createTemplate(validationResult.data);
     return NextResponse.json(newTemplate, { status: 201 });
   } catch (error) {
-    // Проверяем на ошибки дублирования ключа (slug)
     if (error.code === 11000) {
       return NextResponse.json({ message: 'Шаблон с таким названием уже существует' }, { status: 409 });
     }
-    console.error('Failed to create tournament template:', error);
     return NextResponse.json({ message: 'Ошибка сервера при создании шаблона турнира' }, { status: 500 });
   }
 } 

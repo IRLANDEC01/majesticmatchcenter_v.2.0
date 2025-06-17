@@ -15,10 +15,12 @@ class MapTemplateService {
 
   /**
    * Получает все шаблоны карт.
+   * @param {object} [options] - Опции для получения шаблонов.
+   * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
    * @returns {Promise<Array<object>>} - Массив шаблонов карт.
    */
-  async getAllMapTemplates() {
-    return mapTemplateRepository.findAll();
+  async getAllMapTemplates(options = { includeArchived: false }) {
+    return mapTemplateRepository.findAll(options);
   }
 
   /**

@@ -14,7 +14,7 @@ export async function GET(request, { params }) {
   const { id } = params;
 
   try {
-    const tournament = await tournamentService.getTournamentById(id);
+    const tournament = await tournamentService.getById(id);
 
     if (!tournament) {
       return NextResponse.json({ message: 'Турнир не найден' }, { status: 404 });

@@ -9,18 +9,19 @@ class PlayerRepository {
   /**
    * Находит игрока по ID.
    * @param {string} id - ID игрока.
+   * @param {object} [options] - Опции.
+   * @param {boolean} [options.includeArchived=false] - Включить архивированных игроков.
    * @returns {Promise<object|null>}
    */
-  async findById(id) {
+  async findById(id, { includeArchived = false } = {}) {
     const cacheKey = `player:${id}`;
-    const cached = await cache.get(cacheKey);
-    if (cached) {
-      if (cached.archivedAt) return null;
-      return cached;
+    if (!includeArchived) {
+      const cached = await cache.get(cacheKey);
+      if (cached) return cached;
     }
 
-    const player = await Player.findOne({ _id: id, archivedAt: null }).lean();
-    if (player) {
+    const player = await Player.findById(id).setOptions({ includeArchived }).lean();
+    if (player && !includeArchived) {
       await cache.set(cacheKey, player, {
         tags: [`player:${id}`, 'players_list'],
       });
@@ -34,19 +35,7 @@ class PlayerRepository {
    * @returns {Promise<object|null>}
    */
   async findBySlug(slug) {
-    const cacheKey = `player:slug:${slug}`;
-    const cachedPlayer = await cache.get(cacheKey);
-    if (cachedPlayer) {
-      if (cachedPlayer.archivedAt) return null;
-      return cachedPlayer;
-    }
-
-    const player = await Player.findOne({ slug, archivedAt: null }).lean();
-    if (player) {
-      await cache.set(cacheKey, player, {
-        tags: [`player:${player._id}`, 'players_list'],
-      });
-    }
+    const player = await Player.findOne({ slug }).lean();
     return player;
   }
 
@@ -57,11 +46,7 @@ class PlayerRepository {
    * @returns {Promise<Array<object>>}
    */
   async findAll({ includeArchived = false } = {}) {
-    const query = {};
-    if (!includeArchived) {
-      query.archivedAt = null;
-    }
-    return Player.find(query).lean();
+    return Player.find().setOptions({ includeArchived }).lean();
   }
 
   /**
@@ -97,8 +82,8 @@ class PlayerRepository {
    * @returns {Promise<object|null>}
    */
   async archive(id) {
-    const player = await Player.findOneAndUpdate(
-      { _id: id, archivedAt: null },
+    const player = await Player.findByIdAndUpdate(
+      id,
       { $set: { archivedAt: new Date() } },
       { new: true }
     ).lean();
@@ -119,7 +104,7 @@ class PlayerRepository {
     const player = await Player.findByIdAndUpdate(
       id,
       { $unset: { archivedAt: 1 } },
-      { new: true }
+      { new: true, includeArchived: true }
     ).lean();
     
     if (player) {

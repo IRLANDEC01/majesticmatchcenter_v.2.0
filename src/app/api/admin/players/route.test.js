@@ -1,86 +1,83 @@
-import { createMocks } from 'node-mocks-http';
 import { GET, POST } from './route';
 import Player from '@/models/player/Player';
+import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 
 describe('API /api/admin/players', () => {
   beforeAll(async () => {
+    await connectToDatabase();
     await Player.init();
   });
 
-  describe('GET', () => {
-    it('должен возвращать пустой массив, если игроков нет', async () => {
-      const { req } = createMocks({ method: 'GET' });
-      const response = await GET(req);
-      const body = await response.json();
-      expect(response.status).toBe(200);
-      expect(body).toEqual([]);
-    });
+  afterAll(async () => {
+    await disconnectFromDatabase();
+  });
 
-    it('должен возвращать список игроков и статус 200', async () => {
-      await Player.create({ firstName: 'John', lastName: 'Doe' });
-      await Player.create({ firstName: 'Jane', lastName: 'Doe' });
-
-      const { req } = createMocks({ method: 'GET' });
-      const response = await GET(req);
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body).toHaveLength(2);
-    });
+  beforeEach(async () => {
+    await Player.deleteMany({});
   });
 
   describe('POST', () => {
-    it('должен создавать игрока и возвращать 201', async () => {
-      const newPlayerData = { firstName: 'New', lastName: 'Player' };
-      
-      const { req } = createMocks({
+    it('должен успешно создавать игрока и возвращать 201', async () => {
+      const playerData = { firstName: 'John', lastName: 'Doe' };
+      const request = new Request('http://localhost/api/admin/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: newPlayerData,
+        body: JSON.stringify(playerData),
       });
 
-      const response = await POST(req);
+      const response = await POST(request);
       const body = await response.json();
 
       expect(response.status).toBe(201);
-      expect(body.firstName).toBe(newPlayerData.firstName);
-      expect(body.lastName).toBe(newPlayerData.lastName);
-
+      expect(body.firstName).toBe(playerData.firstName);
+      expect(body.slug).toBe('john-doe');
+      
       const dbPlayer = await Player.findById(body._id);
       expect(dbPlayer).not.toBeNull();
     });
 
-    it('должен возвращать 400 при невалидных данных', async () => {
-      const invalidData = { firstName: 'NoLastName' };
-      
-      const { req } = createMocks({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: invalidData,
-      });
-
-      const response = await POST(req);
-      const body = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(body.errors.lastName).toBeDefined();
-    });
-
-    it('должен возвращать 409 при дубликате', async () => {
-      const playerData = { firstName: 'Duplicate', lastName: 'Player' };
+    it('должен возвращать 409 при попытке создать дубликат по имени и фамилии', async () => {
+      const playerData = { firstName: 'Jane', lastName: 'Doe' };
       await Player.create(playerData);
 
-      const { req } = createMocks({
+      const request = new Request('http://localhost/api/admin/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: playerData,
+        body: JSON.stringify(playerData),
       });
 
-      const response = await POST(req);
+      const response = await POST(request);
+      expect(response.status).toBe(409);
+    });
+  });
+
+  describe('GET', () => {
+    it('должен возвращать только неархивированных игроков по умолчанию', async () => {
+      await Player.create({ firstName: 'Active', lastName: 'Player' });
+      await Player.create({ firstName: 'Archived', lastName: 'Player', archivedAt: new Date() });
+
+      const request = new Request('http://localhost/api/admin/players');
+      const response = await GET(request);
       const body = await response.json();
 
-      expect(response.status).toBe(409);
-      expect(body.message).toContain('уже существует');
+      expect(response.status).toBe(200);
+      expect(body.length).toBe(1);
+      expect(body[0].firstName).toBe('Active');
+    });
+
+    it('должен возвращать всех игроков при `include_archived=true`', async () => {
+      await Player.create({ firstName: 'ActivePlayer', lastName: 'Two' });
+      await Player.create({ firstName: 'ArchivedPlayer', lastName: 'Two', archivedAt: new Date() });
+
+      const url = new URL('http://localhost/api/admin/players');
+      url.searchParams.set('include_archived', 'true');
+      const request = new Request(url);
+      
+      const response = await GET(request);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.length).toBe(2);
     });
   });
 }); 

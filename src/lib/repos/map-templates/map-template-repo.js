@@ -42,10 +42,12 @@ class MapTemplateRepository {
 
   /**
    * Находит все шаблоны карт.
+   * @param {object} [options] - Опции для поиска.
+   * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
    * @returns {Promise<Array<object>>} - Массив шаблонов.
    */
-  async findAll() {
-    return MapTemplate.find().lean();
+  async findAll({ includeArchived = false } = {}) {
+    return MapTemplate.find().setOptions({ includeArchived }).lean();
   }
 
   /**

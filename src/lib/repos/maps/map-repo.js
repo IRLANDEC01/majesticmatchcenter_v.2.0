@@ -25,6 +25,27 @@ class MapRepository {
   }
 
   /**
+   * Создает новую карту.
+   * @param {object} data - Данные для создания карты.
+   * @returns {Promise<Map>}
+   */
+  async create(data) {
+    const newMap = new Map(data);
+    await newMap.save();
+    return newMap.toObject();
+  }
+
+  /**
+   * Обновляет карту по ID.
+   * @param {string} id - ID карты.
+   * @param {object} data - Данные для обновления.
+   * @returns {Promise<Map|null>}
+   */
+  async update(id, data) {
+    return Map.findByIdAndUpdate(id, data, { new: true, runValidators: true }).lean();
+  }
+
+  /**
    * Архивирует карту по ID.
    * Устанавливает поле archivedAt в текущую дату.
    * @param {string} id - ID карты для архивации.

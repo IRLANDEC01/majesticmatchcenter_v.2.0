@@ -1,11 +1,11 @@
 import { GET, POST } from './route';
 import MapTemplate from '@/models/map/MapTemplate';
-import mongoose from 'mongoose';
 import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 
-describe('/api/admin/map-templates', () => {
+describe('API /api/admin/map-templates', () => {
   beforeAll(async () => {
     await connectToDatabase();
+    await MapTemplate.init();
   });
 
   afterAll(async () => {
@@ -16,46 +16,68 @@ describe('/api/admin/map-templates', () => {
     await MapTemplate.deleteMany({});
   });
 
-  describe('GET', () => {
-    it('должен возвращать список шаблонов карт и статус 200', async () => {
-      await MapTemplate.create([
-        { name: 'Test Template 1' },
-        { name: 'Test Template 2' },
-      ]);
-      const response = await GET();
-      const body = await response.json();
-      expect(response.status).toBe(200);
-      expect(body).toHaveLength(2);
-    });
-  });
-
   describe('POST', () => {
-    it('должен создавать шаблон и возвращать его со статусом 201', async () => {
-      const newTemplateData = { name: 'New Awesome Template', slug: 'new-awesome-template' };
+    it('должен успешно создавать шаблон карты и возвращать 201', async () => {
+      const templateData = { name: 'New Map Template' };
       const request = new Request('http://localhost/api/admin/map-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTemplateData),
+        body: JSON.stringify(templateData),
       });
+
       const response = await POST(request);
       const body = await response.json();
+
       expect(response.status).toBe(201);
-      expect(body.name).toBe(newTemplateData.name);
+      expect(body.name).toBe(templateData.name);
+      expect(body.slug).toBe('new-map-template');
       
       const dbTemplate = await MapTemplate.findById(body._id);
       expect(dbTemplate).not.toBeNull();
     });
 
-    it('должен возвращать ошибку 409 при дубликате', async () => {
-      await MapTemplate.create({ name: 'Existing Template', slug: 'existing-template' });
-      const newTemplateData = { name: 'Existing Template', slug: 'existing-template' };
+    it('должен возвращать 409 при попытке создать дубликат', async () => {
+      const templateData = { name: 'Duplicate Map Template' };
+      await MapTemplate.create(templateData);
+
       const request = new Request('http://localhost/api/admin/map-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTemplateData),
+        body: JSON.stringify(templateData),
       });
+
       const response = await POST(request);
       expect(response.status).toBe(409);
+    });
+  });
+
+  describe('GET', () => {
+    it('должен возвращать только неархивированные шаблоны по умолчанию', async () => {
+      await MapTemplate.create({ name: 'Active Map Template' });
+      await MapTemplate.create({ name: 'Archived Map Template', archivedAt: new Date() });
+
+      const request = new Request('http://localhost/api/admin/map-templates');
+      const response = await GET(request);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.length).toBe(1);
+      expect(body[0].name).toBe('Active Map Template');
+    });
+
+    it('должен возвращать все шаблоны при `include_archived=true`', async () => {
+      await MapTemplate.create({ name: 'Active Map Template 2' });
+      await MapTemplate.create({ name: 'Archived Map Template 2', archivedAt: new Date() });
+
+      const url = new URL('http://localhost/api/admin/map-templates');
+      url.searchParams.set('include_archived', 'true');
+      const request = new Request(url);
+      
+      const response = await GET(request);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.length).toBe(2);
     });
   });
 }); 

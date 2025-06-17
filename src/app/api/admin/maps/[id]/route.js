@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { mapRepo } from '@/lib/repos/maps/map-repo';
+import { mapService } from '@/lib/domain/maps/map-service';
 import { connectToDatabase } from '@/lib/db';
 import { z } from 'zod';
-import Map from '@/models/map/Map';
 
 // Схема для обновления. Все поля опциональны.
 const updateMapSchema = z.object({
@@ -11,6 +10,11 @@ const updateMapSchema = z.object({
   description: z.string().optional(),
   template: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID шаблона.').optional(),
   startDateTime: z.string().datetime({ message: 'Некорректный формат даты и времени.' }).optional(),
+});
+
+// Схема для PATCH запроса (архивация/восстановление)
+const patchMapSchema = z.object({
+  archived: z.boolean(),
 });
 
 /**
@@ -25,7 +29,7 @@ export async function GET(request, { params }) {
     }
 
     await connectToDatabase();
-    const map = await mapRepo.findById(id);
+    const map = await mapService.getMapById(id);
 
     if (!map) {
       return NextResponse.json({ message: 'Карта не найдена' }, { status: 404 });
@@ -57,7 +61,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const updatedMap = await Map.findByIdAndUpdate(id, validationResult.data, { new: true, runValidators: true }).lean();
+    const updatedMap = await mapService.updateMap(id, validationResult.data);
 
     if (!updatedMap) {
       return NextResponse.json({ message: 'Карта не найдена' }, { status: 404 });
@@ -70,5 +74,44 @@ export async function PUT(request, { params }) {
     }
     console.error(`Failed to update map ${params.id}:`, error);
     return NextResponse.json({ message: 'Ошибка сервера при обновлении карты' }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH /api/admin/maps/[id]
+ * Архивирует или восстанавливает карту.
+ */
+export async function PATCH(request, { params }) {
+  try {
+    const { id } = params;
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return NextResponse.json({ message: 'Некорректный ID карты' }, { status: 400 });
+    }
+
+    await connectToDatabase();
+    const json = await request.json();
+
+    const validationResult = patchMapSchema.safeParse(json);
+    if (!validationResult.success) {
+      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
+    }
+
+    const { archived } = validationResult.data;
+    let result;
+
+    if (archived) {
+      result = await mapService.archiveMap(id);
+    } else {
+      result = await mapService.unarchiveMap(id);
+    }
+
+    if (!result) {
+      return NextResponse.json({ message: 'Карта не найдена' }, { status: 404 });
+    }
+
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error(`Failed to update map status ${params.id}:`, error);
+    return NextResponse.json({ message: 'Ошибка сервера при изменении статуса карты' }, { status: 500 });
   }
 } 

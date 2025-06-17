@@ -83,6 +83,18 @@ const mapSchema = new mongoose.Schema({
   versionKey: '__v',
 });
 
+// Хук для автоматической установки статуса перед сохранением
+mapSchema.pre('save', function(next) {
+  // `this` - это сохраняемый документ
+  // Не меняем статус, если он уже 'completed' или документ не новый/не изменен
+  if (this.isModified('startDateTime') || this.isNew) {
+    if (this.status !== 'completed') {
+      this.status = this.startDateTime > new Date() ? 'planned' : 'active';
+    }
+  }
+  next();
+});
+
 // Хук для автоматического исключения архивированных документов из результатов `find`
 mapSchema.pre(/^find/, function(next) {
   // `this` - это объект запроса (query)

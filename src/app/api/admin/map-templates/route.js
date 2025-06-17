@@ -13,10 +13,13 @@ const createTemplateSchema = z.object({
  * Обработчик GET-запроса для получения всех шаблонов карт.
  * @returns {Promise<NextResponse>}
  */
-export async function GET() {
+export async function GET(request) {
   try {
     await connectToDatabase();
-    const templates = await mapTemplateService.getAllMapTemplates();
+    const { searchParams } = new URL(request.url);
+    const includeArchived = searchParams.get('include_archived') === 'true';
+
+    const templates = await mapTemplateService.getAllMapTemplates({ includeArchived });
     return NextResponse.json(templates);
   } catch (error) {
     console.error('Failed to get map templates:', error);
