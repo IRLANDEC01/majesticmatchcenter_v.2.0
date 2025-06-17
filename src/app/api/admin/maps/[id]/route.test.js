@@ -97,25 +97,5 @@ describe('/api/admin/maps/[id]', () => {
       expect(response.status).toBe(200);
       expect(body.name).toBe('Updated Map Name');
     });
-
-    it('должен возвращать 409 при дублировании slug', async () => {
-      await Map.create({
-        name: 'Another Map',
-        slug: 'existing-map-slug',
-        tournament: testTournament._id,
-        template: mapTemplate._id,
-        startDateTime: new Date(),
-      });
-
-      const updateData = { slug: 'existing-map-slug' };
-      const req = new Request(`http://localhost/api/admin/maps/${testMap._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData),
-      });
-
-      const response = await PUT(req, { params: { id: testMap._id.toString() } });
-      expect(response.status).toBe(409);
-    });
   });
 }); 

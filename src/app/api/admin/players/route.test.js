@@ -1,11 +1,13 @@
 import { GET, POST } from './route';
 import Player from '@/models/player/Player';
+import PlayerStats from '@/models/player/PlayerStats';
 import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 
 describe('API /api/admin/players', () => {
   beforeAll(async () => {
     await connectToDatabase();
     await Player.init();
+    await PlayerStats.init();
   });
 
   afterAll(async () => {
@@ -14,10 +16,11 @@ describe('API /api/admin/players', () => {
 
   beforeEach(async () => {
     await Player.deleteMany({});
+    await PlayerStats.deleteMany({});
   });
 
   describe('POST', () => {
-    it('должен успешно создавать игрока и возвращать 201', async () => {
+    it('должен успешно создавать игрока, связанную статистику и возвращать 201', async () => {
       const playerData = { firstName: 'John', lastName: 'Doe' };
       const request = new Request('http://localhost/api/admin/players', {
         method: 'POST',
@@ -34,6 +37,13 @@ describe('API /api/admin/players', () => {
       
       const dbPlayer = await Player.findById(body._id);
       expect(dbPlayer).not.toBeNull();
+      
+      const dbStats = await PlayerStats.findOne({ playerId: body._id });
+      expect(dbStats).not.toBeNull();
+      if (dbStats) {
+        expect(dbStats.playerId.toString()).toBe(body._id.toString());
+        expect(dbStats.overall.kills).toBe(0);
+      }
     });
 
     it('должен возвращать 409 при попытке создать дубликат по имени и фамилии', async () => {

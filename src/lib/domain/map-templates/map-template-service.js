@@ -1,16 +1,25 @@
-import { mapTemplateRepository } from '@/lib/repos/map-templates/map-template-repo.js';
+import { mapTemplateRepo } from '@/lib/repos/map-templates/map-template-repo.js';
+import { DuplicateError } from '@/lib/errors';
 
 /**
  * Cервис для управления бизнес-логикой шаблонов карт.
  */
 class MapTemplateService {
   /**
+   * @param {object} repos - Репозитории.
+   * @param {import('@/lib/repos/map-templates/map-template-repo').mapTemplateRepo} repos.mapTemplateRepo - Репозиторий шаблонов карт.
+   */
+  constructor(repos) {
+    this.repo = repos.mapTemplateRepo;
+  }
+
+  /**
    * Создает новый шаблон карты.
    * @param {object} templateData - Данные для создания шаблона.
    * @returns {Promise<object>} - Созданный объект шаблона карты.
    */
   async createMapTemplate(templateData) {
-    return mapTemplateRepository.create(templateData);
+    return this.repo.create(templateData);
   }
 
   /**
@@ -20,7 +29,7 @@ class MapTemplateService {
    * @returns {Promise<Array<object>>} - Массив шаблонов карт.
    */
   async getAllMapTemplates(options = { includeArchived: false }) {
-    return mapTemplateRepository.findAll(options);
+    return this.repo.findAll(options);
   }
 
   /**
@@ -29,7 +38,7 @@ class MapTemplateService {
    * @returns {Promise<object|null>} - Найденный шаблон или null.
    */
   async getMapTemplateById(id) {
-    return mapTemplateRepository.findById(id);
+    return this.repo.findById(id);
   }
 
   /**
@@ -39,7 +48,13 @@ class MapTemplateService {
    * @returns {Promise<object>} - Обновленный объект шаблона карты.
    */
   async updateMapTemplate(id, templateData) {
-    return mapTemplateRepository.update(id, templateData);
+    if (templateData.name) {
+      const existingTemplate = await this.repo.findByName(templateData.name);
+      if (existingTemplate && existingTemplate._id.toString() !== id) {
+        throw new DuplicateError('Шаблон карты с таким названием уже существует.');
+      }
+    }
+    return this.repo.update(id, templateData);
   }
   
   /**
@@ -49,7 +64,7 @@ class MapTemplateService {
    */
   async archiveMapTemplate(templateId) {
     // TODO: Добавить бизнес-логику, например, проверку, что нельзя архивировать используемый шаблон
-    return mapTemplateRepository.archive(templateId);
+    return this.repo.archive(templateId);
   }
   
   /**
@@ -58,8 +73,8 @@ class MapTemplateService {
    * @returns {Promise<object|null>}
    */
   async unarchiveMapTemplate(templateId) {
-    return mapTemplateRepository.unarchive(templateId);
+    return this.repo.unarchive(templateId);
   }
 }
 
-export const mapTemplateService = new MapTemplateService(); 
+export const mapTemplateService = new MapTemplateService({ mapTemplateRepo }); 

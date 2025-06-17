@@ -1,40 +1,32 @@
+import { z } from 'zod';
 import { mapRepo } from '@/lib/repos/maps/map-repo';
-import Map from '@/models/map/Map';
-import Tournament from '@/models/tournament/Tournament.js';
-import { mapTemplateRepository } from '@/lib/repos/map-templates/map-template-repo.js';
+import { tournamentRepo } from '@/lib/repos/tournaments/tournament-repo.js';
+import { mapTemplateRepo } from '@/lib/repos/map-templates/map-template-repo.js';
 import { RatingService } from '@/lib/domain/ratings/rating-service';
 import { StatisticsService } from '@/lib/domain/statistics/statistics-service';
 import { AchievementService } from '@/lib/domain/achievements/achievement-service';
-import { DuplicateError } from '@/lib/errors';
+import { ValidationError, NotFoundError } from '@/lib/errors';
 
 const ratingService = new RatingService();
 const statisticsService = new StatisticsService();
 const achievementService = new AchievementService();
+
+const mapSchema = z.object({
+  name: z.string().trim().min(1, 'Название карты обязательно.'),
+  tournament: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID турнира.'),
+  template: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID шаблона.'),
+  startDateTime: z.coerce.date({ required_error: 'Дата и время начала обязательны.' }),
+});
 
 /**
  * Сервис для управления бизнес-логикой, связанной с картами.
  * инкапсулирует логику работы с репозиторием карт.
  */
 class MapService {
-  constructor(repo) {
-    this.repo = repo;
-  }
-
-  /**
-   * Проверяет, уникален ли slug в рамках турнира.
-   * @private
-   * @param {string} slug - Slug для проверки.
-   * @param {string} tournamentId - ID турнира.
-   * @param {string|null} currentMapId - ID текущей карты (для исключения при обновлении).
-   * @returns {Promise<void>}
-   */
-  async _validateSlugUniqueness(slug, tournamentId, currentMapId = null) {
-    if (!slug || !tournamentId) return;
-
-    const existingMap = await this.repo.findBySlug(slug, tournamentId);
-    if (existingMap && existingMap._id.toString() !== currentMapId) {
-      throw new DuplicateError(`Map with slug "${slug}" already exists in this tournament.`);
-    }
+  constructor(repos) {
+    this.repo = repos.mapRepo;
+    this.tournamentRepo = repos.tournamentRepo;
+    this.mapTemplateRepo = repos.mapTemplateRepo;
   }
 
   /**
@@ -56,37 +48,53 @@ class MapService {
   }
 
   /**
-   * Создает новую карту.
+   * Создает новую карту с уникальным slug.
    * @param {object} data - Данные для создания карты.
    * @returns {Promise<Map>}
    */
   async createMap(data) {
-    await this._validateSlugUniqueness(data.slug, data.tournament);
-    return this.repo.create(data);
+    const validationResult = mapSchema.safeParse(data);
+    if (!validationResult.success) {
+      throw new ValidationError('Ошибка валидации при создании карты', validationResult.error.flatten().fieldErrors);
+    }
+    const validatedData = validationResult.data;
+
+    const tournament = await this.tournamentRepo.findById(validatedData.tournament);
+    if (!tournament) {
+      throw new NotFoundError(`Родительский турнир с id ${validatedData.tournament} не найден.`);
+    }
+
+    const template = await this.mapTemplateRepo.findById(validatedData.template);
+    if (!template) {
+      throw new NotFoundError(`Шаблон карты с id ${validatedData.template} не найден.`);
+    }
+    
+    // Порядковый номер карты в турнире
+    const mapCount = await this.repo.countByTournamentId(validatedData.tournament);
+    const slug = `${tournament.slug}-${template.slug}-${mapCount + 1}`;
+    
+    const newMapData = {
+      ...validatedData,
+      slug,
+    };
+    
+    return this.repo.create(newMapData);
   }
 
   /**
-   * Обновляет карту по ID.
+   * Обновляет карту по ID. Слаг не подлежит обновлению.
    * @param {string} id - ID карты.
    * @param {object} data - Данные для обновления.
    * @returns {Promise<Map|null>}
    */
   async updateMap(id, data) {
-    // Для проверки уникальности нам нужен ID турнира.
-    // Если он не передается в `data`, загружаем текущую карту, чтобы его получить.
-    let tournamentId = data.tournament;
-    if (data.slug && !tournamentId) {
-        const currentMap = await this.repo.findById(id);
-        if (!currentMap) {
-            // Если карта не найдена, repo.update() вернет null, что является ожидаемым поведением.
-            // Нет необходимости бросать ошибку здесь.
-            return this.repo.update(id, data);
-        }
-        tournamentId = currentMap.tournament;
+    // Удаляем slug из данных, чтобы его нельзя было изменить.
+    const { slug, ...updateData } = data;
+    if (slug) {
+      // Можно логировать попытку изменения слага, если это важно.
+      console.warn(`Попытка изменить неизменяемый slug для карты ${id} была проигнорирована.`);
     }
-
-    await this._validateSlugUniqueness(data.slug, tournamentId, id);
-    return this.repo.update(id, data);
+    return this.repo.update(id, updateData);
   }
 
   /**
@@ -170,4 +178,8 @@ class MapService {
   }
 }
 
-export const mapService = new MapService(mapRepo); 
+export const mapService = new MapService({
+  mapRepo,
+  tournamentRepo,
+  mapTemplateRepo,
+}); 

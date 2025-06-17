@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import socialLinkSchema from '@/models/shared/social-link-schema.js';
 import seoSchema from '@/models/shared/seo-schema.js';
+import earningsSchema from '@/models/shared/earnings-schema.js';
 
 const playerSchema = new mongoose.Schema({
   // Имя игрока. Только латиница, одно слово.
@@ -55,6 +56,8 @@ const playerSchema = new mongoose.Schema({
     type: Date,
     index: true, // Индекс для быстрого отсеивания архивированных записей
   },
+  // Суммарные заработки игрока за все время.
+  earnings: [earningsSchema],
   // Социальные сети игрока
   socialLinks: [socialLinkSchema],
   // SEO-поля

@@ -53,7 +53,8 @@ class FamilyRepository {
    * @returns {Promise<object|null>}
    */
   async findByName(name) {
-    return Family.findOne({ name, archivedAt: null }).lean();
+    // Используем 'i' для регистронезависимого поиска
+    return Family.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } }).lean();
   }
 
 

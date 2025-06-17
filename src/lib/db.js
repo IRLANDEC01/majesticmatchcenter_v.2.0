@@ -27,6 +27,18 @@ export async function connectToDatabase() {
   return cachedConnection;
 }
 
+export async function clearDatabase() {
+  if (process.env.NODE_ENV !== 'test') {
+    console.warn('clearDatabase should only be called in test environment');
+    return;
+  }
+  const collections = mongoose.connection.collections;
+  for (const key in collections) {
+    const collection = collections[key];
+    await collection.deleteMany({});
+  }
+}
+
 export async function disconnectFromDatabase() {
   if (cachedConnection) {
     await mongoose.connection.close();

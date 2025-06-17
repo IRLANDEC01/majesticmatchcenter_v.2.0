@@ -75,30 +75,60 @@ describe('/api/admin/maps', () => {
   });
 
   describe('POST', () => {
-    it('должен успешно создавать карту и возвращать 201', async () => {
-      const newMapData = {
-        name: 'New Test Map',
+    it('должен успешно создавать карты с инкрементальным slug и возвращать 201', async () => {
+      // --- Создание первой карты ---
+      const mapData1 = {
+        name: 'Test Map 1',
         tournament: testTournament._id.toString(),
         template: mapTemplate._id.toString(),
         startDateTime: new Date(),
       };
 
-      const req = new Request('http://localhost/api/admin/maps', {
+      const req1 = new Request('http://localhost/api/admin/maps', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newMapData),
+        body: JSON.stringify(mapData1),
       });
 
-      const response = await POST(req);
-      const body = await response.json();
+      const response1 = await POST(req1);
+      const body1 = await response1.json();
 
-      expect(response.status).toBe(201);
-      expect(body.name).toBe(newMapData.name);
-      expect(body.tournament).toBe(newMapData.tournament);
-      expect(body.template).toBe(newMapData.template);
+      const expectedSlug1 = `${testTournament.slug}-${mapTemplate.slug}-1`;
 
-      const dbMap = await Map.findById(body._id);
-      expect(dbMap).not.toBeNull();
+      expect(response1.status).toBe(201);
+      expect(body1.name).toBe(mapData1.name);
+      expect(body1.slug).toBe(expectedSlug1);
+
+      const dbMap1 = await Map.findById(body1._id);
+      expect(dbMap1).not.toBeNull();
+      expect(dbMap1.slug).toBe(expectedSlug1);
+
+      // --- Создание второй карты в том же турнире ---
+      const mapData2 = {
+        name: 'Test Map 2',
+        tournament: testTournament._id.toString(),
+        template: mapTemplate._id.toString(),
+        startDateTime: new Date(),
+      };
+      
+      const req2 = new Request('http://localhost/api/admin/maps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mapData2),
+      });
+
+      const response2 = await POST(req2);
+      const body2 = await response2.json();
+      
+      const expectedSlug2 = `${testTournament.slug}-${mapTemplate.slug}-2`;
+      
+      expect(response2.status).toBe(201);
+      expect(body2.name).toBe(mapData2.name);
+      expect(body2.slug).toBe(expectedSlug2);
+
+      const dbMap2 = await Map.findById(body2._id);
+      expect(dbMap2).not.toBeNull();
+      expect(dbMap2.slug).toBe(expectedSlug2);
     });
 
     it('должен возвращать 400 при невалидных данных', async () => {
@@ -118,32 +148,6 @@ describe('/api/admin/maps', () => {
 
       expect(response.status).toBe(400);
       expect(body.errors.template).toBeDefined();
-    });
-
-    it('должен возвращать 409 при дублировании slug', async () => {
-      await Map.create({ 
-        name: 'Existing Map',
-        slug: 'existing-map',
-        tournament: testTournament._id,
-        template: mapTemplate._id,
-        startDateTime: new Date(),
-      });
-
-      const newMapData = {
-        name: 'Another map with same slug',
-        slug: 'existing-map',
-        tournament: testTournament._id.toString(),
-        template: mapTemplate._id.toString(),
-        startDateTime: new Date(),
-      };
-      const req = new Request('http://localhost/api/admin/maps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newMapData),
-      });
-
-      const response = await POST(req);
-      expect(response.status).toBe(409);
     });
   });
 }); 

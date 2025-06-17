@@ -68,6 +68,15 @@ class MapRepository {
   async findBySlug(slug, tournamentId) {
     return Map.findOne({ slug, tournament: tournamentId }).lean();
   }
+  
+  /**
+   * Считает количество карт в указанном турнире.
+   * @param {string} tournamentId - ID турнира.
+   * @returns {Promise<number>}
+   */
+  async countByTournamentId(tournamentId) {
+    return Map.countDocuments({ tournament: tournamentId });
+  }
 }
 
 export const mapRepo = new MapRepository(); 

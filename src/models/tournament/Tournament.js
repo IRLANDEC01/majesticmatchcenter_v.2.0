@@ -136,17 +136,11 @@ const tournamentSchema = new mongoose.Schema({
   versionKey: '__v',
 });
 
-// Хук для автоматической генерации slug из name
+// Хук для валидации, чтобы дата окончания не была раньше даты начала
 tournamentSchema.pre('validate', function(next) {
-  if (this.name && (this.isModified('name') || !this.slug)) {
-    this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-  }
-  
-  // Валидация, чтобы дата окончания не была раньше даты начала
   if (this.startDate && this.endDate && this.endDate < this.startDate) {
     this.invalidate('endDate', 'Дата окончания не может быть раньше даты начала.', this.endDate);
   }
-  
   next();
 });
 

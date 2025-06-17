@@ -137,4 +137,4 @@ class MapTemplateRepository {
   }
 }
 
-export const mapTemplateRepository = new MapTemplateRepository(); 
+export const mapTemplateRepo = new MapTemplateRepository(); 

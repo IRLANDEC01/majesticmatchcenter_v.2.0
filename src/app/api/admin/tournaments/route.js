@@ -3,6 +3,7 @@ import { tournamentService } from '@/lib/domain/tournaments/tournament-service.j
 import { z } from 'zod';
 import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/db.js';
+import { handleApiError } from '@/lib/api/handle-api-error';
 
 // Схема валидации для создания турнира
 const tournamentCreateSchema = z.object({
@@ -22,28 +23,17 @@ const tournamentCreateSchema = z.object({
   })).optional(),
 });
 
+/**
+ * POST /api/admin/tournaments
+ * Создает новый турнир.
+ */
 export async function POST(request) {
   try {
-    await connectToDatabase();
-    const json = await request.json();
-
-    const validation = tournamentCreateSchema.safeParse(json);
-
-    if (!validation.success) {
-      return NextResponse.json({ errors: validation.error.flatten().fieldErrors }, { status: 400 });
-    }
-    
-    // Используем сервисный слой для создания турнира
-    const newTournament = await tournamentService.create(validation.data);
-
+    const data = await request.json();
+    const newTournament = await tournamentService.createTournament(data);
     return NextResponse.json(newTournament, { status: 201 });
-
   } catch (error) {
-    if (error.code === 11000) {
-      return NextResponse.json({ message: 'Турнир с таким названием уже существует' }, { status: 409 });
-    }
-    console.error(error);
-    return NextResponse.json({ message: 'Ошибка сервера при создании турнира' }, { status: 500 });
+    return handleApiError(error);
   }
 }
 

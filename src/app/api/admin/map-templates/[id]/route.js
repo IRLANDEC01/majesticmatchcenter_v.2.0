@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { mapTemplateService } from '@/lib/domain/map-templates/map-template-service';
 import { connectToDatabase } from '@/lib/db';
 import { z } from 'zod';
+import { DuplicateError } from '@/lib/errors';
 
 // Поля, которые можно обновлять. Имя делаем опциональным.
 const updateTemplateSchema = z.object({
@@ -62,8 +63,8 @@ export async function PUT(request, { params }) {
 
     return NextResponse.json(updatedTemplate);
   } catch (error) {
-    if (error.code === 11000) {
-      return NextResponse.json({ message: 'Шаблон карты с таким названием уже существует' }, { status: 409 });
+    if (error instanceof DuplicateError) {
+      return NextResponse.json({ message: error.message }, { status: 409 });
     }
     console.error(`Failed to update map template ${params.id}:`, error);
     return NextResponse.json({ message: 'Ошибка сервера при обновлении шаблона карты' }, { status: 500 });

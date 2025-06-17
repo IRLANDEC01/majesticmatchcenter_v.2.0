@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { familyService } from '@/lib/domain/families/family-service';
 import { connectToDatabase } from '@/lib/db';
 import { z } from 'zod';
+import { handleApiError } from '@/lib/api/handle-api-error';
 
 // Схема для создания семьи.
 const createFamilySchema = z.object({
@@ -19,17 +20,13 @@ const createFamilySchema = z.object({
  */
 export async function GET(request) {
   try {
-    await connectToDatabase();
-    
-    // Универсальный способ получения query-параметров
-    const query = request.query || Object.fromEntries(new URL(request.url, `http://${request.headers.host}`).searchParams.entries());
-    const includeArchived = query.include_archived === 'true';
+    const { searchParams } = new URL(request.url);
+    const includeArchived = searchParams.get('include_archived') === 'true';
 
     const families = await familyService.getAllFamilies({ includeArchived });
     return NextResponse.json(families);
   } catch (error) {
-    console.error('Failed to get families:', error);
-    return NextResponse.json({ message: 'Ошибка сервера при получении семей' }, { status: 500 });
+    return handleApiError(error);
   }
 }
 
@@ -39,23 +36,10 @@ export async function GET(request) {
  */
 export async function POST(request) {
   try {
-    await connectToDatabase();
-    // Универсальный способ получения тела запроса
-    const json = request.body || await request.json();
-
-    const validationResult = createFamilySchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const newFamily = await familyService.createFamily(validationResult.data);
+    const data = await request.json();
+    const newFamily = await familyService.createFamily(data);
     return NextResponse.json(newFamily, { status: 201 });
   } catch (error) {
-    if (error.code === 11000) {
-      // Ошибка дублирующегося ключа (name)
-      return NextResponse.json({ message: 'Семья с таким названием уже существует' }, { status: 409 });
-    }
-    console.error('Failed to create family:', error);
-    return NextResponse.json({ message: 'Ошибка сервера при создании семьи' }, { status: 500 });
+    return handleApiError(error);
   }
 } 

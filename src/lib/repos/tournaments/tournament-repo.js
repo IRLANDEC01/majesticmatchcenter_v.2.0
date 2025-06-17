@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Tournament from '@/models/tournament/Tournament.js';
 import PlayerMapParticipation from '@/models/player/PlayerMapParticipation.js';
+import Map from '@/models/map/Map.js';
 import { cache } from '@/lib/cache/index.js';
 
 class TournamentRepo {
@@ -129,6 +130,55 @@ class TournamentRepo {
       await this._invalidateCache(tournament);
     }
     return tournament;
+  }
+
+  /**
+   * Добавляет участника в турнир.
+   * @param {string} tournamentId - ID турнира.
+   * @param {object} participant - Объект участника.
+   * @returns {Promise<object>}
+   */
+  async addParticipant(tournamentId, participant) {
+    const tournament = await Tournament.findByIdAndUpdate(
+      tournamentId,
+      { $addToSet: { participants: participant } },
+      { new: true }
+    ).lean();
+    if (tournament) {
+      await this._invalidateCache(tournament);
+    }
+    return tournament;
+  }
+
+  /**
+   * Удаляет участника из турнира.
+   * @param {string} tournamentId - ID турнира.
+   * @param {string} participantId - ID участника.
+   * @returns {Promise<object>}
+   */
+  async removeParticipant(tournamentId, participantId) {
+    const tournament = await Tournament.findByIdAndUpdate(
+      tournamentId,
+      { $pull: { participants: { _id: participantId } } },
+      { new: true }
+    ).lean();
+    if (tournament) {
+      await this._invalidateCache(tournament);
+    }
+    return tournament;
+  }
+
+  /**
+   * Находит карты в турнире, где участвует определенный участник.
+   * @param {string} tournamentId - ID турнира.
+   * @param {string} participantId - ID участника.
+   * @returns {Promise<Array<object>>}
+   */
+  async findMapsWithParticipant(tournamentId, participantId) {
+    return Map.find({
+      tournament: tournamentId,
+      'participants.family': participantId, // Предполагаем, что participantId - это ID семьи
+    }).lean();
   }
 
   /**

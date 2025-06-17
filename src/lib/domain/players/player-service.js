@@ -1,4 +1,5 @@
 import { playerRepository } from '@/lib/repos/players/player-repo.js';
+import PlayerStats from '@/models/player/PlayerStats.js';
 
 /**
  * @class PlayerService
@@ -6,14 +7,16 @@ import { playerRepository } from '@/lib/repos/players/player-repo.js';
  */
 class PlayerService {
   /**
-   * Создает нового игрока.
+   * Создает нового игрока и связанный с ним документ статистики.
    * @param {object} playerData - Данные игрока.
    * @returns {Promise<object>}
    */
   async createPlayer(playerData) {
-    // В будущем здесь может быть логика проверки,
-    // например, не существует ли уже игрок с похожим ником.
-    return playerRepository.create(playerData);
+    const newPlayer = await playerRepository.create(playerData);
+    if (newPlayer) {
+      await PlayerStats.create({ playerId: newPlayer._id });
+    }
+    return newPlayer;
   }
 
   /**

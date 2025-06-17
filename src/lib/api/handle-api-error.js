@@ -12,8 +12,17 @@ export function handleApiError(error) {
   console.error(error);
 
   // Кастомные ошибки приложения
+  if (error instanceof ValidationError) {
+    return NextResponse.json({ message: error.message, errors: error.errors }, { status: 400 });
+  }
+  
   if (error instanceof AppError) {
     return NextResponse.json({ message: error.message }, { status: error.statusCode });
+  }
+
+  // Ошибка неверного ID в Mongoose
+  if (error.name === 'CastError') {
+    return NextResponse.json({ message: `Некорректный формат ID для поля ${error.path}` }, { status: 400 });
   }
 
   // Ошибка валидации Zod

@@ -106,6 +106,7 @@ mapSchema.pre(/^find/, function(next) {
 
 // Уникальный индекс, чтобы в одном турнире не было двух карт с одинаковым slug.
 mapSchema.index({ tournament: 1, slug: 1 }, { unique: true });
+mapSchema.index({ status: 1 });
 
 const Map = mongoose.models.Map || mongoose.model('Map', mapSchema);
 

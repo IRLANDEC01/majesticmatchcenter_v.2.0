@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import socialLinkSchema from '@/models/shared/social-link-schema.js';
 import seoSchema from '@/models/shared/seo-schema.js';
+import earningsSchema from '@/models/shared/earnings-schema.js';
 
 // Схема для текущих участников семьи.
 // История членства будет в отдельной коллекции.
@@ -65,6 +66,8 @@ const familySchema = new mongoose.Schema({
     type: Date,
     index: true,
   },
+  // Суммарные заработки семьи за все время.
+  earnings: [earningsSchema],
   members: [memberSchema],
   socialLinks: [socialLinkSchema],
   seo: seoSchema,
