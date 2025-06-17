@@ -1,3 +1,4 @@
+import { createMocks } from 'node-mocks-http';
 import { GET, POST } from './route';
 import Player from '@/models/player/Player';
 
@@ -8,7 +9,8 @@ describe('API /api/admin/players', () => {
 
   describe('GET', () => {
     it('должен возвращать пустой массив, если игроков нет', async () => {
-      const response = await GET();
+      const { req } = createMocks({ method: 'GET' });
+      const response = await GET(req);
       const body = await response.json();
       expect(response.status).toBe(200);
       expect(body).toEqual([]);
@@ -18,7 +20,8 @@ describe('API /api/admin/players', () => {
       await Player.create({ firstName: 'John', lastName: 'Doe' });
       await Player.create({ firstName: 'Jane', lastName: 'Doe' });
 
-      const response = await GET();
+      const { req } = createMocks({ method: 'GET' });
+      const response = await GET(req);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -30,13 +33,13 @@ describe('API /api/admin/players', () => {
     it('должен создавать игрока и возвращать 201', async () => {
       const newPlayerData = { firstName: 'New', lastName: 'Player' };
       
-      const request = new Request('http://localhost/api/admin/players', {
+      const { req } = createMocks({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newPlayerData),
+        body: newPlayerData,
       });
 
-      const response = await POST(request);
+      const response = await POST(req);
       const body = await response.json();
 
       expect(response.status).toBe(201);
@@ -50,13 +53,13 @@ describe('API /api/admin/players', () => {
     it('должен возвращать 400 при невалидных данных', async () => {
       const invalidData = { firstName: 'NoLastName' };
       
-      const request = new Request('http://localhost/api/admin/players', {
+      const { req } = createMocks({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(invalidData),
+        body: invalidData,
       });
 
-      const response = await POST(request);
+      const response = await POST(req);
       const body = await response.json();
 
       expect(response.status).toBe(400);
@@ -67,13 +70,13 @@ describe('API /api/admin/players', () => {
       const playerData = { firstName: 'Duplicate', lastName: 'Player' };
       await Player.create(playerData);
 
-      const request = new Request('http://localhost/api/admin/players', {
+      const { req } = createMocks({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(playerData),
+        body: playerData,
       });
 
-      const response = await POST(request);
+      const response = await POST(req);
       const body = await response.json();
 
       expect(response.status).toBe(409);

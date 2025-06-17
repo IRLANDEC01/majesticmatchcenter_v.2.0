@@ -1,17 +1,10 @@
-import { familyRepository } from '@/lib/repos/families/family-repo';
+import { familyRepository } from '@/lib/repos/families/family-repo.js';
 
 /**
  * @class FamilyService
  * @description Сервис для управления бизнес-логикой семей.
  */
 export class FamilyService {
-  /**
-   * @param {object} familyRepository - Репозиторий для работы с данными семей.
-   */
-  constructor(familyRepository) {
-    this.familyRepository = familyRepository;
-  }
-
   /**
    * Создает новую семью.
    * @param {object} familyData - Данные для создания.
@@ -20,7 +13,7 @@ export class FamilyService {
   async createFamily(familyData) {
     // В будущем здесь может быть логика, например,
     // отправка уведомления о создании новой семьи.
-    return this.familyRepository.create(familyData);
+    return familyRepository.create(familyData);
   }
 
   /**
@@ -30,7 +23,7 @@ export class FamilyService {
    * @returns {Promise<Array<object>>}
    */
   async getAllFamilies(options) {
-    return this.familyRepository.findAll(options);
+    return familyRepository.findAll(options);
   }
 
   /**
@@ -39,7 +32,7 @@ export class FamilyService {
    * @returns {Promise<object|null>}
    */
   async getFamilyById(id) {
-    return this.familyRepository.findById(id);
+    return familyRepository.findById(id);
   }
 
   /**
@@ -51,7 +44,7 @@ export class FamilyService {
   async updateFamily(id, familyData) {
     // Здесь также может появиться дополнительная логика,
     // например, проверка прав на редактирование.
-    return this.familyRepository.update(id, familyData);
+    return familyRepository.update(id, familyData);
   }
 
   /**
@@ -64,7 +57,7 @@ export class FamilyService {
   async addMember(familyId, playerId, role) {
     const memberData = { player: playerId, role };
     // Используем оператор $push для добавления в массив
-    return this.familyRepository.update(familyId, { $push: { members: memberData } });
+    return familyRepository.update(familyId, { $push: { members: memberData } });
   }
 
   /**
@@ -75,7 +68,7 @@ export class FamilyService {
    */
   async removeMember(familyId, playerId) {
     // Используем оператор $pull для удаления из массива по ID игрока
-    return this.familyRepository.update(familyId, { $pull: { members: { player: playerId } } });
+    return familyRepository.update(familyId, { $pull: { members: { player: playerId } } });
   }
 
   /**
@@ -86,8 +79,17 @@ export class FamilyService {
   async archiveFamily(id) {
     // Здесь может быть логика проверки, можно ли архивировать семью
     // (например, если она участвует в активном турнире).
-    return this.familyRepository.archiveById(id);
+    return familyRepository.archive(id);
+  }
+
+  /**
+   * Восстанавливает семью из архива.
+   * @param {string} id - ID семьи.
+   * @returns {Promise<object|null>}
+   */
+  async unarchiveFamily(id) {
+    return familyRepository.unarchive(id);
   }
 }
 
-export const familyService = new FamilyService(familyRepository); 
+export const familyService = new FamilyService(); 

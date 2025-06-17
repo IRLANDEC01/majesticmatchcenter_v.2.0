@@ -32,6 +32,9 @@ const mapTemplateSchema = new mongoose.Schema({
     default: 0,
     min: [0, 'Счетчик использования не может быть отрицательным.'],
   },
+  archivedAt: {
+    type: Date,
+  },
 }, {
   // Добавляет поля createdAt и updatedAt
   timestamps: true,
@@ -43,6 +46,15 @@ const mapTemplateSchema = new mongoose.Schema({
 mapTemplateSchema.pre('validate', function(next) {
   if (this.name && !this.slug) {
     this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+  }
+  next();
+});
+
+// Хук для автоматического исключения архивированных документов из результатов `find`
+mapTemplateSchema.pre(/^find/, function(next) {
+  // `this` - это объект запроса (query)
+  if (!this.getOptions().includeArchived) {
+    this.where({ archivedAt: { $exists: false } });
   }
   next();
 });

@@ -33,7 +33,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     await connectToDatabase();
-    const json = await request.json();
+    const json = request.body || await request.json();
 
     const validationResult = createPlayerSchema.safeParse(json);
     if (!validationResult.success) {
@@ -43,11 +43,11 @@ export async function POST(request) {
     const newPlayer = await playerService.createPlayer(validationResult.data);
     return NextResponse.json(newPlayer, { status: 201 });
   } catch (error) {
-    console.error('Failed to create player:', error);
     if (error.code === 11000) {
       // Ошибка дублирующегося ключа (firstName + lastName)
       return NextResponse.json({ message: 'Игрок с таким именем и фамилией уже существует' }, { status: 409 });
     }
+    console.error('Failed to create player:', error);
     return NextResponse.json({ message: 'Ошибка сервера при создании игрока' }, { status: 500 });
   }
 } 

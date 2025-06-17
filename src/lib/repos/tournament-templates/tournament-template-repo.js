@@ -1,17 +1,28 @@
 import mongoose from 'mongoose';
-import TournamentTemplate from '@/models/tournament/TournamentTemplate.js';
+import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import { cache } from '@/lib/cache';
 
 /**
- * @class TournamentTemplateRepository
- * @description Репозиторий для работы с шаблонами турниров.
+ * Репозиторий для работы с шаблонами турниров.
  */
-class TournamentTemplateRepository {
+class TournamentTemplateRepo {
   /**
-   * Находит шаблон по ID.
-   * Включает логику кэширования.
+   * Находит все шаблоны турниров.
+   * @param {boolean} populateMapTemplates - Флаг для populate связанных шаблонов карт.
+   * @returns {Promise<TournamentTemplate[]>}
+   */
+  async findAll(populateMapTemplates = false) {
+    const query = TournamentTemplate.find();
+    if (populateMapTemplates) {
+      query.populate('mapTemplates');
+    }
+    return query.lean();
+  }
+
+  /**
+   * Находит шаблон турнира по ID.
    * @param {string} id - ID шаблона.
-   * @returns {Promise<object|null>} - Найденный шаблон или null.
+   * @returns {Promise<TournamentTemplate|null>}
    */
   async findById(id) {
     const cacheKey = `tournament_template:${id}`;
@@ -42,34 +53,21 @@ class TournamentTemplateRepository {
   }
 
   /**
-   * Находит все шаблоны.
-   * @param {boolean} populateMapTemplates - Флаг для populate связанных шаблонов карт.
-   * @returns {Promise<Array<object>>} - Массив шаблонов.
-   */
-  async findAll(populateMapTemplates = false) {
-    const query = TournamentTemplate.find();
-    if (populateMapTemplates) {
-      query.populate('mapTemplates');
-    }
-    return query.lean();
-  }
-
-  /**
-   * Создает новый шаблон.
+   * Создает новый шаблон турнира.
    * @param {object} data - Данные для создания.
-   * @returns {Promise<object>} - Созданный шаблон.
+   * @returns {Promise<TournamentTemplate>}
    */
   async create(data) {
-    const template = new TournamentTemplate(data);
-    await template.save();
-    return template.toObject();
+    const newTemplate = new TournamentTemplate(data);
+    await newTemplate.save();
+    return newTemplate.toObject();
   }
 
   /**
    * Обновляет шаблон турнира.
    * @param {string} id - ID шаблона.
    * @param {object} data - Данные для обновления.
-   * @returns {Promise<object>} - Обновленный шаблон.
+   * @returns {Promise<TournamentTemplate|null>}
    */
   async update(id, data) {
     const updatedTemplate = await TournamentTemplate.findByIdAndUpdate(id, data, { new: true }).lean();
@@ -122,6 +120,26 @@ class TournamentTemplateRepository {
 
     return updatedTemplate;
   }
+
+  /**
+   * Архивирует шаблон турнира по ID.
+   * Устанавливает поле archivedAt в текущую дату.
+   * @param {string} id - ID шаблона для архивации.
+   * @returns {Promise<TournamentTemplate|null>}
+   */
+  async archive(id) {
+    return TournamentTemplate.findByIdAndUpdate(id, { $set: { archivedAt: new Date() } }, { new: true }).lean();
+  }
+
+  /**
+   * Восстанавливает шаблон турнира из архива по ID.
+   * Удаляет поле archivedAt.
+   * @param {string} id - ID шаблона для восстановления.
+   * @returns {Promise<TournamentTemplate|null>}
+   */
+  async unarchive(id) {
+    return TournamentTemplate.findByIdAndUpdate(id, { $unset: { archivedAt: 1 } }, { new: true, includeArchived: true }).lean();
+  }
 }
 
-export const tournamentTemplateRepository = new TournamentTemplateRepository(); 
+export const tournamentTemplateRepo = new TournamentTemplateRepo(); 

@@ -1,29 +1,16 @@
-import { tournamentTemplateRepository } from '@/lib/repos/tournament-templates/tournament-template-repo';
+import { tournamentTemplateRepo } from '@/lib/repos/tournament-templates/tournament-template-repo.js';
 
 /**
- * @class TournamentTemplateService
- * @description Cервис для управления бизнес-логикой шаблонов турниров.
- * Инкапсулирует логику, работая поверх репозитория.
+ * Cервис для управления бизнес-логикой шаблонов турниров.
  */
-export class TournamentTemplateService {
-  /**
-   * @param {object} tournamentTemplateRepository - Репозиторий для работы с данными шаблонов турниров.
-   */
-  constructor(tournamentTemplateRepository) {
-    this.tournamentTemplateRepository = tournamentTemplateRepository;
-  }
-
+class TournamentTemplateService {
   /**
    * Создает новый шаблон турнира.
-   * В будущем здесь может быть добавлена дополнительная бизнес-логика,
-   * например, валидация, проверка прав или публикация событий.
    * @param {object} templateData - Данные для создания шаблона.
    * @returns {Promise<object>} - Созданный объект шаблона турнира.
    */
   async createTemplate(templateData) {
-    // Пока что просто проксируем вызов к репозиторию.
-    // Это основа для будущих бизнес-правил.
-    return this.tournamentTemplateRepository.create(templateData);
+    return tournamentTemplateRepo.create(templateData);
   }
 
   /**
@@ -32,7 +19,7 @@ export class TournamentTemplateService {
    * @returns {Promise<Array<object>>} - Массив шаблонов турниров.
    */
   async getAllTemplates(populateMapTemplates = false) {
-    return this.tournamentTemplateRepository.findAll(populateMapTemplates);
+    return tournamentTemplateRepo.findAll(populateMapTemplates);
   }
 
   /**
@@ -41,7 +28,7 @@ export class TournamentTemplateService {
    * @returns {Promise<object|null>} - Найденный шаблон или null.
    */
   async getTemplateById(id) {
-    return this.tournamentTemplateRepository.findById(id);
+    return tournamentTemplateRepo.findById(id);
   }
 
   /**
@@ -51,10 +38,27 @@ export class TournamentTemplateService {
    * @returns {Promise<object>} - Обновленный объект шаблона турнира.
    */
   async updateTemplate(id, templateData) {
-    return this.tournamentTemplateRepository.update(id, templateData);
+    return tournamentTemplateRepo.update(id, templateData);
+  }
+  
+  /**
+   * Архивирует шаблон турнира.
+   * @param {string} templateId - ID шаблона для архивации.
+   * @returns {Promise<object|null>}
+   */
+  async archiveTemplate(templateId) {
+    // TODO: Добавить бизнес-логику
+    return tournamentTemplateRepo.archive(templateId);
+  }
+
+  /**
+   * Восстанавливает шаблон турнира из архива.
+   * @param {string} templateId - ID шаблона для восстановления.
+   * @returns {Promise<object|null>}
+   */
+  async unarchiveTemplate(templateId) {
+    return tournamentTemplateRepo.unarchive(templateId);
   }
 }
 
-// Экспортируем синглтон-экземпляр сервиса с реальным репозиторием.
-// Это основной экземпляр, который будет использоваться в приложении (например, в API-хэндлерах).
-export const tournamentTemplateService = new TournamentTemplateService(tournamentTemplateRepository); 
+export const tournamentTemplateService = new TournamentTemplateService(); 

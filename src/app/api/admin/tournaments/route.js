@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { tournamentService } from '@/lib/domain/tournaments/tournament-service.js';
 import { z } from 'zod';
 import mongoose from 'mongoose';
+import { connectToDatabase } from '@/lib/db.js';
 
 // Схема валидации для создания турнира
 const tournamentCreateSchema = z.object({
@@ -23,7 +24,8 @@ const tournamentCreateSchema = z.object({
 
 export async function POST(request) {
   try {
-    const body = await request.json();
+    await connectToDatabase();
+    const body = request.body || await request.json();
 
     const validation = tournamentCreateSchema.safeParse(body);
 
@@ -49,10 +51,11 @@ export async function POST(request) {
 }
 
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const includeArchived = searchParams.get('include_archived') === 'true';
-
   try {
+    await connectToDatabase();
+    const query = request.query || Object.fromEntries(new URL(request.url, `http://${request.headers.host}`).searchParams.entries());
+    const includeArchived = query.include_archived === 'true';
+
     const tournaments = await tournamentService.getTournaments({ includeArchived });
     return NextResponse.json(tournaments, { status: 200 });
   } catch (error) {

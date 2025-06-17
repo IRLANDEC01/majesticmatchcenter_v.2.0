@@ -11,6 +11,31 @@ const updateTemplateSchema = z.object({
 });
 
 /**
+ * GET /api/admin/map-templates/{id}
+ * Возвращает шаблон карты по ID.
+ */
+export async function GET(request, { params }) {
+  try {
+    const { id } = params;
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return NextResponse.json({ message: 'Некорректный ID шаблона' }, { status: 400 });
+    }
+
+    await connectToDatabase();
+    const template = await mapTemplateService.getMapTemplateById(id);
+
+    if (!template || template.archivedAt) {
+      return NextResponse.json({ message: 'Шаблон карты не найден' }, { status: 404 });
+    }
+
+    return NextResponse.json(template);
+  } catch (error) {
+    console.error(`Failed to get map template ${params.id}:`, error);
+    return NextResponse.json({ message: 'Ошибка сервера при получении шаблона карты' }, { status: 500 });
+  }
+}
+
+/**
  * PUT /api/admin/map-templates/[id]
  * Обновляет существующий шаблон карты.
  */
@@ -29,7 +54,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const updatedTemplate = await mapTemplateService.updateTemplate(id, validationResult.data);
+    const updatedTemplate = await mapTemplateService.updateMapTemplate(id, validationResult.data);
 
     if (!updatedTemplate) {
       return NextResponse.json({ message: 'Шаблон карты не найден' }, { status: 404 });
@@ -37,10 +62,10 @@ export async function PUT(request, { params }) {
 
     return NextResponse.json(updatedTemplate);
   } catch (error) {
-    console.error(`Failed to update map template ${params.id}:`, error);
     if (error.code === 11000) {
       return NextResponse.json({ message: 'Шаблон карты с таким названием уже существует' }, { status: 409 });
     }
+    console.error(`Failed to update map template ${params.id}:`, error);
     return NextResponse.json({ message: 'Ошибка сервера при обновлении шаблона карты' }, { status: 500 });
   }
 } 

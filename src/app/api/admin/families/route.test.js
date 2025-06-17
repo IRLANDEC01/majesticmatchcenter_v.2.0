@@ -1,3 +1,4 @@
+import { createMocks } from 'node-mocks-http';
 import { GET, POST } from './route';
 import Family from '@/models/family/Family';
 
@@ -10,13 +11,13 @@ describe('API /api/admin/families', () => {
     it('должен успешно создавать семью и возвращать статус 201', async () => {
       const familyData = { name: 'The Champions', displayLastName: 'Champions' };
 
-      const request = new Request('http://localhost/api/admin/families', {
+      const { req } = createMocks({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(familyData),
+        body: familyData,
       });
 
-      const response = await POST(request);
+      const response = await POST(req);
       const body = await response.json();
 
       expect(response.status).toBe(201);
@@ -34,13 +35,13 @@ describe('API /api/admin/families', () => {
     it('должен возвращать ошибку 400 при невалидных данных', async () => {
       const invalidData = { name: 'Missing DisplayName' };
 
-      const request = new Request('http://localhost/api/admin/families', {
+      const { req } = createMocks({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(invalidData),
+        body: invalidData,
       });
 
-      const response = await POST(request);
+      const response = await POST(req);
       const body = await response.json();
 
       expect(response.status).toBe(400);
@@ -51,13 +52,13 @@ describe('API /api/admin/families', () => {
       const familyData = { name: 'The Duplicates', displayLastName: 'Duplicates' };
       await new Family(familyData).save();
 
-      const request = new Request('http://localhost/api/admin/families', {
+      const { req } = createMocks({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(familyData),
+        body: familyData,
       });
 
-      const response = await POST(request);
+      const response = await POST(req);
       const body = await response.json();
 
       expect(response.status).toBe(409);
@@ -67,9 +68,10 @@ describe('API /api/admin/families', () => {
 
   describe('GET', () => {
     it('должен возвращать пустой массив, если семей нет', async () => {
-      // Глобальный beforeEach уже очищает коллекцию
-      const request = new Request('http://localhost/api/admin/families');
-      const response = await GET(request);
+      const { req } = createMocks({
+        method: 'GET',
+      });
+      const response = await GET(req);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -82,8 +84,10 @@ describe('API /api/admin/families', () => {
       archivedFamily.archivedAt = new Date();
       await archivedFamily.save();
 
-      const request = new Request('http://localhost/api/admin/families');
-      const response = await GET(request);
+      const { req } = createMocks({
+        method: 'GET',
+      });
+      const response = await GET(req);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -97,8 +101,13 @@ describe('API /api/admin/families', () => {
       archivedFamily.archivedAt = new Date();
       await archivedFamily.save();
 
-      const request = new Request('http://localhost/api/admin/families?include_archived=true');
-      const response = await GET(request);
+      const { req } = createMocks({
+        method: 'GET',
+        query: {
+          include_archived: 'true',
+        },
+      });
+      const response = await GET(req);
       const body = await response.json();
 
       expect(response.status).toBe(200);

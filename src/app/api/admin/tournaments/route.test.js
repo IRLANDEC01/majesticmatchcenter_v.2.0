@@ -1,82 +1,117 @@
+import { createMocks } from 'node-mocks-http';
 import { POST, GET } from './route';
-import { tournamentService } from '@/lib/domain/tournaments/tournament-service.js';
-
-// Мокаем сервисный слой
-jest.mock('@/lib/domain/tournaments/tournament-service.js', () => ({
-  tournamentService: {
-    createTournament: jest.fn(),
-    getTournaments: jest.fn(),
-  },
-}));
+import Tournament from '@/models/tournament/Tournament';
+import TournamentTemplate from '@/models/tournament/TournamentTemplate';
+import MapTemplate from '@/models/map/MapTemplate';
+import mongoose from 'mongoose';
 
 describe('API /api/admin/tournaments', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+  let tournamentTemplate;
+  let mapTemplate;
+
+  beforeAll(async () => {
+    await Tournament.init();
+    await TournamentTemplate.init();
+    await MapTemplate.init();
+  });
+
+  beforeEach(async () => {
+    // Сначала создаем шаблон карты
+    mapTemplate = await MapTemplate.create({ name: 'Test Map' });
+    // Теперь создаем шаблон турнира с обязательной ссылкой на шаблон карты
+    tournamentTemplate = await TournamentTemplate.create({
+      name: `Test Template ${new Date().getTime()}`, // Уникальное имя
+      mapTemplates: [mapTemplate._id],
+    });
   });
 
   describe('POST', () => {
     it('должен успешно создавать турнир и возвращать статус 201', async () => {
       const tournamentData = {
         name: 'Majestic Champions League',
-        description: 'The main event of the year.',
-        template: '60c72b2f9b1d8e001f8e4c5e', // Валидный ObjectId
+        template: tournamentTemplate._id.toString(),
         tournamentType: 'family',
         startDate: new Date().toISOString(),
       };
-      const createdTournament = { _id: 'new-id', ...tournamentData };
-      tournamentService.createTournament.mockResolvedValue(createdTournament);
 
-      const request = new Request('http://localhost/api/admin/tournaments', {
+      const { req } = createMocks({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tournamentData),
+        body: tournamentData,
       });
 
-      const response = await POST(request);
+      const response = await POST(req);
       const body = await response.json();
 
       expect(response.status).toBe(201);
-      expect(body).toEqual(createdTournament);
-      expect(tournamentService.createTournament).toHaveBeenCalledWith(expect.objectContaining({
-        name: tournamentData.name,
-      }));
+      expect(body.name).toBe(tournamentData.name);
+      expect(body.slug).toBe('majestic-champions-league');
+
+      const dbTournament = await Tournament.findById(body._id);
+      expect(dbTournament).not.toBeNull();
     });
 
     it('должен возвращать ошибку 400 при невалидных данных', async () => {
-        const invalidData = { name: 't' }; // Невалидные данные
-        const request = new Request('http://localhost/api/admin/tournaments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(invalidData),
-        });
+      const invalidData = { name: 't' }; // Невалидные данные
+      const { req } = createMocks({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: invalidData,
+      });
 
-        const response = await POST(request);
-        expect(response.status).toBe(400);
-        expect(tournamentService.createTournament).not.toHaveBeenCalled();
+      const response = await POST(req);
+      expect(response.status).toBe(400);
     });
   });
 
   describe('GET', () => {
     it('должен возвращать список турниров', async () => {
-      const tournaments = [{ name: 'Tournament 1' }, { name: 'Tournament 2' }];
-      tournamentService.getTournaments.mockResolvedValue(tournaments);
-
-      const request = new Request('http://localhost/api/admin/tournaments', { method: 'GET' });
-      const response = await GET(request);
+      await Tournament.create({
+        name: 'Tournament 1',
+        template: tournamentTemplate._id,
+        tournamentType: 'family',
+        startDate: new Date(),
+      });
+       await Tournament.create({
+        name: 'Tournament 2',
+        template: tournamentTemplate._id,
+        tournamentType: 'family',
+        startDate: new Date(),
+      });
+      
+      const { req } = createMocks({ method: 'GET' });
+      const response = await GET(req);
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body).toEqual(tournaments);
-      expect(tournamentService.getTournaments).toHaveBeenCalledWith({ includeArchived: false });
+      expect(body.length).toBe(2);
     });
 
-    it('должен вызывать getTournaments с includeArchived: true', async () => {
-      tournamentService.getTournaments.mockResolvedValue([]);
-      
-      const request = new Request('http://localhost/api/admin/tournaments?include_archived=true', { method: 'GET' });
-      await GET(request);
+    it('должен возвращать все турниры, включая архивированные', async () => {
+       await Tournament.create({
+        name: 'Active Tournament',
+        template: tournamentTemplate._id,
+        tournamentType: 'family',
+        startDate: new Date(),
+      });
+      const archived = await Tournament.create({
+        name: 'Archived Tournament',
+        template: tournamentTemplate._id,
+        tournamentType: 'family',
+        startDate: new Date(),
+      });
+      archived.archivedAt = new Date();
+      await archived.save();
 
-      expect(tournamentService.getTournaments).toHaveBeenCalledWith({ includeArchived: true });
+      const { req } = createMocks({
+        method: 'GET',
+        query: { include_archived: 'true' },
+      });
+      const response = await GET(req);
+      const body = await response.json();
+      
+      expect(response.status).toBe(200);
+      expect(body.length).toBe(2);
     });
   });
 });

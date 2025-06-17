@@ -63,7 +63,6 @@ const familySchema = new mongoose.Schema({
   // Если установлена дата — семья считается удаленной (архивированной).
   archivedAt: {
     type: Date,
-    default: null,
     index: true,
   },
   members: [memberSchema],

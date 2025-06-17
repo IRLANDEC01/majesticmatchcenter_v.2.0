@@ -2,17 +2,25 @@ import { PUT } from './route';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import MapTemplate from '@/models/map/MapTemplate';
 import mongoose from 'mongoose';
+import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 
 describe('PUT /api/admin/tournament-templates/[id]', () => {
   let testTemplate;
   let mapTemplate;
 
   beforeAll(async () => {
+    await connectToDatabase();
     await TournamentTemplate.init();
     await MapTemplate.init();
   });
 
+  afterAll(async () => {
+    await disconnectFromDatabase();
+  });
+
   beforeEach(async () => {
+    await TournamentTemplate.deleteMany({});
+    await MapTemplate.deleteMany({});
     mapTemplate = await MapTemplate.create({ name: 'Test Map for Updates' });
     testTemplate = await TournamentTemplate.create({ 
       name: 'Test Template',

@@ -1,10 +1,20 @@
-import { GET, PUT, DELETE } from './route';
+import { GET, PUT } from './route';
 import Player from '@/models/player/Player';
 import mongoose from 'mongoose';
+import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 
 describe('/api/admin/players/[id]', () => {
   beforeAll(async () => {
+    await connectToDatabase();
     await Player.init();
+  });
+
+  afterAll(async () => {
+    await disconnectFromDatabase();
+  });
+
+  beforeEach(async () => {
+    await Player.deleteMany({});
   });
 
   describe('GET', () => {
@@ -72,39 +82,6 @@ describe('/api/admin/players/[id]', () => {
       
       const response = await PUT(request, { params: { id: player2._id.toString() } });
       expect(response.status).toBe(409);
-    });
-  });
-
-  describe('DELETE', () => {
-    it('должен архивировать игрока и возвращать 200', async () => {
-      const testPlayer = await new Player({ firstName: 'PlayerApiTestDelete', lastName: 'Test' }).save();
-      const response = await DELETE(null, { params: { id: testPlayer._id.toString() } });
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.archivedAt).toBeDefined();
-      expect(new Date(body.archivedAt)).toBeInstanceOf(Date);
-
-      const dbPlayer = await Player.findById(testPlayer._id);
-      expect(dbPlayer).not.toBeNull();
-      if (dbPlayer) {
-        expect(dbPlayer.archivedAt).toBeInstanceOf(Date);
-      }
-    });
-
-    it('должен возвращать 404 при попытке архивировать несуществующего игрока', async () => {
-        const nonExistentId = new mongoose.Types.ObjectId();
-        const response = await DELETE(null, { params: { id: nonExistentId.toString() } });
-        expect(response.status).toBe(404);
-    });
-
-    it('должен возвращать 404 при попытке архивировать уже архивированного игрока', async () => {
-      const testPlayer = await new Player({ firstName: 'AlreadyArchived', lastName: 'Test' }).save();
-      await DELETE(null, { params: { id: testPlayer._id.toString() } });
-
-      // Повторный вызов
-      const response = await DELETE(null, { params: { id: testPlayer._id.toString() } });
-      expect(response.status).toBe(404);
     });
   });
 }); 

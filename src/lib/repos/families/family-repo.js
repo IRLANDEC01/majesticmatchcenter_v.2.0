@@ -99,8 +99,17 @@ class FamilyRepository {
    * @param {string} id - ID семьи.
    * @returns {Promise<object|null>}
    */
-  async archiveById(id) {
-    return this._updateArchiveStatus(id, true);
+  async archive(id) {
+    const updatedFamily = await Family.findOneAndUpdate(
+      { _id: id, archivedAt: null }, // Найти только неархивированную
+      { $set: { archivedAt: new Date() } },
+      { new: true }
+    ).lean();
+
+    if (updatedFamily) {
+      await this._invalidateCache(updatedFamily);
+    }
+    return updatedFamily;
   }
 
   /**
@@ -108,32 +117,17 @@ class FamilyRepository {
    * @param {string} id - ID семьи.
    * @returns {Promise<object|null>}
    */
-  async restoreById(id) {
-    return this._updateArchiveStatus(id, false);
-  }
-
-  /**
-   * Приватный метод для обновления статуса архивации.
-   * @param {string} id - ID семьи.
-   * @param {boolean} isArchived - Архивировать или нет.
-   * @returns {Promise<object|null>}
-   * @private
-   */
-  async _updateArchiveStatus(id, isArchived) {
-    const family = await Family.findById(id);
-    if (!family) return null;
-
-    const alreadyArchived = !!family.archivedAt;
-    if (isArchived === alreadyArchived) {
-      return isArchived ? null : family.toObject();
+  async unarchive(id) {
+    const updatedFamily = await Family.findByIdAndUpdate(
+      id,
+      { $unset: { archivedAt: 1 } },
+      { new: true }
+    ).lean();
+    
+    if (updatedFamily) {
+      await this._invalidateCache(updatedFamily);
     }
-    
-    family.archivedAt = isArchived ? new Date() : null;
-    await family.save();
-    
-    await this._invalidateCache(family);
-    
-    return family.toObject();
+    return updatedFamily;
   }
 
   /**

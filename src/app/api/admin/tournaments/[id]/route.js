@@ -52,21 +52,4 @@ export async function PUT(request, { params }) {
     console.error('Ошибка при обновлении турнира:', error);
     return NextResponse.json({ message: 'Внутренняя ошибка сервера' }, { status: 500 });
   }
-}
-
-export async function DELETE(request, { params }) {
-  const { id } = params;
-
-  try {
-    const archivedTournament = await tournamentService.archiveTournament(id);
-
-    if (!archivedTournament) {
-      return NextResponse.json({ message: 'Турнир не найден или уже архивирован' }, { status: 404 });
-    }
-
-    return new Response(null, { status: 204 }); // 204 No Content
-  } catch (error) {
-    console.error(`Ошибка при архивации турнира ${id}:`, error);
-    return NextResponse.json({ message: 'Внутренняя ошибка сервера' }, { status: 500 });
-  }
 } 

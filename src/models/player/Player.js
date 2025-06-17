@@ -53,7 +53,6 @@ const playerSchema = new mongoose.Schema({
   // Этот подход используется для "мягкого удаления".
   archivedAt: {
     type: Date,
-    default: null,
     index: true, // Индекс для быстрого отсеивания архивированных записей
   },
   // Социальные сети игрока

@@ -21,8 +21,9 @@ export async function GET(request) {
   try {
     await connectToDatabase();
     
-    const { searchParams } = new URL(request.url);
-    const includeArchived = searchParams.get('include_archived') === 'true';
+    // Универсальный способ получения query-параметров
+    const query = request.query || Object.fromEntries(new URL(request.url, `http://${request.headers.host}`).searchParams.entries());
+    const includeArchived = query.include_archived === 'true';
 
     const families = await familyService.getAllFamilies({ includeArchived });
     return NextResponse.json(families);
@@ -39,7 +40,8 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     await connectToDatabase();
-    const json = await request.json();
+    // Универсальный способ получения тела запроса
+    const json = request.body || await request.json();
 
     const validationResult = createFamilySchema.safeParse(json);
     if (!validationResult.success) {
@@ -49,11 +51,11 @@ export async function POST(request) {
     const newFamily = await familyService.createFamily(validationResult.data);
     return NextResponse.json(newFamily, { status: 201 });
   } catch (error) {
-    console.error('Failed to create family:', error);
     if (error.code === 11000) {
       // Ошибка дублирующегося ключа (name)
       return NextResponse.json({ message: 'Семья с таким названием уже существует' }, { status: 409 });
     }
+    console.error('Failed to create family:', error);
     return NextResponse.json({ message: 'Ошибка сервера при создании семьи' }, { status: 500 });
   }
 } 

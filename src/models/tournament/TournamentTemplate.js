@@ -4,7 +4,7 @@ const tournamentTemplateSchema = new mongoose.Schema({
   // Название шаблона, например, "Majestic Cup: Summer"
   name: {
     type: String,
-    required: [true, 'Название шаблоона является обязательным полем.'],
+    required: [true, 'Название шаблона турнира является обязательным полем.'],
     trim: true,
     unique: true,
   },
@@ -41,6 +41,9 @@ const tournamentTemplateSchema = new mongoose.Schema({
     default: 0,
     min: [0, 'Счетчик использования не может быть отрицательным.'],
   },
+  archivedAt: {
+    type: Date,
+  },
 }, {
   // Добавляет поля createdAt и updatedAt
   timestamps: true,
@@ -52,6 +55,15 @@ const tournamentTemplateSchema = new mongoose.Schema({
 tournamentTemplateSchema.pre('validate', function(next) {
   if (this.name && !this.slug) {
     this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+  }
+  next();
+});
+
+// Хук для автоматического исключения архивированных документов из результатов `find`
+tournamentTemplateSchema.pre(/^find/, function(next) {
+  // `this` - это объект запроса (query)
+  if (!this.getOptions().includeArchived) {
+    this.where({ archivedAt: { $exists: false } });
   }
   next();
 });

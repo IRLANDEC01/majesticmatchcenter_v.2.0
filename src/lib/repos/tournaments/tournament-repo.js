@@ -3,7 +3,7 @@ import Tournament from '@/models/tournament/Tournament.js';
 import PlayerMapParticipation from '@/models/player/PlayerMapParticipation.js';
 import { cache } from '@/lib/cache/index.js';
 
-class TournamentRepository {
+class TournamentRepo {
   /**
    * Находит турнир по ID.
    * @param {string} id - ID турнира.
@@ -100,7 +100,7 @@ class TournamentRepository {
    * @param {string} id - ID турнира.
    * @returns {Promise<object|null>}
    */
-  async archiveById(id) {
+  async archive(id) {
     const tournament = await Tournament.findOneAndUpdate(
       { _id: id, archivedAt: null },
       { $set: { archivedAt: new Date() } },
@@ -118,10 +118,10 @@ class TournamentRepository {
    * @param {string} id - ID турнира.
    * @returns {Promise<object|null>}
    */
-  async restoreById(id) {
-    const tournament = await Tournament.findOneAndUpdate(
-      { _id: id, archivedAt: { $ne: null } },
-      { $set: { archivedAt: null } },
+  async unarchive(id) {
+    const tournament = await Tournament.findByIdAndUpdate(
+      id,
+      { $unset: { archivedAt: 1 } },
       { new: true }
     ).lean();
     
@@ -216,4 +216,4 @@ class TournamentRepository {
   }
 }
 
-export const tournamentRepository = new TournamentRepository(); 
+export const tournamentRepo = new TournamentRepo(); 

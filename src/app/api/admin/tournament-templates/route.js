@@ -70,7 +70,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     await connectToDatabase();
-    const json = await request.json();
+    const json = request.body || await request.json();
 
     // Валидация входных данных с помощью Zod
     const validationResult = createTemplateSchema.safeParse(json);
@@ -81,11 +81,11 @@ export async function POST(request) {
     const newTemplate = await tournamentTemplateService.createTemplate(validationResult.data);
     return NextResponse.json(newTemplate, { status: 201 });
   } catch (error) {
-    console.error('Failed to create tournament template:', error);
     // Проверяем на ошибки дублирования ключа (slug)
     if (error.code === 11000) {
       return NextResponse.json({ message: 'Шаблон с таким названием уже существует' }, { status: 409 });
     }
+    console.error('Failed to create tournament template:', error);
     return NextResponse.json({ message: 'Ошибка сервера при создании шаблона турнира' }, { status: 500 });
   }
 } 

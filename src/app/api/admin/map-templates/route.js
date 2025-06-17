@@ -16,7 +16,7 @@ const createTemplateSchema = z.object({
 export async function GET() {
   try {
     await connectToDatabase();
-    const templates = await mapTemplateService.getAllTemplates();
+    const templates = await mapTemplateService.getAllMapTemplates();
     return NextResponse.json(templates);
   } catch (error) {
     console.error('Failed to get map templates:', error);
@@ -39,13 +39,13 @@ export async function POST(request) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const newTemplate = await mapTemplateService.createTemplate(validationResult.data);
+    const newTemplate = await mapTemplateService.createMapTemplate(validationResult.data);
     return NextResponse.json(newTemplate, { status: 201 });
   } catch (error) {
-    console.error('Failed to create map template:', error);
     if (error.code === 11000) {
       return NextResponse.json({ message: 'Шаблон карты с таким названием уже существует' }, { status: 409 });
     }
+    console.error('Failed to create map template:', error);
     return NextResponse.json({ message: 'Ошибка сервера при создании шаблона карты' }, { status: 500 });
   }
 } 

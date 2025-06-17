@@ -1,10 +1,20 @@
-import { GET, PUT, DELETE } from './route';
+import { GET, PUT } from './route';
 import Family from '@/models/family/Family';
 import mongoose from 'mongoose';
+import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 
 describe('/api/admin/families/[id]', () => {
   beforeAll(async () => {
+    await connectToDatabase();
     await Family.init();
+  });
+
+  afterAll(async () => {
+    await disconnectFromDatabase();
+  });
+
+  beforeEach(async () => {
+    await Family.deleteMany({});
   });
 
   // GET Tests
@@ -85,36 +95,6 @@ describe('/api/admin/families/[id]', () => {
       
       const response = await PUT(request, { params: { id: family2._id.toString() } });
       expect(response.status).toBe(409);
-    });
-  });
-
-  // DELETE Tests
-  describe('DELETE', () => {
-    it('должен архивировать семью и возвращать статус 200', async () => {
-      const testFamily = await Family.create({ name: 'Test Family DELETE', displayLastName: 'Test' });
-      const response = await DELETE(null, { params: { id: testFamily._id.toString() } });
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.archivedAt).toBeDefined();
-
-      const dbFamily = await Family.findById(testFamily._id);
-      expect(dbFamily).not.toBeNull();
-      expect(dbFamily.archivedAt).toBeInstanceOf(Date);
-    });
-
-    it('должен возвращать 404 при попытке архивировать несуществующую семью', async () => {
-      const nonExistentId = new mongoose.Types.ObjectId();
-      const response = await DELETE(null, { params: { id: nonExistentId.toString() } });
-      expect(response.status).toBe(404);
-    });
-
-    it('должен возвращать 404 при попытке архивировать уже архивированную семью', async () => {
-      const testFamily = await Family.create({ name: 'Already Archived Family', displayLastName: 'Test' });
-      await DELETE(null, { params: { id: testFamily._id.toString() } }); // First DELETE
-      
-      const response = await DELETE(null, { params: { id: testFamily._id.toString() } }); // Second DELETE
-      expect(response.status).toBe(404);
     });
   });
 }); 

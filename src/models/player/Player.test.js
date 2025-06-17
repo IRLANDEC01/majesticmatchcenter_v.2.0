@@ -17,7 +17,7 @@ describe('Player Model', () => {
     expect(savedPlayer._id).toBeDefined();
     expect(savedPlayer.firstName).toBe('John');
     expect(savedPlayer.lastName).toBe('Doe');
-    expect(savedPlayer.archivedAt).toBe(null);
+    expect(savedPlayer.archivedAt).toBeUndefined();
   });
 
   it('должен автоматически генерировать slug из firstName и lastName', async () => {

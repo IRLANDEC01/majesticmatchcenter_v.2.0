@@ -54,6 +54,9 @@ const mapSchema = new mongoose.Schema({
     default: 'planned',
     index: true,
   },
+  archivedAt: {
+    type: Date,
+  },
   // Даты проведения
   startDateTime: {
     type: Date,
@@ -78,6 +81,15 @@ const mapSchema = new mongoose.Schema({
 }, {
   timestamps: true,
   versionKey: '__v',
+});
+
+// Хук для автоматического исключения архивированных документов из результатов `find`
+mapSchema.pre(/^find/, function(next) {
+  // `this` - это объект запроса (query)
+  if (!this.getOptions().includeArchived) {
+    this.where({ archivedAt: { $exists: false } });
+  }
+  next();
 });
 
 // Уникальный индекс, чтобы в одном турнире не было двух карт с одинаковым slug.

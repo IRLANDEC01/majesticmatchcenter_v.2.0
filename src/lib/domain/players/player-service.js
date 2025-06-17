@@ -1,17 +1,10 @@
-import { playerRepository } from '@/lib/repos/players/player-repo';
+import { playerRepository } from '@/lib/repos/players/player-repo.js';
 
 /**
  * @class PlayerService
  * @description Сервис для управления бизнес-логикой игроков.
  */
-export class PlayerService {
-  /**
-   * @param {object} playerRepository - Репозиторий для работы с данными игроков.
-   */
-  constructor(playerRepository) {
-    this.playerRepository = playerRepository;
-  }
-
+class PlayerService {
   /**
    * Создает нового игрока.
    * @param {object} playerData - Данные игрока.
@@ -20,7 +13,7 @@ export class PlayerService {
   async createPlayer(playerData) {
     // В будущем здесь может быть логика проверки,
     // например, не существует ли уже игрок с похожим ником.
-    return this.playerRepository.create(playerData);
+    return playerRepository.create(playerData);
   }
 
   /**
@@ -30,7 +23,7 @@ export class PlayerService {
    * @returns {Promise<Array<object>>}
    */
   async getAllPlayers(options) {
-    return this.playerRepository.findAll(options);
+    return playerRepository.findAll(options);
   }
 
   /**
@@ -39,7 +32,7 @@ export class PlayerService {
    * @returns {Promise<object|null>}
    */
   async getPlayerById(id) {
-    return this.playerRepository.findById(id);
+    return playerRepository.findById(id);
   }
 
   /**
@@ -48,7 +41,7 @@ export class PlayerService {
    * @returns {Promise<object|null>}
    */
   async getPlayerBySlug(slug) {
-    return this.playerRepository.findBySlug(slug);
+    return playerRepository.findBySlug(slug);
   }
 
   /**
@@ -60,7 +53,7 @@ export class PlayerService {
   async updatePlayer(id, playerData) {
     // Здесь может быть логика, запрещающая изменять определенные поля,
     // например, имя или фамилию после создания.
-    return this.playerRepository.update(id, playerData);
+    return playerRepository.update(id, playerData);
   }
 
   /**
@@ -71,8 +64,17 @@ export class PlayerService {
   async archivePlayer(id) {
     // В будущем здесь может быть логика, например, проверка,
     // можно ли архивировать этого игрока (например, если он капитан активной семьи).
-    return this.playerRepository.archiveById(id);
+    return playerRepository.archive(id);
+  }
+
+  /**
+   * Восстанавливает игрока из архива.
+   * @param {string} id - ID игрока.
+   * @returns {Promise<object|null>}
+   */
+  async unarchivePlayer(id) {
+    return playerRepository.unarchive(id);
   }
 }
 
-export const playerService = new PlayerService(playerRepository); 
+export const playerService = new PlayerService(); 

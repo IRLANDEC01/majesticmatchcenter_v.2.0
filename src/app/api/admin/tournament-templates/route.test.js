@@ -1,3 +1,4 @@
+import { createMocks } from 'node-mocks-http';
 import { GET, POST } from './route';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import MapTemplate from '@/models/map/MapTemplate';
@@ -20,7 +21,8 @@ describe('/api/admin/tournament-templates', () => {
       await TournamentTemplate.create({ name: 'Test Template', mapTemplates: [mapTemplate._id] });
       await TournamentTemplate.create({ name: 'Another Template', mapTemplates: [mapTemplate._id] });
       
-      const response = await GET();
+      const { req } = createMocks({ method: 'GET' });
+      const response = await GET(req);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -28,7 +30,8 @@ describe('/api/admin/tournament-templates', () => {
     });
 
     it('должен возвращать пустой массив, если шаблонов нет', async () => {
-      const response = await GET();
+      const { req } = createMocks({ method: 'GET' });
+      const response = await GET(req);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -43,13 +46,13 @@ describe('/api/admin/tournament-templates', () => {
         mapTemplates: [mapTemplate._id.toString()] 
       };
 
-      const request = new Request('http://localhost/api/admin/tournament-templates', {
+      const { req } = createMocks({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTemplateData),
+        body: newTemplateData,
       });
 
-      const response = await POST(request);
+      const response = await POST(req);
       const body = await response.json();
 
       expect(response.status).toBe(201);
@@ -65,13 +68,13 @@ describe('/api/admin/tournament-templates', () => {
         mapTemplates: [mapTemplate._id.toString()] // Поле все равно должно быть валидным
       };
 
-      const request = new Request('http://localhost/api/admin/tournament-templates', {
+      const { req } = createMocks({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(invalidData),
+        body: invalidData,
       });
 
-      const response = await POST(request);
+      const response = await POST(req);
       const body = await response.json();
 
       expect(response.status).toBe(400);
@@ -81,17 +84,17 @@ describe('/api/admin/tournament-templates', () => {
     it('должен возвращать ошибку 409 при дубликате', async () => {
         const templateData = { 
           name: 'Duplicate Template',
-          mapTemplates: [mapTemplate._id]
+          mapTemplates: [mapTemplate._id.toString()]
         };
         await TournamentTemplate.create(templateData);
 
-        const request = new Request('http://localhost/api/admin/tournament-templates', {
+        const { req } = createMocks({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(templateData),
+            body: templateData,
         });
 
-        const response = await POST(request);
+        const response = await POST(req);
         const body = await response.json();
 
         expect(response.status).toBe(409);

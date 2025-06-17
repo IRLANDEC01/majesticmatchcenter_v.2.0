@@ -7,16 +7,10 @@ const createJestConfig = nextJest({ dir: './' });
 const customJestConfig = {
   preset: '@shelf/jest-mongodb',
   testEnvironment: 'node',
-  setupFilesAfterEnv: ['./jest.setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  // Говорим Jest не трансформировать модули, которые уже являются ESM.
-  // Это ключевое исправление для ошибки 'Must use import to load ES Module'.
-  transformIgnorePatterns: [
-    '/node_modules/(?!(mongoose|mongodb|bson|@mongodb-js|mongodb-memory-server)/)',
-    '^.+\\.module\\.(css|sass|scss)$',
-  ],
 };
 
 // Экспортируем функцию, которую next/jest может выполнить для создания финальной конфигурации.

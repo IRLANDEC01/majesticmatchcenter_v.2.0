@@ -66,36 +66,10 @@ export async function PUT(request, { params }) {
 
     return NextResponse.json(updatedFamily);
   } catch (error) {
-    console.error(`Failed to update family ${params.id}:`, error);
+    if (error.code !== 11000) console.error(`Failed to update family ${params.id}:`, error);
     if (error.code === 11000) {
       return NextResponse.json({ message: 'Семья с таким названием уже существует' }, { status: 409 });
     }
     return NextResponse.json({ message: 'Ошибка сервера при обновлении семьи' }, { status: 500 });
-  }
-}
-
-/**
- * DELETE /api/admin/families/[id]
- * Архивирует семью (мягкое удаление).
- */
-export async function DELETE(request, { params }) {
-  try {
-    const idValidation = MongooseID.safeParse(params.id);
-    if (!idValidation.success) {
-      return NextResponse.json({ message: 'Некорректный ID семьи' }, { status: 400 });
-    }
-    
-    await connectToDatabase();
-    const archivedFamily = await familyService.archiveFamily(params.id);
-
-    if (!archivedFamily) {
-      return NextResponse.json({ message: 'Семья не найдена или уже архивирована' }, { status: 404 });
-    }
-
-    // Возвращаем архивированную семью, чтобы клиент видел итоговое состояние
-    return NextResponse.json(archivedFamily);
-  } catch (error) {
-    console.error(`Failed to archive family ${params.id}:`, error);
-    return NextResponse.json({ message: 'Ошибка сервера при архивации семьи' }, { status: 500 });
   }
 } 

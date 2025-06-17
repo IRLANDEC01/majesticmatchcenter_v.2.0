@@ -113,6 +113,26 @@ class MapTemplateRepository {
 
     return updatedTemplate;
   }
+
+  /**
+   * Архивирует шаблон карты по ID.
+   * Устанавливает поле archivedAt в текущую дату.
+   * @param {string} id - ID шаблона для архивации.
+   * @returns {Promise<MapTemplate|null>}
+   */
+  async archive(id) {
+    return MapTemplate.findByIdAndUpdate(id, { $set: { archivedAt: new Date() } }, { new: true }).lean();
+  }
+
+  /**
+   * Восстанавливает шаблон карты из архива по ID.
+   * Удаляет поле archivedAt.
+   * @param {string} id - ID шаблона для восстановления.
+   * @returns {Promise<MapTemplate|null>}
+   */
+  async unarchive(id) {
+    return MapTemplate.findByIdAndUpdate(id, { $unset: { archivedAt: 1 } }, { new: true, includeArchived: true }).lean();
+  }
 }
 
 export const mapTemplateRepository = new MapTemplateRepository(); 

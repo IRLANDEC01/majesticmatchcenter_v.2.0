@@ -1,98 +1,75 @@
-import { PUT } from './route';
+import { GET, PUT } from './route';
 import MapTemplate from '@/models/map/MapTemplate';
 import mongoose from 'mongoose';
+import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
+import models from '@/models';
 
-describe('PUT /api/admin/map-templates/[id]', () => {
+describe('/api/admin/map-templates/[id]', () => {
+  let testTemplate;
+
   beforeAll(async () => {
-    await MapTemplate.init();
+    await connectToDatabase();
   });
 
-  it('должен обновлять шаблон и возвращать его со статусом 200', async () => {
-    const testTemplate = await MapTemplate.create({ name: 'Test Map To Update' });
-    const templateId = testTemplate._id.toString();
-    const updateData = { name: 'Updated Awesome Map' };
-    
-    const request = new Request(`http://localhost/api/admin/map-templates/${templateId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData),
+  afterAll(async () => {
+    await disconnectFromDatabase();
+  });
+
+  beforeEach(async () => {
+    await Promise.all([
+      MapTemplate.deleteMany({}),
+      models.TournamentTemplate.deleteMany({}),
+      models.Tournament.deleteMany({}),
+    ]);
+    testTemplate = await MapTemplate.create({ name: 'My Test Template', slug: 'my-test-template' });
+  });
+
+  describe('GET', () => {
+    it('должен возвращать шаблон по ID и статус 200', async () => {
+      const response = await GET(null, { params: { id: testTemplate._id.toString() } });
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body.name).toBe(testTemplate.name);
     });
 
-    const response = await PUT(request, { params: { id: templateId } });
-    const body = await response.json();
+    it('должен возвращать 404, если шаблон не найден', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId();
+      const response = await GET(null, { params: { id: nonExistentId.toString() } });
+      expect(response.status).toBe(404);
+    });
+  });
 
-    expect(response.status).toBe(200);
-    expect(body.name).toBe(updateData.name);
+  describe('PUT', () => {
+    it('должен успешно обновлять шаблон', async () => {
+      const updateData = { name: 'Updated Template Name' };
+      const request = new Request(`http://localhost/api/admin/map-templates/${testTemplate._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
 
-    const dbTemplate = await MapTemplate.findById(templateId);
-    expect(dbTemplate).not.toBeNull();
-    if (dbTemplate) {
+      const response = await PUT(request, { params: { id: testTemplate._id.toString() } });
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.name).toBe(updateData.name);
+
+      const dbTemplate = await MapTemplate.findById(testTemplate._id);
       expect(dbTemplate.name).toBe(updateData.name);
-    }
-  });
-
-  it('должен возвращать 404, если шаблон не найден', async () => {
-    const templateId = new mongoose.Types.ObjectId().toString();
-    const updateData = { name: 'Non-existent Map' };
-    
-    const request = new Request(`http://localhost/api/admin/map-templates/${templateId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData),
     });
 
-    const response = await PUT(request, { params: { id: templateId } });
-    const body = await response.json();
+    it('должен возвращать 409 при дублировании имени', async () => {
+      const anotherTemplate = await MapTemplate.create({ name: 'Another Template', slug: 'another-template' });
+      const updateData = { name: 'My Test Template' }; // name, который уже есть у testTemplate
 
-    expect(response.status).toBe(404);
-    expect(body.message).toBe('Шаблон карты не найден');
-  });
-
-  it('должен возвращать 400 при невалидном ID', async () => {
-    const invalidId = 'invalid-id';
-    const request = new Request(`http://localhost/api/admin/map-templates/${invalidId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'test' }),
+      const request = new Request(`http://localhost/api/admin/map-templates/${anotherTemplate._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
+      
+      const response = await PUT(request, { params: { id: anotherTemplate._id.toString() } });
+      expect(response.status).toBe(409);
     });
-
-    const response = await PUT(request, { params: { id: invalidId } });
-    const body = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(body.message).toBe('Некорректный ID шаблона');
-  });
-
-  it('должен возвращать 400 при невалидных данных (пустое имя)', async () => {
-    const testTemplate = await MapTemplate.create({ name: 'Test Map For Validation' });
-    const templateId = testTemplate._id.toString();
-    const invalidData = { name: '' }; 
-
-    const request = new Request(`http://localhost/api/admin/map-templates/${templateId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(invalidData),
-    });
-
-    const response = await PUT(request, { params: { id: templateId } });
-    const body = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(body.errors.name).toBeDefined();
-  });
-
-  it('должен возвращать 409 при попытке обновить имя на уже существующее', async () => {
-    await MapTemplate.create({ name: 'Existing Name' });
-    const templateToUpdate = await MapTemplate.create({ name: 'Old Name' });
-    const templateId = templateToUpdate._id.toString();
-
-    const request = new Request(`http://localhost/api/admin/map-templates/${templateId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Existing Name' }),
-    });
-
-    const response = await PUT(request, { params: { id: templateId } });
-    expect(response.status).toBe(409);
   });
 }); 

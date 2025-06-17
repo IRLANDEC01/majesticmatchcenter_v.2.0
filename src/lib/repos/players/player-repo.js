@@ -96,8 +96,18 @@ class PlayerRepository {
    * @param {string} id - ID игрока.
    * @returns {Promise<object|null>}
    */
-  async archiveById(id) {
-    return this._updateArchiveStatus(id, true);
+  async archive(id) {
+    const player = await Player.findOneAndUpdate(
+      { _id: id, archivedAt: null },
+      { $set: { archivedAt: new Date() } },
+      { new: true }
+    ).lean();
+
+    if (player) {
+      await cache.invalidateByTag(`player:${id}`);
+      await cache.invalidateByTag('players_list');
+    }
+    return player;
   }
 
   /**
@@ -105,32 +115,15 @@ class PlayerRepository {
    * @param {string} id - ID игрока.
    * @returns {Promise<object|null>}
    */
-  async restoreById(id) {
-    return this._updateArchiveStatus(id, false);
-  }
-  
-  /**
-   * Вспомогательный приватный метод для обновления статуса архивации.
-   * @param {string} id - ID игрока.
-   * @param {boolean} isArchived - Архивировать или восстановить.
-   * @returns {Promise<object|null>}
-   * @private
-   */
-  async _updateArchiveStatus(id, isArchived) {
-    const filter = {
-      _id: id,
-      archivedAt: isArchived ? null : { $ne: null },
-    };
-
-    const update = {
-      $set: { archivedAt: isArchived ? new Date() : null },
-    };
-
-    const player = await Player.findOneAndUpdate(filter, update, { new: true }).lean();
-
+  async unarchive(id) {
+    const player = await Player.findByIdAndUpdate(
+      id,
+      { $unset: { archivedAt: 1 } },
+      { new: true }
+    ).lean();
+    
     if (player) {
       await cache.invalidateByTag(`player:${id}`);
-      await cache.invalidateByTag(`player:slug:${player.slug}`);
       await cache.invalidateByTag('players_list');
     }
     return player;
