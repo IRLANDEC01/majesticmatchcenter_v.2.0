@@ -64,6 +64,10 @@ class MapRepository {
   async unarchive(id) {
     return Map.findByIdAndUpdate(id, { $unset: { archivedAt: 1 } }, { new: true, includeArchived: true }).lean();
   }
+
+  async findBySlug(slug, tournamentId) {
+    return Map.findOne({ slug, tournament: tournamentId }).lean();
+  }
 }
 
 export const mapRepo = new MapRepository(); 

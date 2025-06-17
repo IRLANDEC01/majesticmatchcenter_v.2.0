@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { mapService } from '@/lib/domain/maps/map-service';
 import { connectToDatabase } from '@/lib/db';
 import { z } from 'zod';
+import { handleApiError } from '@/lib/api/handle-api-error';
+import { NotFoundError } from '@/lib/errors';
 
 // Схема для обновления. Все поля опциональны.
 const updateMapSchema = z.object({
@@ -64,16 +66,12 @@ export async function PUT(request, { params }) {
     const updatedMap = await mapService.updateMap(id, validationResult.data);
 
     if (!updatedMap) {
-      return NextResponse.json({ message: 'Карта не найдена' }, { status: 404 });
+      throw new NotFoundError(`Map with id ${id} not found.`);
     }
 
     return NextResponse.json(updatedMap);
   } catch (error) {
-    if (error.code === 11000) {
-      return NextResponse.json({ message: 'Карта с таким slug уже существует' }, { status: 409 });
-    }
-    console.error(`Failed to update map ${params.id}:`, error);
-    return NextResponse.json({ message: 'Ошибка сервера при обновлении карты' }, { status: 500 });
+    return handleApiError(error);
   }
 }
 

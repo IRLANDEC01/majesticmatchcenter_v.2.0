@@ -5,6 +5,7 @@ import { mapTemplateRepository } from '@/lib/repos/map-templates/map-template-re
 import { RatingService } from '@/lib/domain/ratings/rating-service';
 import { StatisticsService } from '@/lib/domain/statistics/statistics-service';
 import { AchievementService } from '@/lib/domain/achievements/achievement-service';
+import { DuplicateError } from '@/lib/errors';
 
 const ratingService = new RatingService();
 const statisticsService = new StatisticsService();
@@ -17,6 +18,23 @@ const achievementService = new AchievementService();
 class MapService {
   constructor(repo) {
     this.repo = repo;
+  }
+
+  /**
+   * Проверяет, уникален ли slug в рамках турнира.
+   * @private
+   * @param {string} slug - Slug для проверки.
+   * @param {string} tournamentId - ID турнира.
+   * @param {string|null} currentMapId - ID текущей карты (для исключения при обновлении).
+   * @returns {Promise<void>}
+   */
+  async _validateSlugUniqueness(slug, tournamentId, currentMapId = null) {
+    if (!slug || !tournamentId) return;
+
+    const existingMap = await this.repo.findBySlug(slug, tournamentId);
+    if (existingMap && existingMap._id.toString() !== currentMapId) {
+      throw new DuplicateError(`Map with slug "${slug}" already exists in this tournament.`);
+    }
   }
 
   /**
@@ -43,7 +61,7 @@ class MapService {
    * @returns {Promise<Map>}
    */
   async createMap(data) {
-    // В будущем здесь может быть более сложная бизнес-логика
+    await this._validateSlugUniqueness(data.slug, data.tournament);
     return this.repo.create(data);
   }
 
@@ -54,6 +72,20 @@ class MapService {
    * @returns {Promise<Map|null>}
    */
   async updateMap(id, data) {
+    // Для проверки уникальности нам нужен ID турнира.
+    // Если он не передается в `data`, загружаем текущую карту, чтобы его получить.
+    let tournamentId = data.tournament;
+    if (data.slug && !tournamentId) {
+        const currentMap = await this.repo.findById(id);
+        if (!currentMap) {
+            // Если карта не найдена, repo.update() вернет null, что является ожидаемым поведением.
+            // Нет необходимости бросать ошибку здесь.
+            return this.repo.update(id, data);
+        }
+        tournamentId = currentMap.tournament;
+    }
+
+    await this._validateSlugUniqueness(data.slug, tournamentId, id);
     return this.repo.update(id, data);
   }
 
