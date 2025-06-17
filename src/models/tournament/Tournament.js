@@ -106,6 +106,10 @@ const tournamentSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
+  // Дата окончания. Может быть не задана для турниров без определенной даты конца.
+  endDate: {
+    type: Date,
+  },
   // Призовой фонд турнира.
   prizePool: [prizeSchema],
   // Пул участников, зарегистрированных на турнир.
@@ -114,11 +118,30 @@ const tournamentSchema = new mongoose.Schema({
   winner: {
     type: mongoose.Schema.Types.ObjectId,
   },
+  // Ссылка на самого ценного игрока турнира (денормализация для быстрого доступа).
+  mvp: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Player',
+  },
   // SEO поля
   seo: seoSchema,
 }, {
   timestamps: true,
   versionKey: '__v',
+});
+
+// Хук для автоматической генерации slug из name
+tournamentSchema.pre('validate', function(next) {
+  if (this.name && (this.isModified('name') || !this.slug)) {
+    this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+  }
+  
+  // Валидация, чтобы дата окончания не была раньше даты начала
+  if (this.startDate && this.endDate && this.endDate < this.startDate) {
+    this.invalidate('endDate', 'Дата окончания не может быть раньше даты начала.', this.endDate);
+  }
+  
+  next();
 });
 
 const Tournament = mongoose.models.Tournament || mongoose.model('Tournament', tournamentSchema);

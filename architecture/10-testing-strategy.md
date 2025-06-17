@@ -82,6 +82,12 @@
     ```bash
     npx jest path/to/your.test.js
     ```
+*   **Тесты для динамических маршрутов Next.js:**
+    *   **Проблема:** Jest может не находить файлы, в пути которых есть скобки `[` и `]`, например, `src/app/api/admin/tournaments/[id]/route.test.js`.
+    *   **Решение:** Использовать флаг `--runTestsByPath`, который корректно обрабатывает такие пути.
+    ```bash
+    npx jest --runTestsByPath path/to/your/[id]/route.test.js
+    ```
 *   **Тесты в режиме отладки (последовательно):**
     ```bash
     npx jest --runInBand
