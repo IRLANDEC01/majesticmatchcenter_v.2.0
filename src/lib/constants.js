@@ -24,17 +24,12 @@ export const CURRENCY_VALUES = Object.values(CURRENCY_TYPES);
  * @enum {string}
  */
 export const RATING_REASONS = {
-  MAP_COMPLETION: 'MAP_COMPLETION', // Начисление за завершение карты
-  MANUAL_ADJUSTMENT: 'MANUAL_ADJUSTMENT', // Ручная корректировка администратором
-  INITIAL_RATING: 'INITIAL_RATING', // Начальный рейтинг при создании
+  MAP_COMPLETION: 'map_completion', // Начисление за завершение карты
+  MANUAL_ADJUSTMENT: 'manual_adjustment', // Ручная корректировка администратором
+  INITIAL_RATING: 'initial_rating', // Начальный рейтинг при создании
 };
 
 export const TOURNAMENT_TYPES = {
   TEAM: 'team',
   FAMILY: 'family',
-};
-
-export const RATING_CHANGE_REASONS = {
-  MAP_COMPLETION: 'map_completion',
-  MANUAL_ADJUSTMENT: 'manual_adjustment',
 }; 

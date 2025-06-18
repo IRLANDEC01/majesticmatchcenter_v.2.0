@@ -1,5 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
-import { RATING_CHANGE_REASONS } from '@/lib/constants';
+import { RATING_REASONS } from '@/lib/constants';
+import { AppError } from '@/lib/errors';
 
 const PlayerRatingHistorySchema = new Schema(
   {
@@ -35,9 +36,11 @@ const PlayerRatingHistorySchema = new Schema(
     },
     reason: {
       type: String,
-      required: true,
-      enum: Object.values(RATING_CHANGE_REASONS),
-      default: RATING_CHANGE_REASONS.MAP_COMPLETION,
+      required: [true, 'Причина изменения рейтинга обязательна.'],
+      enum: Object.values(RATING_REASONS),
+      default: RATING_REASONS.MAP_COMPLETION,
+      trim: true,
+      index: true,
       comment: 'Причина изменения рейтинга.',
     },
   },

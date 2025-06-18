@@ -1,7 +1,7 @@
 /**
  * Сервис для управления статистикой игроков и семей.
  */
-import { playerRepository } from '@/lib/repos/players/player-repo';
+import { playerRepo } from '@/lib/repos/players/player-repo';
 import { playerStatsRepository } from '@/lib/repos/statistics/player-stats-repo';
 import { playerMapParticipationRepository } from '@/lib/repos/statistics/player-map-participation-repo';
 
@@ -47,46 +47,52 @@ export class StatisticsService {
    * Парсит "сырую" статистику матча, находит соответствующих игроков и обновляет их документы со статистикой.
    * @param {string} mapId - ID карты.
    * @param {string} tournamentId - ID родительского турнира.
-   * @param {Array<object>} rawStats - Массив с "сырой" статистикой из JSON-файла.
-   * @param {Array<object>} mapParticipants - Участники карты для сопоставления имен игроков.
-   * @returns {Promise<Array<object>>} Промис, который разрешается в обработанную статистику с добавленными ID игроков.
+   * @param {Array<object>} rawStats - Массив с "сырой" статистикой. Ожидается, что каждый объект содержит `firstName` и `lastName`.
+   * @returns {Promise<Array<object>>} Промис, который разрешается в массив `rawStats` с добавленным `playerId`.
    */
-  async parseAndApplyMapStats(mapId, tournamentId, rawStats, mapParticipants) {
-    const playerLookup = new Map(
-      mapParticipants.map(p => [`${p.firstName}${p.lastName}`, p._id.toString()])
-    );
-
-    const statsWithPlayerIds = [];
+  async parseAndApplyMapStats(mapId, tournamentId, rawStats) {
+    const enrichedStats = [];
     const updatePromises = [];
 
-    for (const rawStat of rawStats) {
-      const lookupKey = `${rawStat.firstName}${rawStat.lastName}`;
-      const playerId = playerLookup.get(lookupKey);
+    for (const stat of rawStats) {
+      if (!stat.firstName || !stat.lastName) {
+        console.warn('Статистика получена без имени/фамилии и будет проигнорирована:', stat);
+        continue;
+      }
 
-      if (playerId) {
-        const statWithId = { ...rawStat, playerId };
-        statsWithPlayerIds.push(statWithId);
+      const players = await this.playerRepo.findAll({ filter: { firstName: stat.firstName, lastName: stat.lastName } });
+      const player = players[0];
 
-        const { weaponStats, ...overallChange } = rawStat;
-        overallChange.mapsPlayed = 1;
+      if (player) {
+        const playerId = player._id;
 
+        const statsChange = { ...stat };
+        delete statsChange.firstName;
+        delete statsChange.lastName;
+
+        // Собираем все обещания в один массив
         updatePromises.push(
-          this.playerStatsRepo.applyOverallStatsChange(playerId, overallChange, 1),
+          this.playerStatsRepo.applyOverallStatsChange(playerId, statsChange, 1)
+        );
+        updatePromises.push(
           this.playerMapParticipationRepo.create({
-            ...rawStat,
+            ...stat,
             playerId,
             mapId,
             tournamentId,
           })
         );
+
+        enrichedStats.push({ ...stat, playerId });
       } else {
-        console.warn(`Игрок "${rawStat.firstName} ${rawStat.lastName}" из файла статистики не найден среди участников карты.`);
+        console.warn(`Игрок "${stat.firstName} ${stat.lastName}" не найден в базе данных. Статистика проигнорирована.`);
       }
     }
 
+    // Дожидаемся выполнения всех операций с базой данных
     await Promise.all(updatePromises);
 
-    return statsWithPlayerIds;
+    return enrichedStats;
   }
 
   /**
@@ -122,7 +128,7 @@ export class StatisticsService {
 }
 
 export const statisticsService = new StatisticsService({
-  playerRepo: playerRepository,
+  playerRepo,
   playerStatsRepo: playerStatsRepository,
   playerMapParticipationRepo: playerMapParticipationRepository,
 }); 

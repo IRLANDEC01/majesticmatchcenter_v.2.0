@@ -37,6 +37,12 @@ const playerSchema = new mongoose.Schema({
     trim: true,
     default: '/defaults/player-avatar.png', // Путь к аватару по умолчанию
   },
+  rating: {
+    type: Number,
+    default: 0,
+    min: [0, 'Рейтинг не может быть отрицательным.'],
+    index: true,
+  },
   // Краткая биография или описание игрока
   bio: {
     type: String,

@@ -28,8 +28,11 @@ function getRedisClient() {
     maxRetriesPerRequest: null, // Отключаем повторные попытки на уровне команд
   });
 
-  redis.on('connect', () => console.log('=> connected to Redis'));
-  redis.on('error', (err) => console.error('Redis Client Error', err));
+  // Не регистрируем обработчики событий в тестовой среде, чтобы избежать асинхронных утечек
+  if (process.env.NODE_ENV !== 'test') {
+    redis.on('connect', () => console.log('=> connected to Redis'));
+    redis.on('error', (err) => console.error('Redis Client Error', err));
+  }
 
   return redis;
 }

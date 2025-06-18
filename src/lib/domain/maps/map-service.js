@@ -20,13 +20,13 @@ const mapSchema = z.object({
 });
 
 const completionSchema = z.object({
-  winnerId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID победителя.'),
-  mvpId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID MVP.'),
+  winnerFamilyId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID семьи-победителя.'),
+  mvpPlayerId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID MVP.'),
   ratingChanges: z.array(z.object({
     familyId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val)),
     change: z.number().nonnegative(),
   })).optional(),
-  statistics: z.array(z.any()).optional(),
+  playerStats: z.array(z.any()).optional(),
 });
 
 /**
@@ -128,10 +128,10 @@ class MapService {
    * Завершает карту, обновляет статистики и рейтинги.
    * @param {string} mapId - ID карты.
    * @param {object} completionData - Данные для завершения.
-   * @param {string} completionData.winnerId - ID победившей семьи/команды.
-   * @param {string} completionData.mvpId - ID самого ценного игрока.
+   * @param {string} completionData.winnerFamilyId - ID победившей семьи/команды.
+   * @param {string} completionData.mvpPlayerId - ID самого ценного игрока.
    * @param {Array<{familyId: string, change: number}>} [completionData.ratingChanges] - Опциональные изменения рейтинга семей.
-   * @param {Array<object>} [completionData.statistics] - Опциональная статистика игроков из JSON.
+   * @param {Array<object>} [completionData.playerStats] - Опциональная статистика игроков из JSON.
    * @returns {Promise<import('@/models/map/Map').Map>}
    */
   async completeMap(mapId, completionData) {
@@ -139,7 +139,7 @@ class MapService {
     if (!validationResult.success) {
       throw new ValidationError('Ошибка валидации при завершении карты', validationResult.error.flatten().fieldErrors);
     }
-    const { winnerId, mvpId, ratingChanges, statistics } = validationResult.data;
+    const { winnerFamilyId, mvpPlayerId, ratingChanges, playerStats } = validationResult.data;
 
     const map = await this.repo.findById(mapId);
 
@@ -151,40 +151,38 @@ class MapService {
     }
 
     const [winner, mvp] = await Promise.all([
-      this.familyRepo.findById(winnerId),
-      this.playerRepo.findById(mvpId),
+      this.familyRepo.findById(winnerFamilyId),
+      this.playerRepo.findById(mvpPlayerId),
     ]);
     
-    if (!winner) throw new NotFoundError(`Семья-победитель с ID ${winnerId} не найдена.`);
-    if (!mvp) throw new NotFoundError(`Игрок MVP с ID ${mvpId} не найден.`);
+    if (!winner) throw new NotFoundError(`Семья-победитель с ID ${winnerFamilyId} не найдена.`);
+    if (!mvp) throw new NotFoundError(`Игрок MVP с ID ${mvpPlayerId} не найден.`);
 
 
     // 1. Обновляем рейтинги семей (если данные предоставлены)
     if (ratingChanges && ratingChanges.length > 0) {
-      await this.ratingService.updateFamilyRatings(mapId, ratingChanges);
+      const participantFamilyIds = map.participants.map(p => p.participant._id.toString());
+      await this.ratingService.updateFamilyRatings(mapId, ratingChanges, participantFamilyIds);
     }
 
     // 2. Обрабатываем статистику и рейтинг игроков (если данные предоставлены)
-    if (statistics && statistics.length > 0) {
-      const allPlayerIds = map.participantFamilies.flatMap(pf => pf.players);
-      const participants = await this.playerRepo.findAll({ filter: { _id: { $in: allPlayerIds } } });
-      
-      const statsWithPlayerIds = await this.statisticsService.parseAndApplyMapStats(mapId, map.tournament, statistics, participants);
+    if (playerStats && playerStats.length > 0) {
+      const statsWithPlayerIds = await this.statisticsService.parseAndApplyMapStats(mapId, map.tournament, playerStats);
       await this.ratingService.updatePlayerRatings(mapId, statsWithPlayerIds);
     }
     
     // 3. Обновляем саму карту
     const updatedMapData = {
       status: 'completed',
-      winner: winnerId,
-      mvp: mvpId,
+      winner: winnerFamilyId,
+      mvp: mvpPlayerId,
       // ratingChanges are not stored on the map document itself anymore.
     };
     const completedMap = await this.repo.update(mapId, updatedMapData);
 
 
     // 4. Генерируем достижения
-    // await this.achievementService.processMapCompletionAchievements(mapId, completedMap, statistics || []);
+    // await this.achievementService.processMapCompletionAchievements(mapId, completedMap, playerStats || []);
 
     return completedMap;
   }

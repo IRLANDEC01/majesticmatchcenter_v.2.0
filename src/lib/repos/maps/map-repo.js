@@ -11,7 +11,10 @@ class MapRepository {
    * @returns {Promise<Map|null>}
    */
   async findById(id) {
-    return Map.findById(id).lean();
+    return Map.findById(id)
+      .populate('participants.participant')
+      .populate('participants.players')
+      .lean();
   }
   
   /**

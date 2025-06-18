@@ -8,8 +8,10 @@ import { DuplicateError, NotFoundError, ValidationError, AppError } from '@/lib/
  * @returns {NextResponse} - Стандартизированный ответ с ошибкой.
  */
 export function handleApiError(error) {
-  // Логируем ошибку для отладки
-  console.error(error);
+  // Логируем ошибку для отладки, но не в тестовой среде, чтобы не засорять вывод.
+  if (process.env.NODE_ENV !== 'test') {
+    console.error(error);
+  }
 
   // Кастомные ошибки приложения
   if (error instanceof ValidationError) {

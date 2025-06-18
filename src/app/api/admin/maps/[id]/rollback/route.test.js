@@ -71,10 +71,10 @@ describe('POST /api/admin/maps/[id]/rollback', () => {
 
     // Complete the map first to be able to roll it back
     await mapService.completeMap(testMap._id, {
-      winnerId: testFamily._id.toString(),
-      mvpId: testPlayer._id.toString(),
+      winnerFamilyId: testFamily._id.toString(),
+      mvpPlayerId: testPlayer._id.toString(),
       ratingChanges: [],
-      statistics: [],
+      playerStats: [],
     });
   });
 

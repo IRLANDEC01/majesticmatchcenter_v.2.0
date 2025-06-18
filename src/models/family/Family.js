@@ -60,6 +60,12 @@ const familySchema = new mongoose.Schema({
   },
   logo: { type: String, trim: true },
   banner: { type: String, trim: true },
+  rating: {
+    type: Number,
+    default: 0,
+    min: [0, 'Рейтинг не может быть отрицательным.'],
+    index: true,
+  },
   // Дата архивации семьи. Если значение `null` — семья активна.
   // Если установлена дата — семья считается удаленной (архивированной).
   archivedAt: {
