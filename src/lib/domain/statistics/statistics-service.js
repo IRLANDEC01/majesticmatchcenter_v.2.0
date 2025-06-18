@@ -1,19 +1,23 @@
-/**
- * Сервис для управления статистикой игроков и семей.
- */
+import { z } from 'zod';
 import { playerRepo } from '@/lib/repos/players/player-repo';
-import { playerStatsRepository } from '@/lib/repos/statistics/player-stats-repo';
-import { playerMapParticipationRepository } from '@/lib/repos/statistics/player-map-participation-repo';
+import { playerMapParticipationRepo } from '@/lib/repos/statistics/player-map-participation-repo';
+import { familyMapParticipationRepo } from '@/lib/repos/statistics/family-map-participation-repo';
+import { playerStatsRepo } from '@/lib/repos/statistics/player-stats-repo';
+import { NotFoundError, AppError, PlayerNotFoundError } from '@/lib/errors';
 
-export class StatisticsService {
-  constructor({
-    playerRepo,
-    playerStatsRepo,
-    playerMapParticipationRepo,
-  }) {
+/**
+ * Сервис для обработки и сохранения статистики игроков и семей.
+ */
+class StatisticsService {
+  constructor({ playerRepo, playerMapParticipationRepo, familyMapParticipationRepo, playerStatsRepo }) {
     this.playerRepo = playerRepo;
-    this.playerStatsRepo = playerStatsRepo;
     this.playerMapParticipationRepo = playerMapParticipationRepo;
+    this.familyMapParticipationRepo = familyMapParticipationRepo;
+    this.playerStatsRepo = playerStatsRepo;
+
+    // Привязка контекста
+    this.parseAndApplyMapStats = this.parseAndApplyMapStats.bind(this);
+    this.rollbackMapStats = this.rollbackMapStats.bind(this);
   }
 
   /**
@@ -83,7 +87,7 @@ export class StatisticsService {
           })
         );
 
-        enrichedStats.push({ ...stat, playerId });
+        enrichedStats.push({ ...stat, playerId, mapId });
       } else {
         console.warn(`Игрок "${stat.firstName} ${stat.lastName}" не найден в базе данных. Статистика проигнорирована.`);
       }
@@ -127,8 +131,4 @@ export class StatisticsService {
   }
 }
 
-export const statisticsService = new StatisticsService({
-  playerRepo,
-  playerStatsRepo: playerStatsRepository,
-  playerMapParticipationRepo: playerMapParticipationRepository,
-}); 
+export { StatisticsService }; 

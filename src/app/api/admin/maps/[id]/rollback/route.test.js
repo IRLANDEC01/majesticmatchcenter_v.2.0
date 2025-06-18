@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { POST } from './route';
+// import { POST } from './route'; // Будет импортирован динамически
 import { connectToDatabase, disconnectFromDatabase, clearDatabase } from '@/lib/db';
 import Map from '@/models/map/Map';
 import Tournament from '@/models/tournament/Tournament';
@@ -7,14 +7,13 @@ import Family from '@/models/family/Family';
 import Player from '@/models/player/Player';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import MapTemplate from '@/models/map/MapTemplate';
-import { mapService } from '@/lib/domain/maps/map-service';
+import PlayerMapParticipation from '@/models/player/PlayerMapParticipation';
+import FamilyMapParticipation from '@/models/family/FamilyMapParticipation';
 
 describe('POST /api/admin/maps/[id]/rollback', () => {
-  let testTournament;
-  let testMap;
-  let testFamily;
-  let testPlayer;
+  let testTournament, testMap, testFamily, testPlayer;
 
+  // Локальное управление подключением
   beforeAll(async () => {
     await connectToDatabase();
   });
@@ -24,7 +23,8 @@ describe('POST /api/admin/maps/[id]/rollback', () => {
   });
 
   beforeEach(async () => {
-    await clearDatabase();
+    jest.resetModules(); // Сброс кеша
+    await clearDatabase(); // Очистка БД
 
     const testTournamentTemplate = await TournamentTemplate.create({
       name: 'Test Template',
@@ -63,28 +63,22 @@ describe('POST /api/admin/maps/[id]/rollback', () => {
 
     testMap = await Map.create({
       name: 'Test Map',
-      status: 'active',
+      status: 'completed', // Сразу создаем в нужном статусе
       tournament: testTournament._id,
       template: testMapTemplate._id,
       startDateTime: new Date(),
-    });
-
-    // Complete the map first to be able to roll it back
-    await mapService.completeMap(testMap._id, {
-      winnerFamilyId: testFamily._id.toString(),
-      mvpPlayerId: testPlayer._id.toString(),
-      ratingChanges: [],
-      playerStats: [],
+      winner: testFamily._id,
+      mvp: testPlayer._id,
     });
   });
 
   it('должен откатить завершение карты и вернуть 200', async () => {
+    const { POST } = await import('./route'); // Динамический импорт
     const req = new Request(`http://localhost/api/admin/maps/${testMap._id}/rollback`, {
       method: 'POST',
     });
 
     const response = await POST(req, { params: { id: testMap._id.toString() } });
-
     expect(response.status).toBe(200);
 
     const body = await response.json();
@@ -97,15 +91,14 @@ describe('POST /api/admin/maps/[id]/rollback', () => {
   });
 
   it('должен вернуть 409, если карта не в статусе "completed"', async () => {
-    // First, roll back the map to 'active'
-    await mapService.rollbackMapCompletion(testMap._id);
+    const { POST } = await import('./route'); // Динамический импорт
+    await Map.findByIdAndUpdate(testMap._id, { status: 'active' });
 
     const req = new Request(`http://localhost/api/admin/maps/${testMap._id}/rollback`, {
       method: 'POST',
     });
 
     const response = await POST(req, { params: { id: testMap._id.toString() } });
-    
     expect(response.status).toBe(409);
     const body = await response.json();
     expect(body.message).toContain('Откатить можно только завершенную карту');

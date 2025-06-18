@@ -1,22 +1,17 @@
 import { NextResponse } from 'next/server';
-import { mapService } from '@/lib/domain/maps/map-service';
 import { handleApiError } from '@/lib/api/handle-api-error';
+import container from '@/lib/di-container';
 
 export async function POST(request, { params }) {
-  const { id } = params;
   try {
+    const mapService = container.get('mapService');
+    const { id } = params;
     const body = await request.json();
-    const { winnerFamilyId, mvpPlayerId, ratingChanges, playerStats } = body;
+    
+    // Передаем управление в сервис
+    const completedMap = await mapService.completeMap(id, body);
 
-    await mapService.completeMap(id, {
-      winnerFamilyId,
-      mvpPlayerId,
-      ratingChanges,
-      playerStats,
-    });
-
-    // При успешном завершении возвращаем статус 200 OK без тела.
-    return new Response(null, { status: 200 });
+    return NextResponse.json(completedMap, { status: 200 });
   } catch (error) {
     if (error.name === 'ValidationError') {
       console.error('ValidationError details:', JSON.stringify(error.errors, null, 2));

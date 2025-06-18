@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { mapService } from '@/lib/domain/maps/map-service';
-import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
 import { handleApiError } from '@/lib/api/handle-api-error';
+import container from '@/lib/di-container';
+import { z } from 'zod';
 import { NotFoundError } from '@/lib/errors';
+
+const mapService = container.get('mapService');
 
 // Схема для обновления. Все поля опциональны.
 const updateMapSchema = z.object({
@@ -25,22 +26,13 @@ const patchMapSchema = z.object({
  */
 export async function GET(request, { params }) {
   try {
-    const { id } = params;
-    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return NextResponse.json({ message: 'Некорректный ID карты' }, { status: 400 });
-    }
-
-    await connectToDatabase();
-    const map = await mapService.getMapById(id);
-
+    const map = await mapService.getMapById(params.id);
     if (!map) {
       return NextResponse.json({ message: 'Карта не найдена' }, { status: 404 });
     }
-
     return NextResponse.json(map);
   } catch (error) {
-    console.error(`Failed to get map ${params.id}:`, error);
-    return NextResponse.json({ message: 'Ошибка сервера при получении карты' }, { status: 500 });
+    return handleApiError(error);
   }
 }
 
@@ -50,25 +42,11 @@ export async function GET(request, { params }) {
  */
 export async function PUT(request, { params }) {
   try {
-    const { id } = params;
-    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return NextResponse.json({ message: 'Некорректный ID карты' }, { status: 400 });
-    }
-
-    await connectToDatabase();
-    const json = await request.json();
-
-    const validationResult = updateMapSchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const updatedMap = await mapService.updateMap(id, validationResult.data);
-
+    const mapData = await request.json();
+    const updatedMap = await mapService.updateMap(params.id, mapData);
     if (!updatedMap) {
-      throw new NotFoundError(`Map with id ${id} not found.`);
+      return NextResponse.json({ message: 'Карта не найдена' }, { status: 404 });
     }
-
     return NextResponse.json(updatedMap);
   } catch (error) {
     return handleApiError(error);

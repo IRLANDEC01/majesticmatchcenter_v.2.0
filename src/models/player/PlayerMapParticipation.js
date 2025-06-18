@@ -18,6 +18,23 @@ const playerMapParticipationSchema = new mongoose.Schema({
   headshots: { type: Number, default: 0 },
   headshotAccuracy: { type: Number, default: 0 },
   
+  // НОВЫЕ ПОЛЯ для контекста рейтинга
+  ratingChange: { 
+    type: Number, 
+    default: 0,
+    comment: 'Изменение рейтинга игрока за эту карту'
+  },
+  previousRating: {
+    type: Number,
+    required: true,
+    comment: 'Рейтинг игрока ДО этой карты'
+  },
+  newRating: {
+    type: Number,
+    required: true,
+    comment: 'Рейтинг игрока ПОСЛЕ этой карты'
+  },
+
   // Детальная статистика по оружию за эту карту
   weaponStats: [weaponStatSchema],
 }, {

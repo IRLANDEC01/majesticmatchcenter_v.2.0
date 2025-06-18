@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { mapService } from '@/lib/domain/maps/map-service';
-import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
 import { handleApiError } from '@/lib/api/handle-api-error';
+import container from '@/lib/di-container';
+import { z } from 'zod';
+
+const mapService = container.get('mapService');
 
 const createMapSchema = z.object({
   name: z.string().min(1, 'Название не может быть пустым.'),
@@ -18,7 +19,6 @@ const createMapSchema = z.object({
  */
 export async function GET() {
   try {
-    await connectToDatabase();
     const maps = await mapService.getAllMaps();
     return NextResponse.json(maps);
   } catch (error) {
@@ -33,8 +33,8 @@ export async function GET() {
  */
 export async function POST(request) {
   try {
-    const data = await request.json();
-    const newMap = await mapService.createMap(data);
+    const mapData = await request.json();
+    const newMap = await mapService.createMap(mapData);
     return NextResponse.json(newMap, { status: 201 });
   } catch (error) {
     return handleApiError(error);

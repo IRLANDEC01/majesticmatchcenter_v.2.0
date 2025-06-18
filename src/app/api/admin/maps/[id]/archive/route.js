@@ -1,11 +1,8 @@
 import { NextResponse } from 'next/server';
-import { mapService } from '@/lib/domain/maps/map-service';
-import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
+import { handleApiError } from '@/lib/api/handle-api-error';
+import container from '@/lib/di-container';
 
-const patchSchema = z.object({
-  archived: z.boolean(),
-});
+const mapService = container.get('mapService');
 
 /**
  * PATCH /api/admin/maps/[id]/archive
@@ -13,31 +10,16 @@ const patchSchema = z.object({
  */
 export async function PATCH(request, { params }) {
   try {
-    await connectToDatabase();
     const { id } = params;
-    const json = await request.json();
-
-    const validationResult = patchSchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const { archived } = validationResult.data;
+    const { archived } = await request.json();
     let result;
-
     if (archived) {
       result = await mapService.archiveMap(id);
     } else {
       result = await mapService.unarchiveMap(id);
     }
-
-    if (!result) {
-      return NextResponse.json({ message: `Map with id ${id} not found.` }, { status: 404 });
-    }
-
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Failed to update map archive state:', error);
-    return NextResponse.json({ message: 'Ошибка сервера' }, { status: 500 });
+    return handleApiError(error);
   }
 } 

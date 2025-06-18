@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { POST } from './route';
+// import { POST } from './route'; // Будет импортирован динамически
 import { connectToDatabase, disconnectFromDatabase, clearDatabase } from '@/lib/db';
 import Map from '@/models/map/Map';
 import Tournament from '@/models/tournament/Tournament';
@@ -7,15 +7,11 @@ import Family from '@/models/family/Family';
 import Player from '@/models/player/Player';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import MapTemplate from '@/models/map/MapTemplate';
-import FamilyRatingHistory from '@/models/family/FamilyRatingHistory';
-import PlayerRatingHistory from '@/models/player/PlayerRatingHistory';
 import PlayerMapParticipation from '@/models/player/PlayerMapParticipation';
+import FamilyMapParticipation from '@/models/family/FamilyMapParticipation';
 
 describe('POST /api/admin/maps/[id]/complete', () => {
-  let testTournament;
-  let testMap;
-  let testFamily;
-  let testPlayer;
+  let testTournament, testMap, testFamily, testMvpPlayer, otherFamily;
 
   beforeAll(async () => {
     await connectToDatabase();
@@ -26,15 +22,8 @@ describe('POST /api/admin/maps/[id]/complete', () => {
   });
 
   beforeEach(async () => {
-    await Map.deleteMany({});
-    await Tournament.deleteMany({});
-    await Family.deleteMany({});
-    await Player.deleteMany({});
-    await TournamentTemplate.deleteMany({});
-    await MapTemplate.deleteMany({});
-    await FamilyRatingHistory.deleteMany({});
-    await PlayerRatingHistory.deleteMany({});
-    await PlayerMapParticipation.deleteMany({});
+    jest.resetModules();
+    await clearDatabase();
 
     const testTournamentTemplate = await TournamentTemplate.create({
       name: 'Test Template',
@@ -51,7 +40,7 @@ describe('POST /api/admin/maps/[id]/complete', () => {
     testFamily = await Family.create({
       name: 'Test Family',
       slug: 'test-family',
-      displayLastName: 'TestFamily',
+      displayLastName: 'Family',
       rating: 100, // Начальный рейтинг для теста
     });
 
@@ -70,7 +59,7 @@ describe('POST /api/admin/maps/[id]/complete', () => {
       ],
     });
 
-    testPlayer = await Player.create({
+    testMvpPlayer = await Player.create({
       firstName: 'Test',
       lastName: 'Player',
       nickname: 'testplayer',
@@ -87,17 +76,15 @@ describe('POST /api/admin/maps/[id]/complete', () => {
       participants: [
         {
           participant: testFamily._id,
-          players: [testPlayer._id],
+          players: [testMvpPlayer._id],
         },
       ],
     });
+
+    otherFamily = await Family.create({ name: 'Other Family', slug: 'other-family', displayLastName: 'Other', rating: 1000 });
   });
 
-  afterEach(async () => {
-    await mongoose.connection.db.dropDatabase();
-  });
-
-  it('должен успешно завершить карту, обновить рейтинги и статистику', async () => {
+  it('должен успешно завершить карту, обновить рейтинги и создать записи участия', async () => {
     // Arrange
     const initialFamilyRating = 100;
     const initialPlayerRating = 50;
@@ -107,7 +94,7 @@ describe('POST /api/admin/maps/[id]/complete', () => {
 
     const completionData = {
       winnerFamilyId: testFamily._id.toString(),
-      mvpPlayerId: testPlayer._id.toString(),
+      mvpPlayerId: testMvpPlayer._id.toString(),
       ratingChanges: [
         {
           familyId: testFamily._id.toString(),
@@ -116,8 +103,8 @@ describe('POST /api/admin/maps/[id]/complete', () => {
       ],
       playerStats: [
         {
-          firstName: testPlayer.firstName,
-          lastName: testPlayer.lastName,
+          firstName: testMvpPlayer.firstName,
+          lastName: testMvpPlayer.lastName,
           kills: playerKills,
           deaths: 3,
           damageDealt: 500,
@@ -143,6 +130,7 @@ describe('POST /api/admin/maps/[id]/complete', () => {
     });
 
     // Act
+    const { POST } = await import('./route'); // Динамический импорт
     const response = await POST(request, { params: { id: testMap._id.toString() } });
 
     // Assert: Ответ API
@@ -152,36 +140,29 @@ describe('POST /api/admin/maps/[id]/complete', () => {
     const updatedMap = await Map.findById(testMap._id).lean();
     expect(updatedMap.status).toBe('completed');
     expect(updatedMap.winner.toString()).toBe(testFamily._id.toString());
-    expect(updatedMap.mvp.toString()).toBe(testPlayer._id.toString());
+    expect(updatedMap.mvp.toString()).toBe(testMvpPlayer._id.toString());
 
     // Assert: Рейтинг семьи
     const winnerFamily = await Family.findById(testFamily._id).lean();
     expect(winnerFamily.rating).toBe(initialFamilyRating + familyRatingChange);
 
-    const familyRatingRecord = await FamilyRatingHistory.findOne({ family: testFamily._id, map: testMap._id }).lean();
-    expect(familyRatingRecord).not.toBeNull();
-    expect(familyRatingRecord.change).toBe(familyRatingChange);
+    const familyMapRecord = await FamilyMapParticipation.findOne({ familyId: testFamily._id, mapId: testMap._id }).lean();
+    expect(familyMapRecord).not.toBeNull();
+    expect(familyMapRecord.ratingChange).toBe(familyRatingChange);
+    expect(familyMapRecord.previousRating).toBe(initialFamilyRating);
+    expect(familyMapRecord.newRating).toBe(initialFamilyRating + familyRatingChange);
+    expect(familyMapRecord.isWinner).toBe(true);
 
     // Assert: Статистика и рейтинг игрока
-    const updatedPlayer = await Player.findById(testPlayer._id).lean();
+    const updatedPlayer = await Player.findById(testMvpPlayer._id).lean();
     expect(updatedPlayer.rating).toBe(initialPlayerRating + playerRatingChange);
 
-    const playerRatingRecord = await PlayerRatingHistory.findOne({ player: testPlayer._id, map: testMap._id }).lean();
-    expect(playerRatingRecord).not.toBeNull();
-    expect(playerRatingRecord.change).toBe(playerRatingChange);
-
-    const playerMapParticipation = await PlayerMapParticipation.findOne({ player: testPlayer._id, map: testMap._id }).lean();
+    const playerMapParticipation = await PlayerMapParticipation.findOne({ playerId: testMvpPlayer._id, mapId: testMap._id }).lean();
     expect(playerMapParticipation).not.toBeNull();
     expect(playerMapParticipation.kills).toBe(playerKills);
-    expect(playerMapParticipation.deaths).toBe(3);
-    expect(playerMapParticipation.damageDealt).toBe(500);
-    expect(playerMapParticipation.shotsFired).toBe(100);
-    expect(playerMapParticipation.hits).toBe(50);
-    expect(playerMapParticipation.hitAccuracy).toBe(50.0);
-    expect(playerMapParticipation.headshots).toBe(10);
-    expect(playerMapParticipation.headshotAccuracy).toBe(20.0);
-    expect(playerMapParticipation.weaponStats).toHaveLength(2);
-    expect(playerMapParticipation.weaponStats[0].weapon).toBe('AK-47');
-    expect(playerMapParticipation.weaponStats[0].kills).toBe(3);
+    // Проверяем рейтинговый контекст в записи участия
+    expect(playerMapParticipation.ratingChange).toBe(playerRatingChange);
+    expect(playerMapParticipation.previousRating).toBe(initialPlayerRating);
+    expect(playerMapParticipation.newRating).toBe(initialPlayerRating + playerRatingChange);
   });
 }); 

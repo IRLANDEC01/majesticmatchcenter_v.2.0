@@ -2,12 +2,18 @@ import PlayerMapParticipation from '@/models/player/PlayerMapParticipation';
 
 class PlayerMapParticipationRepository {
   /**
-   * Создает новую запись об участии игрока в карте.
-   * @param {object} data - Данные для новой записи.
-   * @returns {Promise<Document>} Созданный документ.
+   * Создает или обновляет запись об участии игрока в карте.
+   * Если запись существует, она будет обновлена.
+   * @param {object} query - Условие для поиска (например, { playerId, mapId }).
+   * @param {object} data - Данные для создания или обновления.
+   * @returns {Promise<Document>} Созданный или обновленный документ.
    */
-  async create(data) {
-    return PlayerMapParticipation.create(data);
+  async upsert(query, data) {
+    return PlayerMapParticipation.findOneAndUpdate(query, data, {
+      new: true,
+      upsert: true,
+      setDefaultsOnInsert: true,
+    });
   }
 
   /**
@@ -24,4 +30,4 @@ class PlayerMapParticipationRepository {
   }
 }
 
-export const playerMapParticipationRepository = new PlayerMapParticipationRepository(); 
+export const playerMapParticipationRepo = new PlayerMapParticipationRepository(); 

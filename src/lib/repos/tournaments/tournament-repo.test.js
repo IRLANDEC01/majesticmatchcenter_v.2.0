@@ -75,10 +75,10 @@ describe('TournamentRepo', () => {
       player3 = await Player.create({ firstName: 'Player', lastName: 'Three', slug: 'player-three' });
 
       await PlayerMapParticipation.create([
-        { tournamentId: tournament._id, mapId: map1._id, playerId: player1._id, kills: 10, deaths: 5, damageDealt: 1000 },
-        { tournamentId: tournament._id, mapId: map2._id, playerId: player1._id, kills: 5, deaths: 5, damageDealt: 500 },
-        { tournamentId: tournament._id, mapId: map1._id, playerId: player2._id, kills: 20, deaths: 2, damageDealt: 2500 },
-        { tournamentId: tournament._id, mapId: map1._id, playerId: player3._id, kills: 0, deaths: 0, damageDealt: 100 },
+        { tournamentId: tournament._id, mapId: map1._id, playerId: player1._id, kills: 10, deaths: 5, damageDealt: 1000, previousRating: 1000, newRating: 1010 },
+        { tournamentId: tournament._id, mapId: map2._id, playerId: player1._id, kills: 5, deaths: 5, damageDealt: 500, previousRating: 1010, newRating: 1015 },
+        { tournamentId: tournament._id, mapId: map1._id, playerId: player2._id, kills: 20, deaths: 2, damageDealt: 2500, previousRating: 1000, newRating: 1020 },
+        { tournamentId: tournament._id, mapId: map1._id, playerId: player3._id, kills: 0, deaths: 0, damageDealt: 100, previousRating: 1000, newRating: 1000 },
       ]);
     });
 

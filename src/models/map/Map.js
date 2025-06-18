@@ -59,7 +59,6 @@ const mapSchema = new mongoose.Schema({
     required: true,
     enum: ['planned', 'active', 'completed'],
     default: 'planned',
-    index: true,
   },
   archivedAt: {
     type: Date,

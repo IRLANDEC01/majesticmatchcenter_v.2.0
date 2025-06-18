@@ -1,17 +1,10 @@
 import { z } from 'zod';
-import { mapRepo } from '@/lib/repos/maps/map-repo';
-import { tournamentRepo } from '@/lib/repos/tournaments/tournament-repo.js';
-import { mapTemplateRepo } from '@/lib/repos/map-templates/map-template-repo.js';
-import { familyRepo } from '@/lib/repos/families/family-repo.js';
-import { playerRepo } from '@/lib/repos/players/player-repo.js';
-import { ratingService } from '@/lib/domain/ratings/rating-service';
-import { statisticsService } from '@/lib/domain/statistics/statistics-service';
-import { AchievementService } from '@/lib/domain/achievements/achievement-service';
 import { ValidationError, NotFoundError, AppError } from '@/lib/errors';
 
-// Services are now injected, not instantiated here.
-const achievementService = new AchievementService(); // This one remains as it's not refactored yet.
+// Больше нет прямых импортов репозиториев и сервисов
+// Они будут передаваться через конструктор
 
+// Схемы валидации Zod, которые были случайно удалены
 const mapSchema = z.object({
   name: z.string().trim().min(1, 'Название карты обязательно.'),
   tournament: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID турнира.'),
@@ -161,14 +154,18 @@ class MapService {
 
     // 1. Обновляем рейтинги семей (если данные предоставлены)
     if (ratingChanges && ratingChanges.length > 0) {
-      const participantFamilyIds = map.participants.map(p => p.participant._id.toString());
-      await this.ratingService.updateFamilyRatings(mapId, ratingChanges, participantFamilyIds);
+      // Добавляем информацию о победителе в данные для FamilyRating
+      const ratingChangesWithWinner = ratingChanges.map(rc => ({
+        ...rc,
+        isWinner: rc.familyId === winnerFamilyId,
+      }));
+      await this.ratingService.updateFamilyRatings(map, ratingChangesWithWinner);
     }
 
     // 2. Обрабатываем статистику и рейтинг игроков (если данные предоставлены)
     if (playerStats && playerStats.length > 0) {
       const statsWithPlayerIds = await this.statisticsService.parseAndApplyMapStats(mapId, map.tournament, playerStats);
-      await this.ratingService.updatePlayerRatings(mapId, statsWithPlayerIds);
+      await this.ratingService.updatePlayerRatings(statsWithPlayerIds);
     }
     
     // 3. Обновляем саму карту
@@ -223,7 +220,11 @@ class MapService {
    * @param {string} mapId - ID карты для архивации.
    */
   async archiveMap(mapId) {
-    return this.repo.archive(mapId);
+    const result = await this.repo.archive(mapId);
+    if (!result) {
+      throw new NotFoundError(`Карта с ID ${mapId} для архивации не найдена.`);
+    }
+    return result;
   }
   
   /**
@@ -231,21 +232,13 @@ class MapService {
    * @param {string} mapId - ID карты для восстановления.
    */
   async unarchiveMap(mapId) {
-    return this.repo.unarchive(mapId);
+    const result = await this.repo.unarchive(mapId);
+    if (!result) {
+      throw new NotFoundError(`Карта с ID ${mapId} для восстановления не найдена.`);
+    }
+    return result;
   }
 }
 
-export const mapService = new MapService(
-  {
-    mapRepo,
-    tournamentRepo,
-    mapTemplateRepo,
-    familyRepo,
-    playerRepo,
-  },
-  {
-    ratingService,
-    statisticsService,
-    achievementService,
-  }
-); 
+// Удаляем старый экспорт синглтона
+export { MapService }; 

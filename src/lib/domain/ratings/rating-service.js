@@ -4,45 +4,33 @@
  * @typedef {import('@/models/map/Map').Map} Map
  */
 
-import { familyRepo } from '@/lib/repos/families/family-repo';
-import { playerRepo } from '@/lib/repos/players/player-repo';
-import { familyRatingHistoryRepository } from '@/lib/repos/ratings/family-rating-history-repo';
-import { playerRatingHistoryRepository } from '@/lib/repos/ratings/player-rating-history-repo';
 import { ValidationError } from '@/lib/errors';
-import { RATING_REASONS } from '@/lib/constants';
 
 /**
  * Сервис для управления рейтингами игроков и семей.
- * Инкапсулирует логику начисления и отката изменений рейтинга.
+ * Обеспечивает консистентность данных между основной моделью и историей.
  */
-export class RatingService {
-  constructor({
-    familyRepo,
-    playerRepo,
-    familyRatingHistoryRepo,
-    playerRatingHistoryRepo,
-  }) {
-    this.familyRepo = familyRepo;
-    this.playerRepo = playerRepo;
-    this.familyRatingHistoryRepo = familyRatingHistoryRepo;
-    this.playerRatingHistoryRepo = playerRatingHistoryRepo;
+class RatingService {
+  constructor(repos) {
+    this.familyRepo = repos.familyRepo;
+    this.playerRepo = repos.playerRepo;
+    this.playerMapParticipationRepo = repos.playerMapParticipationRepo;
+    this.familyMapParticipationRepo = repos.familyMapParticipationRepo;
+    this.rollbackMapRatings = this.rollbackMapRatings.bind(this);
   }
 
   /**
-   * Обновляет рейтинги игроков на основе их результатов (убийств).
-   * @param {string} mapId - ID завершаемой карты.
-   * @param {Array<object>} parsedStats - Обработанная статистика игроков из матча, ожидаются объекты с `playerId` и `kills`.
+   * Обновляет рейтинги игроков и дополняет их записи участия контекстом рейтинга.
+   * Предполагается, что `statistics-service` уже создал базовые записи участия.
+   * @param {Array<{playerId: string, kills: number}>} parsedStats - Статистика игроков.
    * @returns {Promise<void>}
    */
-  async updatePlayerRatings(mapId, parsedStats) {
+  async updatePlayerRatings(parsedStats) {
     const promises = parsedStats.map(async (stat) => {
-      const { playerId, kills } = stat;
-      // Рейтинг начисляется по количеству убийств
+      const { playerId, kills, mapId } = stat;
       const change = kills || 0;
 
-      if (change === 0) {
-        return;
-      }
+      if (change === 0) return;
 
       const player = await this.playerRepo.findById(playerId);
       if (!player) {
@@ -50,15 +38,16 @@ export class RatingService {
         return;
       }
 
+      const previousRating = player.rating;
+      const newRating = previousRating + change;
+
+      // Обновляем и рейтинг, и запись участия
       await Promise.all([
         this.playerRepo.incrementRating(playerId, change),
-        this.playerRatingHistoryRepo.create({
-          player: playerId,
-          map: mapId,
-          change,
-          reason: RATING_REASONS.MAP_COMPLETION,
-          previousRating: player.rating,
-          newRating: player.rating + change,
+        this.playerMapParticipationRepo.upsert({ playerId, mapId }, {
+          previousRating,
+          newRating,
+          ratingChange: change,
         }),
       ]);
     });
@@ -67,44 +56,42 @@ export class RatingService {
   }
 
   /**
-   * Обновляет рейтинги семей на основе ручного ввода администратора.
-   * @param {string} mapId - ID завершаемой карты.
-   * @param {Array<{familyId: string, change: number}>} ratingChanges - Массив объектов с ID семей и очками рейтинга.
-   * @param {Array<string>} participantFamilyIds - "Белый список" ID семей, которые действительно участвовали в карте.
+   * Обновляет рейтинги семей и создает записи их участия в карте.
+   * @param {object} map - Документ карты.
+   * @param {Array<{familyId: string, change: number, isWinner: boolean}>} ratingChanges - Изменения рейтинга.
    * @returns {Promise<void>}
    */
-  async updateFamilyRatings(mapId, ratingChanges, participantFamilyIds) {
-    const promises = ratingChanges.map(async ({ familyId, change }) => {
-      // Проверяем, что семья действительно является участником карты.
+  async updateFamilyRatings(map, ratingChanges) {
+    const participantFamilyIds = map.participants.map(p => p.participant._id.toString());
+    
+    const promises = ratingChanges.map(async ({ familyId, change, isWinner }) => {
       if (!participantFamilyIds.includes(familyId)) {
-        console.warn(`Попытка изменить рейтинг для семьи ${familyId}, которая не является участником карты ${mapId}. Пропускаем.`);
+        console.warn(`Попытка изменить рейтинг для семьи ${familyId}, которая не участник карты ${map._id}.`);
         return;
       }
-
       if (typeof change !== 'number' || change < 0) {
         throw new ValidationError(`Некорректное изменение рейтинга для семьи ${familyId}: ${change}`);
       }
 
-      if (change === 0) {
-        return;
-      }
+      if (change === 0) return;
 
       const family = await this.familyRepo.findById(familyId);
       if (!family) {
-        // Логируем предупреждение или пропускаем, так как выбрасывание ошибки может быть слишком строгим, если семья была удалена.
-        console.warn(`Семья с id ${familyId} не найдена. Пропускаем обновление рейтинга.`);
+        console.warn(`Семья с id ${familyId} не найдена. Пропускаем.`);
         return;
       }
 
+      const previousRating = family.rating;
+      const newRating = previousRating + change;
+
       await Promise.all([
         this.familyRepo.incrementRating(familyId, change),
-        this.familyRatingHistoryRepo.create({
-          familyId: familyId,
-          mapId: mapId,
-          change,
-          reason: RATING_REASONS.MAP_COMPLETION,
-          oldRating: family.rating,
-          newRating: family.rating + change,
+        this.familyMapParticipationRepo.upsert({ familyId, mapId: map._id }, {
+          tournamentId: map.tournament,
+          isWinner,
+          previousRating,
+          newRating,
+          ratingChange: change,
         }),
       ]);
     });
@@ -118,29 +105,20 @@ export class RatingService {
    * @returns {Promise<void>}
    */
   async rollbackMapRatings(mapId) {
-    const familyRollback = async () => {
-      const familyHistoryRecords = await this.familyRatingHistoryRepo.findAndDeleteByMapId(mapId);
-      const familyPromises = familyHistoryRecords.map(record =>
-        this.familyRepo.incrementRating(record.family, -record.change)
-      );
-      await Promise.all(familyPromises);
-    };
+    // Откат для семей
+    const familyParticipations = await this.familyMapParticipationRepo.findAndDeleteByMapId(mapId);
+    const familyPromises = familyParticipations.map(record =>
+      this.familyRepo.incrementRating(record.familyId, -record.ratingChange)
+    );
 
-    const playerRollback = async () => {
-      const playerHistoryRecords = await this.playerRatingHistoryRepo.findAndDeleteByMapId(mapId);
-      const playerPromises = playerHistoryRecords.map(record =>
-        this.playerRepo.incrementRating(record.player, -record.change)
-      );
-      await Promise.all(playerPromises);
-    };
+    // Откат для игроков
+    const playerParticipations = await this.playerMapParticipationRepo.findAndDeleteByMapId(mapId);
+    const playerPromises = playerParticipations.map(record =>
+      this.playerRepo.incrementRating(record.playerId, -record.ratingChange)
+    );
 
-    await Promise.all([familyRollback(), playerRollback()]);
+    await Promise.all([...familyPromises, ...playerPromises]);
   }
 }
 
-export const ratingService = new RatingService({
-  familyRepo,
-  playerRepo,
-  familyRatingHistoryRepo: familyRatingHistoryRepository,
-  playerRatingHistoryRepo: playerRatingHistoryRepository,
-}); 
+export { RatingService }; 
