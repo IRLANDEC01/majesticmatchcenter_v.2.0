@@ -13,6 +13,11 @@ class PlayerService {
    * @returns {Promise<object>}
    */
   async createPlayer(playerData) {
+    const existingPlayer = await playerRepo.findByName(playerData.firstName, playerData.lastName);
+    if (existingPlayer) {
+      throw new DuplicateError('Игрок с таким именем и фамилией уже существует.');
+    }
+
     const newPlayer = await playerRepo.create(playerData);
     if (newPlayer) {
       await PlayerStats.create({ playerId: newPlayer._id });

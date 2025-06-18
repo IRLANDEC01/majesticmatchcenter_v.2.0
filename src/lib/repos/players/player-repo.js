@@ -35,8 +35,17 @@ class PlayerRepository {
    * @returns {Promise<object|null>}
    */
   async findBySlug(slug) {
-    const player = await Player.findOne({ slug }).lean();
-    return player;
+    return Player.findOne({ slug, archivedAt: null }).lean();
+  }
+
+  /**
+   * Находит игрока по имени и фамилии.
+   * @param {string} firstName - Имя игрока.
+   * @param {string} lastName - Фамилия игрока.
+   * @returns {Promise<object|null>}
+   */
+  async findByName(firstName, lastName) {
+    return Player.findOne({ firstName, lastName, archivedAt: null }).lean();
   }
 
   /**

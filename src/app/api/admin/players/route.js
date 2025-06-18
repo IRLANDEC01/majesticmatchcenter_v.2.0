@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { playerService } from '@/lib/domain/players/player-service';
 import { connectToDatabase } from '@/lib/db';
 import { z } from 'zod';
+import { DuplicateError } from '@/lib/errors';
 
 // Zod-схема для создания игрока, более строгая чем модель Mongoose
 const createPlayerSchema = z.object({
@@ -45,10 +46,11 @@ export async function POST(request) {
     const newPlayer = await playerService.createPlayer(validationResult.data);
     return NextResponse.json(newPlayer, { status: 201 });
   } catch (error) {
-    if (error.code === 11000) {
-      // Ошибка дублирующегося ключа (firstName + lastName)
-      return NextResponse.json({ message: 'Игрок с таким именем и фамилией уже существует' }, { status: 409 });
+    if (error instanceof DuplicateError) {
+      return NextResponse.json({ message: error.message }, { status: 409 });
     }
+    
+    // Логируем все остальные, непредвиденные ошибки
     console.error('Failed to create player:', error);
     return NextResponse.json({ message: 'Ошибка сервера при создании игрока' }, { status: 500 });
   }
