@@ -518,7 +518,7 @@ export function UserForm() {
 - **Zod**: https://zod.dev/
 - **React Query**: https://tanstack.com/query/latest
 
-# План и архитектура фронтенда и UI (2024)
+# План и архитектура фронтенда и UI (2025)
 
 ---
 
