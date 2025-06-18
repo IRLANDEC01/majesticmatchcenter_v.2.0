@@ -16,54 +16,69 @@
 *   **Почему?** Успешное прохождение этих тестов дает максимальную уверенность в том, что фича работает как единое целое. Они ловят ошибки на всех уровнях: от неправильной валидации до багов в логике базы данных.
 *   **Где?** Располагаются рядом с файлом маршрута: `src/app/api/.../route.test.js`.
 
-#### **Канонический пример (шаблон для новых тестов):**
+#### **Канонический пример (обновленный стандарт):**
+
+Наш новый стандарт использует централизованный хелпер `src/lib/test-helpers.js` для управления подключением к БД и создания консистентных тестовых данных. Это делает тесты более чистыми, читаемыми и надежными.
 
 ```javascript
-// 1. Импортируем обработчики, модель и утилиты для БД
-import { POST, GET } from './route';
-import MyModel from '@/models/MyModel';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
+// 1. Импортируем обработчики, модели через index и хелперы
+import { POST, GET } from './route.js';
+import models from '@/models/index.js';
+import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
+
+const { MyModel } = models;
 
 describe('/api/path/to/endpoint', () => {
+  let testData; // Переменная для хранения созданных данных
 
-  // 2. Управляем подключением к БД: одно на весь файл
-  beforeAll(async () => {
-    await connectToDatabase();
-    // Гарантирует, что уникальные индексы будут созданы перед тестами
-    await MyModel.init(); 
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
-
-  // 3. Очищаем данные ПЕРЕД КАЖДЫМ тестом для полной изоляции
+  // 2. Используем хелперы для управления БД
+  beforeAll(dbConnect);
+  afterAll(dbDisconnect);
+  
+  // 3. Перед каждым тестом очищаем БД и наполняем ее свежим набором данных
   beforeEach(async () => {
-    await MyModel.deleteMany({});
+    await dbClear();
+    testData = await populateDb(); // Сохраняем созданные данные
   });
 
   // 4. Группируем тесты по HTTP-методам
   describe('POST', () => {
     it('должен успешно создавать сущность и возвращать 201', async () => {
-      // Arrange: готовим данные и создаем нативный объект запроса
-      const requestData = { name: 'Test' };
+      // Arrange: готовим данные для новой сущности
+      const requestData = { name: 'New Test Item' };
       const request = new Request('http://localhost/api/...', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData),
       });
 
-      // Act: вызываем обработчик маршрута напрямую
+      // Act: вызываем обработчик
       const response = await POST(request);
 
-      // Assert: проверяем статус и тело ответа
+      // Assert: проверяем ответ
       expect(response.status).toBe(201);
       const body = await response.json();
-      expect(body.name).toBe('Test');
+      expect(body.name).toBe(requestData.name);
       
-      // (Опционально) Assert: проверяем состояние базы данных
+      // Assert: проверяем состояние БД
       const dbItem = await MyModel.findById(body._id);
       expect(dbItem).not.toBeNull();
+    });
+  });
+  
+  describe('GET', () => {
+    it('должен возвращать сущность, созданную в populateDb', async () => {
+        // Arrange: Используем данные, созданные в beforeEach
+        const itemToFind = testData.myModels[0];
+        const request = new Request(`http://localhost/api/.../${itemToFind._id}`);
+        
+        // Act
+        const response = await GET(request, { params: { id: itemToFind._id.toString() } });
+        
+        // Assert
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.name).toBe(itemToFind.name);
     });
   });
 });
@@ -133,4 +148,21 @@ describe('/api/path/to/endpoint', () => {
     *   **Решение:** Внедрение централизованной системы ошибок.
         1.  **Доменный сервис** выбрасывает семантическую ошибку (например, `throw new DuplicateError()`).
         2.  **API-маршрут** оборачивает вызов в `try/catch` и просто передает любую ошибку в единый обработчик `handleApiError(error)`.
-        3.  **Единый обработчик** `handleApiError` преобразует семантическую ошибку в правильный HTTP-ответ (например, `DuplicateError` -> `409 Conflict`). Это делает код чистым, а тесты простыми: нужно лишь проверить, что API возвращает ожидаемый статус-код, не вдаваясь в детали реализации. 
+        3.  **Единый обработчик** `handleApiError` преобразует семантическую ошибку в правильный HTTP-ответ (например, `DuplicateError` -> `409 Conflict`). Это делает код чистым, а тесты простыми: нужно лишь проверить, что API возвращает ожидаемый статус-код, не вдаваясь в детали реализации.
+
+10. **❌ Молчаливое "пожирание" полей валидатором Zod**
+    *   **Проблема:** При передаче данных из API-маршрута в сервисный слой, который использует Zod для валидации, часть полей объекта "исчезала". Например, в `payload` для завершения карты присутствовал полный массив `playerStats`, но до сервиса статистики доходили только `playerId`, а все остальные поля (`kills`, `deaths` и т.д.) терялись.
+    *   **Почему это плохо:** Это приводит к трудноуловимым ошибкам `ValidationError` на более глубоких слоях (например, при сохранении в Mongoose), так как обязательные поля оказываются `undefined`. Отладка становится крайне сложной, потому что кажется, что данные корректно отправляются из теста, но сервис их по какой-то причине не получает. Коренная причина в том, что `safeParse(data)` по умолчанию возвращает новый объект `validationResult.data`, содержащий **только те поля, которые явно описаны в схеме Zod**. Все остальные поля молча отбрасываются.
+    *   **Решение:** Если схема Zod описывает только часть полей объекта, а остальные нужно пропустить "как есть", необходимо явно указать это с помощью метода `.passthrough()` на уровне объекта. Это говорит Zod, что нужно проверить описанные поля, а все остальные — включить в результирующий объект `validationResult.data` без изменений.
+    
+    ```javascript
+    // ПРИМЕР
+    const mySchema = z.object({
+      id: z.string(),
+      // Мы не описываем name, description и т.д.
+    }).passthrough(); // <-- Ключевое решение
+    
+    const result = mySchema.safeParse({ id: '123', name: 'Test', description: '...' });
+    // result.data теперь будет { id: '123', name: 'Test', description: '...' }
+    // БЕЗ .passthrough() результат был бы просто { id: '123' }
+    ``` 

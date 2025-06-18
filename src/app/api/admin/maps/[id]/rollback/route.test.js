@@ -1,89 +1,49 @@
-import mongoose from 'mongoose';
 import { POST } from './route';
-import { connectToDatabase, disconnectFromDatabase, clearDatabase } from '@/lib/db';
-import Map from '@/models/map/Map';
-import Tournament from '@/models/tournament/Tournament';
-import Family from '@/models/family/Family';
-import Player from '@/models/player/Player';
-import TournamentTemplate from '@/models/tournament/TournamentTemplate';
-import MapTemplate from '@/models/map/MapTemplate';
+import { dbConnect, dbDisconnect, dbClear, populateDb, GUCCI_STATS } from '@/lib/test-helpers';
 import { mapService } from '@/lib/domain/maps/map-service';
+import models from '@/models/index.js';
+
+const { Map } = models;
 
 describe('POST /api/admin/maps/[id]/rollback', () => {
-  let testTournament;
-  let testMap;
-  let testFamily;
-  let testPlayer;
+  let testData;
 
-  beforeAll(async () => {
-    await connectToDatabase();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
+  beforeAll(dbConnect);
+  afterAll(dbDisconnect);
 
   beforeEach(async () => {
-    await clearDatabase();
+    await dbClear();
+    testData = await populateDb();
 
-    const testTournamentTemplate = await TournamentTemplate.create({
-      name: 'Test Template',
-      slug: 'test-template',
-      mapTemplates: [new mongoose.Types.ObjectId()],
-    });
+    // Сначала "завершаем" карту, чтобы ее можно было откатить
+    const mapToComplete = testData.map;
+    const winningFamily = testData.families[0];
+    const mvpPlayer = testData.players[0];
 
-    testFamily = await Family.create({
-      name: 'Test Family',
-      slug: 'test-family',
-      displayLastName: 'TestFamily',
-    });
+    const playerStatsPayload = testData.players.map((player, index) => ({
+      playerId: player._id.toString(),
+      familyId: player.currentFamily.toString(),
+      ...GUCCI_STATS[index % GUCCI_STATS.length],
+    }));
 
-    testTournament = await Tournament.create({
-      name: 'Test Tournament',
-      slug: 'test-tournament',
-      template: testTournamentTemplate._id,
-      tournamentType: 'family',
-      startDate: new Date(),
-      participants: [{
-        family: testFamily._id,
-        participantType: 'family',
-      }],
-    });
-    
-    const testMapTemplate = await MapTemplate.create({
-      name: 'Test Map Template',
-      slug: 'test-map-template',
+    await mapService.completeMap(mapToComplete._id.toString(), {
+      winnerFamilyId: winningFamily._id.toString(),
+      mvpPlayerId: mvpPlayer._id.toString(),
+      familyRatingChange: 100,
+      playerStats: playerStatsPayload,
     });
 
-    testPlayer = await Player.create({
-      firstName: 'Test',
-      lastName: 'Player',
-      nickname: 'testplayer',
-    });
-
-    testMap = await Map.create({
-      name: 'Test Map',
-      status: 'active',
-      tournament: testTournament._id,
-      template: testMapTemplate._id,
-      startDateTime: new Date(),
-    });
-
-    // Complete the map first to be able to roll it back
-    await mapService.completeMap(testMap._id, {
-      winnerFamilyId: testFamily._id.toString(),
-      mvpPlayerId: testPlayer._id.toString(),
-      ratingChanges: [],
-      playerStats: [],
-    });
+    // Обновляем testData.map, чтобы он содержал завершенную карту
+    testData.map = await Map.findById(mapToComplete._id).lean();
   });
 
   it('должен откатить завершение карты и вернуть 200', async () => {
-    const req = new Request(`http://localhost/api/admin/maps/${testMap._id}/rollback`, {
+    const mapToRollback = testData.map;
+    const req = new Request(`http://localhost/api/admin/maps/${mapToRollback._id}/rollback`, {
       method: 'POST',
     });
 
-    const response = await POST(req, { params: { id: testMap._id.toString() } });
+    const response = await POST(req, { params: { id: mapToRollback._id.toString() } });
 
     expect(response.status).toBe(200);
 
@@ -92,19 +52,20 @@ describe('POST /api/admin/maps/[id]/rollback', () => {
     expect(body.winner).toBeNull();
     expect(body.mvp).toBeNull();
 
-    const dbMap = await Map.findById(testMap._id).lean();
+    const dbMap = await Map.findById(mapToRollback._id).lean();
     expect(dbMap.status).toBe('active');
   });
 
   it('должен вернуть 409, если карта не в статусе "completed"', async () => {
     // First, roll back the map to 'active'
-    await mapService.rollbackMapCompletion(testMap._id);
+    const mapToRollback = testData.map;
+    await mapService.rollbackMapCompletion(mapToRollback._id);
 
-    const req = new Request(`http://localhost/api/admin/maps/${testMap._id}/rollback`, {
+    const req = new Request(`http://localhost/api/admin/maps/${mapToRollback._id}/rollback`, {
       method: 'POST',
     });
 
-    const response = await POST(req, { params: { id: testMap._id.toString() } });
+    const response = await POST(req, { params: { id: mapToRollback._id.toString() } });
     
     expect(response.status).toBe(409);
     const body = await response.json();

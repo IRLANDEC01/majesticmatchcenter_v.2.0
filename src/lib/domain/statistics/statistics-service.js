@@ -3,7 +3,8 @@
  */
 import { playerRepo } from '@/lib/repos/players/player-repo';
 import { playerStatsRepository } from '@/lib/repos/statistics/player-stats-repo';
-import { playerMapParticipationRepository } from '@/lib/repos/statistics/player-map-participation-repo';
+import { playerMapParticipationRepo } from '@/lib/repos/statistics/player-map-participation-repo';
+import { RATING_REASONS } from '@/lib/constants';
 
 export class StatisticsService {
   constructor({
@@ -14,6 +15,64 @@ export class StatisticsService {
     this.playerRepo = playerRepo;
     this.playerStatsRepo = playerStatsRepo;
     this.playerMapParticipationRepo = playerMapParticipationRepo;
+  }
+
+  /**
+   * Записывает статистику всех игроков за одну карту.
+   * @param {string} mapId - ID карты.
+   * @param {string} tournamentId - ID турнира.
+   * @param {Array<object>} playerStats - Массив объектов со статистикой каждого игрока.
+   */
+  async recordPlayerMapStats(mapId, tournamentId, playerStats) {
+    if (!playerStats || playerStats.length === 0) {
+      return;
+    }
+
+    const participationDocs = [];
+    const ratingUpdatePromises = [];
+
+    for (const stats of playerStats) {
+      // Пока что логика начисления рейтинга простая: 1 убийство = 1 очко.
+      const ratingChange = stats.kills - stats.deaths;
+
+      // Создаем документ вручную, чтобы исключить проблемы со spread (...)
+      const doc = {
+        // Связи
+        playerId: stats.playerId,
+        familyId: stats.familyId,
+        mapId,
+        tournamentId,
+        
+        // Рейтинг
+        ratingChange,
+        reason: RATING_REASONS.MAP_COMPLETION,
+        
+        // Статистика
+        kills: stats.kills,
+        deaths: stats.deaths,
+        damageDealt: stats.damageDealt,
+        shotsFired: stats.shotsFired,
+        hits: stats.hits,
+        hitAccuracy: stats.hitAccuracy,
+        headshots: stats.headshots,
+        headshotAccuracy: stats.headshotAccuracy,
+        weaponStats: stats.weaponStats,
+      };
+      participationDocs.push(doc);
+
+      // Сразу готовим промис для обновления основного рейтинга игрока
+      if (ratingChange !== 0) {
+        ratingUpdatePromises.push(
+          this.playerRepo.incrementRating(stats.playerId, ratingChange)
+        );
+      }
+    }
+
+    // Выполняем все операции параллельно
+    await Promise.all([
+      this.playerMapParticipationRepo.createMany(participationDocs),
+      ...ratingUpdatePromises,
+    ]);
   }
 
   /**
@@ -51,6 +110,8 @@ export class StatisticsService {
    * @returns {Promise<Array<object>>} Промис, который разрешается в массив `rawStats` с добавленным `playerId`.
    */
   async parseAndApplyMapStats(mapId, tournamentId, rawStats) {
+    // DEPRECATED
+    console.warn('DEPRECATED: parseAndApplyMapStats is called');
     const enrichedStats = [];
     const updatePromises = [];
 
@@ -101,16 +162,24 @@ export class StatisticsService {
    * @returns {Promise<void>}
    */
   async rollbackMapStats(mapId) {
-    const participationRecords = await this.playerMapParticipationRepo.findAndDeleteByMapId(mapId);
-
+    // 1. Найти все записи, которые нужно откатить
+    const participationRecords = await this.playerMapParticipationRepo.findByMapId(mapId);
+    if (!participationRecords || participationRecords.length === 0) {
+      return; // Нечего откатывать
+    }
+    
+    // 2. Сформировать промисы для отката рейтинга в основной модели Player
     const rollbackPromises = participationRecords.map(record => {
-      const { weaponStats, ...overallChange } = record;
-      overallChange.mapsPlayed = 1;
-
-      return this.playerStatsRepo.applyOverallStatsChange(record.playerId, overallChange, -1);
+      // Важно: инвертируем изменение. Если было +15, станет -15.
+      const ratingChange = -record.ratingChange;
+      return this.playerRepo.incrementRating(record.playerId, ratingChange);
     });
-
+    
+    // 3. Дождаться отката рейтингов
     await Promise.all(rollbackPromises);
+
+    // 4. Удалить сами записи об участии
+    await this.playerMapParticipationRepo.deleteByMapId(mapId);
   }
 
   /**
@@ -130,5 +199,5 @@ export class StatisticsService {
 export const statisticsService = new StatisticsService({
   playerRepo,
   playerStatsRepo: playerStatsRepository,
-  playerMapParticipationRepo: playerMapParticipationRepository,
+  playerMapParticipationRepo,
 }); 

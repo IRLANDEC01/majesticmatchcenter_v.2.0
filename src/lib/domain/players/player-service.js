@@ -1,3 +1,4 @@
+import { DuplicateError } from '@/lib/errors.js';
 import { playerRepo } from '@/lib/repos/players/player-repo.js';
 import PlayerStats from '@/models/player/PlayerStats.js';
 
@@ -54,8 +55,23 @@ class PlayerService {
    * @returns {Promise<object|null>}
    */
   async updatePlayer(id, playerData) {
-    // Здесь может быть логика, запрещающая изменять определенные поля,
-    // например, имя или фамилию после создания.
+    const { firstName, lastName } = playerData;
+
+    // Проверяем на дубликат только если передано имя или фамилия
+    if (firstName && lastName) {
+      const existingPlayer = await playerRepo.findAll({
+        filter: {
+          _id: { $ne: id },
+          firstName,
+          lastName,
+        },
+      });
+
+      if (existingPlayer.length > 0) {
+        throw new DuplicateError('Игрок с таким именем и фамилией уже существует.');
+      }
+    }
+
     return playerRepo.update(id, playerData);
   }
 

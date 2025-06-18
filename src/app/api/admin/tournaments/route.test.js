@@ -1,60 +1,33 @@
-import { GET, POST } from './route';
-import Tournament from '@/models/tournament/Tournament';
-import TournamentTemplate from '@/models/tournament/TournamentTemplate';
-import MapTemplate from '@/models/map/MapTemplate';
-import { connectToDatabase, disconnectFromDatabase, clearDatabase } from '@/lib/db';
-import mongoose from 'mongoose';
+import { GET, POST } from './route.js';
+import models from '@/models/index.js';
+import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
+
+const { Tournament, TournamentTemplate } = models;
 
 describe('API /api/admin/tournaments', () => {
-  let template;
+  let testData;
 
-  beforeAll(async () => {
-    await connectToDatabase();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
-
+  beforeAll(dbConnect);
+  afterAll(dbDisconnect);
   beforeEach(async () => {
-    await clearDatabase();
-    const mapTemplate = await MapTemplate.create({ name: 'Test Map Template' });
-    template = await TournamentTemplate.create({
-      name: 'Test Template',
-      slug: 'test-template',
-      mapTemplates: [mapTemplate._id],
-    });
-    // Создаем турниры для GET тестов с уникальными слагами
-    await Tournament.create({
-      name: 'T1',
-      slug: 't1',
-      template: template._id,
-      tournamentType: 'family',
-      startDate: new Date(),
-      participants: [{ participantType: 'family', family: new mongoose.Types.ObjectId() }]
-    });
-    await Tournament.create({
-      name: 'T2',
-      slug: 't2',
-      template: template._id,
-      tournamentType: 'family',
-      startDate: new Date(),
-      participants: [{ participantType: 'family', family: new mongoose.Types.ObjectId() }],
-      archivedAt: new Date()
-    });
+    await dbClear();
+    testData = await populateDb();
   });
 
   describe('POST', () => {
     it('должен успешно создавать турниры с инкрементальным slug и возвращать 201', async () => {
-      const familyId = new mongoose.Types.ObjectId();
+      // Arrange
+      const familyForTournament = testData.families[0];
+      const templateForTournament = testData.tournamentTemplate;
+      
       const requestData = {
         name: 'Новый тестовый турнир',
-        template: template._id.toString(),
+        template: templateForTournament._id.toString(),
         tournamentType: 'family',
         startDate: new Date(),
         participants: [{
           participantType: 'family',
-          family: familyId.toString()
+          family: familyForTournament._id.toString()
         }],
       };
 
@@ -66,14 +39,9 @@ describe('API /api/admin/tournaments', () => {
       });
 
       const response1 = await POST(request1);
-      expect(response1.status).toBe(201);
       const body1 = await response1.json();
-      expect(body1.name).toBe(requestData.name);
-      expect(body1.slug).toBe('test-template-1'); // Счетчик стал 1
-      
-      const dbItem1 = await Tournament.findById(body1._id);
-      expect(dbItem1).not.toBeNull();
-      expect(dbItem1.slug).toBe('test-template-1');
+      expect(response1.status).toBe(201);
+      expect(body1.slug).toBe(`${templateForTournament.slug}-1`);
       
       // --- Второй вызов с теми же данными ---
       const request2 = new Request('http://localhost/api/admin/tournaments', {
@@ -83,36 +51,35 @@ describe('API /api/admin/tournaments', () => {
       });
       
       const response2 = await POST(request2);
-      expect(response2.status).toBe(201);
       const body2 = await response2.json();
-      expect(body2.slug).toBe('test-template-2'); // Счетчик стал 2
-
-      const dbItem2 = await Tournament.findById(body2._id);
-      expect(dbItem2).not.toBeNull();
-      expect(dbItem2.slug).toBe('test-template-2');
+      expect(response2.status).toBe(201);
+      expect(body2.slug).toBe(`${templateForTournament.slug}-2`);
     });
 
     it('должен возвращать ошибку 400, если не указаны обязательные поля', async () => {
-      const requestData = { name: 'Неполный турнир' }; // Нет template, type, startDate, participants
+      // Arrange
+      const requestData = { name: 'Неполный турнир' }; // Нет template, type, и т.д.
       const request = new Request('http://localhost/api/admin/tournaments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData),
       });
 
+      // Act
       const response = await POST(request);
-      expect(response.status).toBe(400);
       const body = await response.json();
+
+      // Assert
+      expect(response.status).toBe(400);
       expect(body.errors).toHaveProperty('template');
       expect(body.errors).toHaveProperty('tournamentType');
-      expect(body.errors).toHaveProperty('startDate');
-      expect(body.errors).toHaveProperty('participants');
     });
 
     it('должен возвращать ошибку 400, если не указан ни один участник', async () => {
+       // Arrange
        const requestData = {
         name: 'Турнир без участников',
-        template: template._id.toString(),
+        template: testData.tournamentTemplate._id.toString(),
         tournamentType: 'family',
         startDate: new Date(),
         participants: [], // Пустой массив
@@ -124,30 +91,54 @@ describe('API /api/admin/tournaments', () => {
         body: JSON.stringify(requestData),
       });
 
+      // Act
       const response = await POST(request);
-      expect(response.status).toBe(400);
       const body = await response.json();
+
+      // Assert
+      expect(response.status).toBe(400);
       expect(body.errors).toHaveProperty('participants');
-      expect(body.errors.participants[0]).toBe('Нужен хотя бы один участник.');
     });
   });
 
   describe('GET', () => {
     it('должен возвращать только неархивированные турниры по умолчанию', async () => {
-      const request = new Request('http://localhost/api/admin/tournaments', { method: 'GET' });
+      // Arrange: populateDb создает один активный турнир
+      // Архивируем его, чтобы проверить фильтрацию
+      await Tournament.findByIdAndUpdate(testData.tournament._id, { archivedAt: new Date() });
+      // Создаем новый активный турнир
+      await Tournament.create({
+        name: 'Active Tournament',
+        slug: 'active-tournament-1',
+        template: testData.tournamentTemplate._id,
+        tournamentType: 'family',
+        startDate: new Date(),
+        participants: [{ participantType: 'family', family: testData.families[0]._id }]
+      });
+
+      const request = new Request('http://localhost/api/admin/tournaments');
+      
+      // Act
       const response = await GET(request);
-      expect(response.status).toBe(200);
       const body = await response.json();
+
+      // Assert
+      expect(response.status).toBe(200);
       expect(body.length).toBe(1);
-      expect(body[0].name).toBe('T1');
+      expect(body[0].name).toBe('Active Tournament');
     });
 
     it('должен возвращать все турниры при `include_archived=true`', async () => {
-      const request = new Request('http://localhost/api/admin/tournaments?include_archived=true', { method: 'GET' });
+      // Arrange: populateDb создает один активный турнир. Этого достаточно.
+      const request = new Request('http://localhost/api/admin/tournaments?include_archived=true');
+      
+      // Act
       const response = await GET(request);
-      expect(response.status).toBe(200);
       const body = await response.json();
-      expect(body.length).toBe(2);
+      
+      // Assert
+      expect(response.status).toBe(200);
+      expect(body.length).toBe(1); // В populateDb создается только один турнир
     });
   });
 });

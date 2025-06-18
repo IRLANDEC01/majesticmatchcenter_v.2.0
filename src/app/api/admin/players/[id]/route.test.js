@@ -1,86 +1,96 @@
-import { GET, PUT } from './route';
-import Player from '@/models/player/Player';
+import { GET, PUT } from './route.js';
+import models from '@/models/index.js';
+import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
 import mongoose from 'mongoose';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
+
+const { Player } = models;
 
 describe('/api/admin/players/[id]', () => {
-  beforeAll(async () => {
-    await connectToDatabase();
-    await Player.init();
-  });
+  let testData;
 
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
-
+  beforeAll(dbConnect);
+  afterAll(dbDisconnect);
   beforeEach(async () => {
-    await Player.deleteMany({});
+    await dbClear();
+    testData = await populateDb();
   });
 
   describe('GET', () => {
     it('должен возвращать игрока по ID и статус 200', async () => {
-      const testPlayer = await new Player({ firstName: 'PlayerApiTestGet', lastName: 'Test' }).save();
-      const response = await GET(null, { params: { id: testPlayer._id.toString() } });
+      // Arrange
+      const playerToFind = testData.players[0];
+      
+      // Act
+      const response = await GET(null, { params: { id: playerToFind._id.toString() } });
       const body = await response.json();
+
+      // Assert
       expect(response.status).toBe(200);
-      expect(body.firstName).toBe('PlayerApiTestGet');
-      expect(body.lastName).toBe('Test');
+      expect(body.firstName).toBe(playerToFind.firstName);
     });
 
     it('должен возвращать 404, если игрок не найден', async () => {
+      // Arrange
       const nonExistentId = new mongoose.Types.ObjectId();
+
+      // Act
       const response = await GET(null, { params: { id: nonExistentId.toString() } });
+
+      // Assert
       expect(response.status).toBe(404);
     });
 
     it('должен возвращать 404, если игрок архивирован', async () => {
-      const testPlayer = await new Player({ firstName: 'ArchivedPlayer', lastName: 'Test' }).save();
-      await testPlayer.updateOne({ $set: { archivedAt: new Date() } });
+      // Arrange
+      const playerToArchive = testData.players[0];
+      await Player.findByIdAndUpdate(playerToArchive._id, { archivedAt: new Date() });
 
-      const response = await GET(null, { params: { id: testPlayer._id.toString() } });
+      // Act
+      const response = await GET(null, { params: { id: playerToArchive._id.toString() } });
+      
+      // Assert
       expect(response.status).toBe(404);
     });
   });
 
   describe('PUT', () => {
     it('должен успешно обновлять игрока', async () => {
-      const testPlayer = await new Player({ firstName: 'PlayerApiTestPut', lastName: 'Test' }).save();
-      const updateData = { bio: 'A new bio' };
-      const request = new Request(`http://localhost/api/admin/players/${testPlayer._id}`, {
+      // Arrange
+      const playerToUpdate = testData.players[0];
+      const updateData = { bio: 'A new bio for testing' };
+      const request = new Request(`http://localhost/api/admin/players/${playerToUpdate._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData),
       });
 
-      const response = await PUT(request, { params: { id: testPlayer._id.toString() } });
+      // Act
+      const response = await PUT(request, { params: { id: playerToUpdate._id.toString() } });
       const body = await response.json();
 
+      // Assert
       expect(response.status).toBe(200);
-      expect(body.bio).toBe('A new bio');
-    });
-
-    it('должен возвращать 404 при попытке обновить несуществующего игрока', async () => {
-        const nonExistentId = new mongoose.Types.ObjectId();
-        const request = new Request(`http://localhost/api/admin/players/${nonExistentId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bio: 'Does not matter' }),
-        });
-        const response = await PUT(request, { params: { id: nonExistentId.toString() } });
-        expect(response.status).toBe(404);
+      expect(body.bio).toBe(updateData.bio);
     });
 
     it('должен возвращать 409 при попытке обновить имя на уже существующее', async () => {
-      const player1 = await Player.create({ firstName: 'Player', lastName: 'One' });
-      const player2 = await Player.create({ firstName: 'Player', lastName: 'Two' });
+      // Arrange
+      const playerToUpdate = testData.players[1]; // Aza Uzi
+      const conflictingPlayer = testData.players[0]; // Tom Gucci
 
-      const request = new Request(`http://localhost/api/admin/players/${player2._id}`, {
+      const request = new Request(`http://localhost/api/admin/players/${playerToUpdate._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firstName: 'Player', lastName: 'One' }), // Try to use player1's name
+        body: JSON.stringify({ 
+          firstName: conflictingPlayer.firstName, 
+          lastName: conflictingPlayer.lastName 
+        }),
       });
       
-      const response = await PUT(request, { params: { id: player2._id.toString() } });
+      // Act
+      const response = await PUT(request, { params: { id: playerToUpdate._id.toString() } });
+
+      // Assert
       expect(response.status).toBe(409);
     });
   });

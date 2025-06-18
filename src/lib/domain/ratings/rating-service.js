@@ -6,7 +6,7 @@
 
 import { familyRepo } from '@/lib/repos/families/family-repo';
 import { playerRepo } from '@/lib/repos/players/player-repo';
-import { familyRatingHistoryRepository } from '@/lib/repos/ratings/family-rating-history-repo';
+import { familyMapParticipationRepo } from '@/lib/repos/ratings/family-map-participation-repo';
 import { playerRatingHistoryRepository } from '@/lib/repos/ratings/player-rating-history-repo';
 import { ValidationError } from '@/lib/errors';
 import { RATING_REASONS } from '@/lib/constants';
@@ -19,13 +19,40 @@ export class RatingService {
   constructor({
     familyRepo,
     playerRepo,
-    familyRatingHistoryRepo,
+    familyMapParticipationRepo,
     playerRatingHistoryRepo,
   }) {
     this.familyRepo = familyRepo;
     this.playerRepo = playerRepo;
-    this.familyRatingHistoryRepo = familyRatingHistoryRepo;
+    this.familyMapParticipationRepo = familyMapParticipationRepo;
     this.playerRatingHistoryRepo = playerRatingHistoryRepo;
+  }
+
+  /**
+   * Записывает результат участия семьи в карте.
+   * Атомарно обновляет рейтинг семьи и создает запись об участии.
+   * @param {string} mapId - ID карты.
+   * @param {string} familyId - ID семьи-победителя.
+   * @param {number} ratingChange - Изменение рейтинга.
+   */
+  async recordFamilyMapResult(mapId, familyId, ratingChange) {
+    if (ratingChange < 0) {
+      throw new ValidationError('Изменение рейтинга не может быть отрицательным.');
+    }
+
+    if (ratingChange === 0) {
+      return; // Ничего не делаем, если изменение рейтинга равно нулю.
+    }
+
+    // Эта операция должна быть атомарной. В идеале - транзакция.
+    // Пока что для простоты делаем последовательно.
+    await this.familyRepo.incrementRating(familyId, ratingChange);
+    await this.familyMapParticipationRepo.create({
+      mapId,
+      familyId,
+      ratingChange,
+      reason: RATING_REASONS.MAP_COMPLETION,
+    });
   }
 
   /**
@@ -74,42 +101,9 @@ export class RatingService {
    * @returns {Promise<void>}
    */
   async updateFamilyRatings(mapId, ratingChanges, participantFamilyIds) {
-    const promises = ratingChanges.map(async ({ familyId, change }) => {
-      // Проверяем, что семья действительно является участником карты.
-      if (!participantFamilyIds.includes(familyId)) {
-        console.warn(`Попытка изменить рейтинг для семьи ${familyId}, которая не является участником карты ${mapId}. Пропускаем.`);
-        return;
-      }
-
-      if (typeof change !== 'number' || change < 0) {
-        throw new ValidationError(`Некорректное изменение рейтинга для семьи ${familyId}: ${change}`);
-      }
-
-      if (change === 0) {
-        return;
-      }
-
-      const family = await this.familyRepo.findById(familyId);
-      if (!family) {
-        // Логируем предупреждение или пропускаем, так как выбрасывание ошибки может быть слишком строгим, если семья была удалена.
-        console.warn(`Семья с id ${familyId} не найдена. Пропускаем обновление рейтинга.`);
-        return;
-      }
-
-      await Promise.all([
-        this.familyRepo.incrementRating(familyId, change),
-        this.familyRatingHistoryRepo.create({
-          familyId: familyId,
-          mapId: mapId,
-          change,
-          reason: RATING_REASONS.MAP_COMPLETION,
-          oldRating: family.rating,
-          newRating: family.rating + change,
-        }),
-      ]);
-    });
-
-    await Promise.all(promises);
+    // Этот метод устарел и будет удален.
+    // Логика перенесена в recordFamilyMapResult и будет расширена для всех участников.
+    console.warn('DEPRECATED: updateFamilyRatings is called');
   }
 
   /**
@@ -119,11 +113,19 @@ export class RatingService {
    */
   async rollbackMapRatings(mapId) {
     const familyRollback = async () => {
-      const familyHistoryRecords = await this.familyRatingHistoryRepo.findAndDeleteByMapId(mapId);
-      const familyPromises = familyHistoryRecords.map(record =>
-        this.familyRepo.incrementRating(record.family, -record.change)
+      // Находим все записи, чтобы знать, на сколько откатывать рейтинг
+      const participations = await this.familyMapParticipationRepo.findByMapId(mapId);
+      
+      const promises = participations.map(p => 
+        this.familyRepo.incrementRating(p.familyId, -p.ratingChange)
       );
-      await Promise.all(familyPromises);
+      
+      await Promise.all(promises);
+      
+      // Удаляем записи только после успешного отката рейтинга
+      if (participations.length > 0) {
+        await this.familyMapParticipationRepo.deleteByMapId(mapId);
+      }
     };
 
     const playerRollback = async () => {
@@ -141,6 +143,6 @@ export class RatingService {
 export const ratingService = new RatingService({
   familyRepo,
   playerRepo,
-  familyRatingHistoryRepo: familyRatingHistoryRepository,
+  familyMapParticipationRepo,
   playerRatingHistoryRepo: playerRatingHistoryRepository,
 }); 

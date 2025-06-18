@@ -22,11 +22,13 @@ const mapSchema = z.object({
 const completionSchema = z.object({
   winnerFamilyId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID семьи-победителя.'),
   mvpPlayerId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID MVP.'),
-  ratingChanges: z.array(z.object({
-    familyId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val)),
-    change: z.number().nonnegative(),
-  })).optional(),
-  playerStats: z.array(z.any()).optional(),
+  familyRatingChange: z.number().nonnegative('Рейтинг не может быть отрицательным.'),
+  playerStats: z.array(z.object({
+    playerId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val)),
+    // Мы не будем здесь валидировать всю структуру статистики,
+    // доверяя, что она приходит в правильном формате.
+    // Валидация будет на более глубоких слоях, если потребуется.
+  }).passthrough()),
 });
 
 /**
@@ -130,8 +132,8 @@ class MapService {
    * @param {object} completionData - Данные для завершения.
    * @param {string} completionData.winnerFamilyId - ID победившей семьи/команды.
    * @param {string} completionData.mvpPlayerId - ID самого ценного игрока.
-   * @param {Array<{familyId: string, change: number}>} [completionData.ratingChanges] - Опциональные изменения рейтинга семей.
-   * @param {Array<object>} [completionData.playerStats] - Опциональная статистика игроков из JSON.
+   * @param {number} completionData.familyRatingChange - Изменение рейтинга для семьи-победителя.
+   * @param {Array<object>} completionData.playerStats - Статистика всех игроков.
    * @returns {Promise<import('@/models/map/Map').Map>}
    */
   async completeMap(mapId, completionData) {
@@ -139,10 +141,9 @@ class MapService {
     if (!validationResult.success) {
       throw new ValidationError('Ошибка валидации при завершении карты', validationResult.error.flatten().fieldErrors);
     }
-    const { winnerFamilyId, mvpPlayerId, ratingChanges, playerStats } = validationResult.data;
+    const { winnerFamilyId, mvpPlayerId, familyRatingChange, playerStats } = validationResult.data;
 
     const map = await this.repo.findById(mapId);
-
     if (!map) {
       throw new NotFoundError(`Карта с ID ${mapId} не найдена.`);
     }
@@ -150,40 +151,20 @@ class MapService {
       throw new AppError(`Нельзя завершить карту со статусом '${map.status}'. Карта должна быть активна.`, 409);
     }
 
-    const [winner, mvp] = await Promise.all([
-      this.familyRepo.findById(winnerFamilyId),
-      this.playerRepo.findById(mvpPlayerId),
-    ]);
-    
-    if (!winner) throw new NotFoundError(`Семья-победитель с ID ${winnerFamilyId} не найдена.`);
-    if (!mvp) throw new NotFoundError(`Игрок MVP с ID ${mvpPlayerId} не найден.`);
-
-
-    // 1. Обновляем рейтинги семей (если данные предоставлены)
-    if (ratingChanges && ratingChanges.length > 0) {
-      const participantFamilyIds = map.participants.map(p => p.participant._id.toString());
-      await this.ratingService.updateFamilyRatings(mapId, ratingChanges, participantFamilyIds);
-    }
-
-    // 2. Обрабатываем статистику и рейтинг игроков (если данные предоставлены)
-    if (playerStats && playerStats.length > 0) {
-      const statsWithPlayerIds = await this.statisticsService.parseAndApplyMapStats(mapId, map.tournament, playerStats);
-      await this.ratingService.updatePlayerRatings(mapId, statsWithPlayerIds);
-    }
-    
-    // 3. Обновляем саму карту
+    // На следующих шагах мы раскомментируем и реализуем вызовы других сервисов.
     const updatedMapData = {
       status: 'completed',
       winner: winnerFamilyId,
       mvp: mvpPlayerId,
-      // ratingChanges are not stored on the map document itself anymore.
     };
     const completedMap = await this.repo.update(mapId, updatedMapData);
+    
+    // Шаг 2 - Вызвать ratingService для обновления рейтинга семьи
+    await this.ratingService.recordFamilyMapResult(mapId, winnerFamilyId, familyRatingChange);
 
-
-    // 4. Генерируем достижения
-    // await this.achievementService.processMapCompletionAchievements(mapId, completedMap, playerStats || []);
-
+    // Шаг 3 - Вызвать statisticsService для сохранения статистики игроков
+    await this.statisticsService.recordPlayerMapStats(mapId, completedMap.tournament, playerStats);
+    
     return completedMap;
   }
 
