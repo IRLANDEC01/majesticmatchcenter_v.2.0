@@ -1,6 +1,7 @@
 import { POST } from './route.js';
 import models from '@/models/index.js';
 import { dbConnect, dbDisconnect, dbClear, populateDb, GUCCI_STATS } from '@/lib/test-helpers.js';
+import { STATUSES } from '@/lib/constants.js';
 
 const { Map, Family, Player, FamilyMapParticipation, PlayerMapParticipation } = models;
 
@@ -46,7 +47,7 @@ describe('/api/admin/maps/[id]/complete', () => {
       expect(response.status).toBe(200);
       
       const updatedMap = await Map.findById(map._id);
-      expect(updatedMap.status).toBe('completed');
+      expect(updatedMap.status).toBe(STATUSES.COMPLETED);
 
       const participations = await FamilyMapParticipation.find({ mapId: map._id });
       expect(participations.length).toBe(2);

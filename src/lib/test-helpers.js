@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { connectToDatabase, disconnectFromDatabase } from './db.js';
 import models from '../models/index.js';
+import { STATUSES, TOURNAMENT_SCORING_TYPES } from './constants.js';
 
 const {
   Family,
@@ -9,6 +10,11 @@ const {
   Tournament,
   MapTemplate,
   TournamentTemplate,
+  FamilyTournamentParticipation,
+  FamilyMapParticipation,
+  PlayerTournamentParticipation,
+  PlayerEarning,
+  FamilyEarning,
 } = models;
 
 /**
@@ -77,7 +83,7 @@ export const populateDb = async (config = {}) => {
       slug: 'majestic-summer-cup-2024-1',
       template: context.tournamentTemplate._id,
       tournamentType: 'family',
-      status: 'active',
+      status: STATUSES.ACTIVE,
       startDate: new Date(),
       participants: [
         { participantType: 'family', family: family1._id },
@@ -101,7 +107,7 @@ export const populateDb = async (config = {}) => {
         slug: 'dust-2-grand-final',
         tournament: context.tournament._id,
         template: context.mapTemplate1._id,
-        status: 'active',
+        status: STATUSES.ACTIVE,
         startDateTime: new Date(),
         participants: [
             { participant: family1._id, players: [player1_1._id] },
@@ -123,15 +129,23 @@ export const populateDb = async (config = {}) => {
       tournamentId: p.tournamentId || context.tournament._id,
     }));
       
-    context.familyMapParticipations = await models.FamilyMapParticipation.create(dataWithTournamentId);
+    context.familyMapParticipations = await FamilyMapParticipation.insertMany(dataWithTournamentId);
   }
   
   // --- Участие в турнирах ---
-  if (config.familyTournamentParticipations) {
-    const participationsData = typeof config.familyTournamentParticipations === 'function'
-      ? config.familyTournamentParticipations(context)
-      : config.familyTournamentParticipations;
-    context.familyTournamentParticipations = await models.FamilyTournamentParticipation.create(participationsData);
+  const ftpData = config.familyTournamentParticipations
+    ? (typeof config.familyTournamentParticipations === 'function' ? config.familyTournamentParticipations(context) : config.familyTournamentParticipations)
+    : context.families.map(f => ({ family: f._id, tournament: context.tournament._id }));
+
+  if (ftpData && ftpData.length > 0) {
+    context.familyTournamentParticipations = await FamilyTournamentParticipation.insertMany(ftpData);
+  }
+  
+  if (config.playerTournamentParticipations) {
+    const participationsData = typeof config.playerTournamentParticipations === 'function'
+      ? config.playerTournamentParticipations(context)
+      : config.playerTournamentParticipations;
+    context.playerTournamentParticipations = await PlayerTournamentParticipation.insertMany(participationsData);
   }
 
   // Для обратной совместимости со старыми тестами

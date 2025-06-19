@@ -8,6 +8,7 @@ import { ratingService } from '@/lib/domain/ratings/rating-service';
 import { statisticsService } from '@/lib/domain/statistics/statistics-service';
 import { AchievementService } from '@/lib/domain/achievements/achievement-service';
 import { ValidationError, NotFoundError, AppError } from '@/lib/errors';
+import { STATUSES } from '@/lib/constants';
 
 // Services are now injected, not instantiated here.
 const achievementService = new AchievementService(); // This one remains as it's not refactored yet.
@@ -151,13 +152,13 @@ class MapService {
     if (!map) {
       throw new NotFoundError(`Карта с ID ${mapId} не найдена.`);
     }
-    if (map.status !== 'active') {
+    if (map.status !== STATUSES.ACTIVE) {
       throw new AppError(`Нельзя завершить карту со статусом '${map.status}'. Карта должна быть активна.`, 409);
     }
 
     // На следующих шагах мы раскомментируем и реализуем вызовы других сервисов.
     const updatedMapData = {
-      status: 'completed',
+      status: STATUSES.COMPLETED,
       winner: winnerFamilyId,
       mvp: mvpPlayerId,
     };
@@ -183,7 +184,7 @@ class MapService {
       throw new NotFoundError(`Карта с ID ${mapId} не найдена.`);
     }
 
-    if (map.status !== 'completed') {
+    if (map.status !== STATUSES.COMPLETED) {
       throw new AppError(`Откатить можно только завершенную карту. Текущий статус: '${map.status}'.`, 409);
     }
 
@@ -194,7 +195,7 @@ class MapService {
 
     // 2. Сбрасываем состояние карты
     const rolledBackMapData = {
-      status: 'active',
+      status: STATUSES.ACTIVE,
       winner: null,
       mvp: null,
     };

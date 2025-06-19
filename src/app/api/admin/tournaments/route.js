@@ -4,7 +4,6 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/db.js';
 import { handleApiError } from '@/lib/api/handle-api-error';
-import { createTournamentSchema } from '@/lib/api/schemas/tournaments/tournament-schemas';
 
 // Схема валидации для создания турнира
 const tournamentCreateSchema = z.object({
@@ -15,13 +14,7 @@ const tournamentCreateSchema = z.object({
   }),
   tournamentType: z.enum(['family', 'team']),
   startDate: z.coerce.date(),
-  participants: z.array(z.object({
-    participantType: z.enum(['family', 'team']),
-    family: z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
-      message: 'Неверный формат ID семьи',
-    }).optional(),
-    // TODO: Добавить валидацию для 'team' когда будет реализовано
-  })).optional(),
+  // Участники больше не являются частью начального создания
 });
 
 /**
@@ -31,7 +24,7 @@ const tournamentCreateSchema = z.object({
 export async function POST(request) {
   try {
     const json = await request.json();
-    const validationResult = createTournamentSchema.safeParse(json);
+    const validationResult = tournamentCreateSchema.safeParse(json);
 
     if (!validationResult.success) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
@@ -53,7 +46,6 @@ export async function GET(request) {
     const tournaments = await tournamentService.getAll({ includeArchived });
     return NextResponse.json(tournaments, { status: 200 });
   } catch (error) {
-    console.error(error);
     return NextResponse.json({ message: 'Внутренняя ошибка сервера при получении турниров' }, { status: 500 });
   }
 } 

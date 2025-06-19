@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { TOURNAMENT_SCORING_VALUES } from '@/lib/constants';
 
 /**
  * Схема для создания и обновления шаблона турнира.
@@ -17,7 +16,6 @@ export const tournamentTemplateSchema = z.object({
 export const createTournamentSchema = z.object({
   name: z.string().min(3, 'Название турнира должно содержать минимум 3 символа.'),
   template: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID шаблона турнира.'),
-  scoringType: z.enum(TOURNAMENT_SCORING_VALUES),
   tournamentType: z.enum(['family', 'team']),
   startDate: z.coerce.date({ required_error: 'Дата начала обязательна.' }),
   endDate: z.coerce.date().optional(),

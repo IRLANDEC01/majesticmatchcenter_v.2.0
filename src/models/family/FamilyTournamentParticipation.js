@@ -1,38 +1,58 @@
-import mongoose, { Schema, models } from 'mongoose';
+import mongoose from 'mongoose';
 import earningsSchema from '@/models/shared/earnings-schema';
+import { RESULT_TIERS } from '@/lib/constants';
 
-const FamilyTournamentParticipationSchema = new Schema(
+const { Schema } = mongoose;
+
+const familyTournamentParticipationSchema = new Schema(
   {
-    // Ссылка на семью-участника
-    familyId: {
+    family: {
       type: Schema.Types.ObjectId,
       ref: 'Family',
       required: true,
       index: true,
     },
-    // Ссылка на турнир
-    tournamentId: {
+    tournament: {
       type: Schema.Types.ObjectId,
       ref: 'Tournament',
       required: true,
       index: true,
     },
-    // Итоговое место, занятое в турнире. null, если турнир не завершен.
-    finalPlace: {
+    totalPoints: {
       type: Number,
-      default: null,
+      default: 0,
     },
-    // Суммарные призовые, заработанные семьей в этом турнире.
-    // Используется как денормализованная витрина. Источник правды - FamilyEarning.
-    earnings: {
-      type: [earningsSchema],
-      default: [],
+    result: {
+      tier: {
+        type: String,
+        enum: RESULT_TIERS,
+        required: true,
+        default: 'participant',
+        comment: 'Категория/уровень результата (победитель, финалист, участник).',
+      },
+      rank: {
+        type: Number,
+        min: 1,
+        sparse: true,
+        comment: 'Числовое место в турнире, если применимо.',
+      },
+      points: {
+        type: Number,
+        sparse: true,
+        comment: 'Итоговое количество очков в турнире, если применимо.',
+      },
     },
+    earnings: [earningsSchema],
   },
   {
     timestamps: true,
-    versionKey: false,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
-export default models.FamilyTournamentParticipation || mongoose.model('FamilyTournamentParticipation', FamilyTournamentParticipationSchema); 
+familyTournamentParticipationSchema.index({ family: 1, tournament: 1 }, { unique: true });
+
+const FamilyTournamentParticipation = mongoose.models.FamilyTournamentParticipation || mongoose.model('FamilyTournamentParticipation', familyTournamentParticipationSchema);
+
+export default FamilyTournamentParticipation; 

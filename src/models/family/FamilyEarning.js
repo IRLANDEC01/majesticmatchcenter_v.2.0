@@ -1,5 +1,5 @@
 import mongoose, { Schema, models } from 'mongoose';
-import { CURRENCY_VALUES } from '@/lib/constants';
+import { CURRENCY_VALUES, RESULT_TIERS_ENUM } from '@/lib/constants';
 
 const FamilyEarningSchema = new Schema(
   {
@@ -17,10 +17,16 @@ const FamilyEarningSchema = new Schema(
       required: true,
       index: true,
     },
-    // Место, за которое получен приз
-    place: {
+    // Результат, за который получен приз
+    tier: {
+      type: String,
+      enum: RESULT_TIERS_ENUM,
+      comment: 'Категория результата (например, "winner").',
+    },
+    rank: {
       type: Number,
-      required: true,
+      min: 1,
+      comment: 'Конкретное место (например, 1).',
     },
     // Валюта приза
     currency: {

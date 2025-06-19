@@ -6,6 +6,7 @@ import { AppError, DuplicateError, NotFoundError, ValidationError } from '@/lib/
 import familyTournamentParticipationRepo from '@/lib/repos/families/family-tournament-participation-repo';
 import familyEarningRepo from '@/lib/repos/families/family-earning-repo';
 import playerEarningRepo from '@/lib/repos/players/player-earning-repo';
+import playerTournamentParticipationRepo from '@/lib/repos/players/player-tournament-participation-repo';
 
 /**
  * Сервис для управления бизнес-логикой турниров.
@@ -14,17 +15,21 @@ class TournamentService {
   /**
    * @param {object} repos - Репозитории.
    * @param {tournamentRepo} repos.tournamentRepo - Репозиторий турниров.
+   * @param {tournamentTemplateRepo} repos.tournamentTemplateRepo - Репозиторий шаблонов турниров.
    * @param {familyRepo} repos.familyRepo - Репозиторий семей.
    * @param {playerRepo} repos.playerRepo - Репозиторий игроков.
    * @param {familyTournamentParticipationRepo} repos.familyTournamentParticipationRepo - Репозиторий участий семей в турнирах.
+   * @param {playerTournamentParticipationRepo} repos.playerTournamentParticipationRepo - Репозиторий участий игроков в турнирах.
    * @param {familyEarningRepo} repos.familyEarningRepo - Репозиторий призовых семей.
    * @param {playerEarningRepo} repos.playerEarningRepo - Репозиторий призовых игроков.
    */
   constructor(repos) {
     this.tournamentRepo = repos.tournamentRepo;
+    this.tournamentTemplateRepo = repos.tournamentTemplateRepo;
     this.familyRepo = repos.familyRepo;
     this.playerRepo = repos.playerRepo;
     this.familyTournamentParticipationRepo = repos.familyTournamentParticipationRepo;
+    this.playerTournamentParticipationRepo = repos.playerTournamentParticipationRepo;
     this.familyEarningRepo = repos.familyEarningRepo;
     this.playerEarningRepo = repos.playerEarningRepo;
   }
@@ -37,7 +42,7 @@ class TournamentService {
   async createTournament(tournamentData) {
     const validatedData = tournamentData; // Прямое использование данных после валидации в API
 
-    const template = await tournamentTemplateRepo.incrementUsageCount(validatedData.template);
+    const template = await this.tournamentTemplateRepo.incrementUsageCount(validatedData.template);
     if (!template) {
       throw new NotFoundError(`Шаблон турнира с id ${validatedData.template} не найден.`);
     }
@@ -102,67 +107,73 @@ class TournamentService {
     return this.tournamentRepo.getTournamentStats(id);
   }
 
-  async completeTournament(tournamentId, payload) {
+  /**
+   * Завершает турнир, распределяет призы и обновляет всю связанную статистику.
+   * Этот метод является идемпотентным для начисления призов, но не для обновления статуса.
+   * @param {string} tournamentId - ID турнира для завершения.
+   * @param {object} payload - Данные для завершения.
+   * @param {Array<object>} payload.outcomes - Массив с результатами участников.
+   * @param {string} payload.outcomes[].familyId - ID семьи.
+   * @param {string} payload.outcomes[].tier - Категория результата (например, 'winner').
+   * @param {number} [payload.outcomes[].rank] - Числовое место (если применимо).
+   * @returns {Promise<object>} - Обновленный объект турнира.
+   */
+  async completeTournament(tournamentId, { outcomes }) {
+    if (!outcomes || outcomes.length === 0) {
+      throw new ValidationError('Необходимо предоставить массив результатов (outcomes).');
+    }
+
     const tournament = await this.tournamentRepo.findById(tournamentId, { 
       populate: {
         path: 'participants.family',
-        populate: {
-          path: 'members.player',
-        },
+        populate: { path: 'members.player' },
       },
     });
+
     if (!tournament) {
       throw new NotFoundError(`Турнир с ID ${tournamentId} не найден.`);
     }
-    if (tournament.status === 'completed') {
+    if (tournament.status === 'COMPLETED') {
       throw new ValidationError('Турнир уже завершен.');
     }
 
-    let placements = payload.placements || [];
-
-    // Сценарий 1: Автоматический подсчет для LEADERBOARD
-    if (tournament.scoringType === 'LEADERBOARD') {
-      const leaderboard = await this.tournamentRepo.getLeaderboard(tournamentId);
-      if (leaderboard.length > 1 && leaderboard[0].totalPoints === leaderboard[1].totalPoints) {
-        throw new AppError('Обнаружена ничья за первое место. Завершение невозможно.', 409);
-      }
-      placements = leaderboard.map((item, index) => ({
-        place: index + 1,
-        familyId: item.familyId.toString(),
-      }));
+    // 1. Определение победителя
+    const winnerOutcome = outcomes.find(o => o.tier === 'winner' || o.rank === 1);
+    if (!winnerOutcome) {
+      throw new ValidationError('Не определен победитель (должен быть tier: "winner" или rank: 1).');
     }
 
-    if (placements.length === 0) {
-      throw new ValidationError('Не предоставлены данные о расстановке мест (placements).');
-    }
-
-    const winnerPlacement = placements.find((p) => p.place === 1);
-    if (!winnerPlacement) {
-      throw new ValidationError('Не определен победитель (1-е место).');
-    }
-
-    // Основная логика начисления призов
-    for (const placement of placements) {
-      const prizesForPlace = tournament.prizePool.filter((p) => p.place === placement.place);
-      if (prizesForPlace.length === 0) continue;
-
-      const family = tournament.participants.find(p => p.family?._id.toString() === placement.familyId)?.family;
+    // 2. Обработка каждого результата
+    for (const outcome of outcomes) {
+      const { familyId, tier, rank } = outcome;
+      
+      const family = tournament.participants.find(p => p.family?._id.toString() === familyId.toString())?.family;
       if (!family) {
-        throw new AppError(`Семья с ID ${placement.familyId} не найдена среди участников.`, 400);
+        throw new AppError(`Семья с ID ${familyId} не найдена среди участников турнира.`, 400);
       }
       
       const earningsForUpdate = [];
 
-      for (const prize of prizesForPlace) {
+      // Ищем подходящие правила в призовом фонде
+      const applicablePrizes = tournament.prizePool.filter(prize => 
+        (prize.target.tier && prize.target.tier === tier) || 
+        (prize.target.rank && prize.target.rank === rank)
+      );
+
+      for (const prize of applicablePrizes) {
+        // Создаем запись о заработке для семьи
         await this.familyEarningRepo.create({
           familyId: family._id,
           tournamentId,
-          place: prize.place,
+          tier,
+          rank,
           currency: prize.currency,
           amount: prize.amount,
         });
 
         const playerShare = prize.amount / family.members.length;
+
+        // Создаем записи о заработке для каждого игрока
         for (const member of family.members) {
           await this.playerEarningRepo.create({
             playerId: member.player._id,
@@ -171,27 +182,33 @@ class TournamentService {
             currency: prize.currency,
             amount: playerShare,
           });
+
+          // Обновляем "витрину" участия игрока
+          await this.playerTournamentParticipationRepo.updateByPlayerAndTournament(
+            member.player._id, tournamentId, { $push: { earnings: prize } }
+          );
         }
         
-        earningsForUpdate.push({ currency: prize.currency, amount: prize.amount });
+        earningsForUpdate.push(prize);
       }
       
+      // Обновляем "витрину" участия семьи
       await this.familyTournamentParticipationRepo.updateByFamilyAndTournament(
         family._id,
         tournamentId,
         {
-          finalPlace: placement.place,
+          result: { tier, rank },
           $push: { earnings: { $each: earningsForUpdate } },
         }
       );
     }
     
-    // TODO: Поставить асинхронные задачи в очередь на пересчет статистики
+    // 3. TODO: Поставить асинхронные задачи в очередь на пересчет статистики
 
-    // Обновляем сам турнир
+    // 4. Финальное обновление самого турнира
     const updatedTournament = await this.tournamentRepo.update(tournamentId, {
-      status: 'completed',
-      winner: winnerPlacement.familyId,
+      status: 'COMPLETED',
+      winner: winnerOutcome.familyId,
       endDate: new Date(),
     });
 
@@ -201,9 +218,11 @@ class TournamentService {
 
 export const tournamentService = new TournamentService({
   tournamentRepo,
+  tournamentTemplateRepo,
   familyRepo,
   playerRepo,
   familyTournamentParticipationRepo,
+  playerTournamentParticipationRepo,
   familyEarningRepo,
   playerEarningRepo,
 });

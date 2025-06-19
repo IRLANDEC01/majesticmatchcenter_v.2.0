@@ -2,6 +2,7 @@ import { POST } from './route';
 import { dbConnect, dbDisconnect, dbClear, populateDb, GUCCI_STATS } from '@/lib/test-helpers';
 import { mapService } from '@/lib/domain/maps/map-service';
 import models from '@/models/index.js';
+import { STATUSES } from '@/lib/constants';
 
 const { Map } = models;
 
@@ -48,12 +49,12 @@ describe('POST /api/admin/maps/[id]/rollback', () => {
     expect(response.status).toBe(200);
 
     const body = await response.json();
-    expect(body.status).toBe('active');
+    expect(body.status).toBe(STATUSES.ACTIVE);
     expect(body.winner).toBeNull();
     expect(body.mvp).toBeNull();
 
     const dbMap = await Map.findById(mapToRollback._id).lean();
-    expect(dbMap.status).toBe('active');
+    expect(dbMap.status).toBe(STATUSES.ACTIVE);
   });
 
   it('должен вернуть 409, если карта не в статусе "completed"', async () => {

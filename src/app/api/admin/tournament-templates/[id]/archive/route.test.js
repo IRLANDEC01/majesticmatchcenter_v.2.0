@@ -1,29 +1,24 @@
 import { PATCH } from './route';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import MapTemplate from '@/models/map/MapTemplate';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
+import { TOURNAMENT_SCORING_TYPES } from '@/lib/constants';
 
 describe('API /api/admin/tournament-templates/[id]/archive', () => {
   let testTemplate;
   let mapTemplate;
 
-  beforeAll(async () => {
-    await connectToDatabase();
-    await TournamentTemplate.init();
-    await MapTemplate.init();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
+  beforeAll(dbConnect);
+  afterAll(dbDisconnect);
 
   beforeEach(async () => {
-    await TournamentTemplate.deleteMany({});
-    await MapTemplate.deleteMany({});
-    mapTemplate = await MapTemplate.create({ name: 'Test Map for Archiving' });
+    await dbClear();
+    mapTemplate = await MapTemplate.create({ name: 'Test Map for Archiving', slug: 'test-map-for-archiving' });
     testTemplate = await TournamentTemplate.create({
       name: 'Test Template for Archiving',
+      slug: 'test-template-for-archiving',
       mapTemplates: [mapTemplate._id],
+      scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
     });
   });
 

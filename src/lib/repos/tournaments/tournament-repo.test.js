@@ -7,6 +7,7 @@ import Map from '@/models/map/Map';
 import MapTemplate from '@/models/map/MapTemplate';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import PlayerMapParticipation from '@/models/player/PlayerMapParticipation';
+import { STATUSES, TOURNAMENT_SCORING_TYPES } from '@/lib/constants';
 
 describe('TournamentRepo', () => {
   describe('getTournamentStats', () => {
@@ -43,12 +44,14 @@ describe('TournamentRepo', () => {
       tournamentTemplate = await TournamentTemplate.create({
         name: 'Test Tournament Template',
         slug: 'test-tournament-template',
+        scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
         mapTemplates: [mapTemplate._id],
       });
 
       tournament = await Tournament.create({
         name: 'Stats Test Tournament',
         template: tournamentTemplate._id,
+        scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
         tournamentType: 'family',
         startDate: new Date(),
       });
@@ -59,7 +62,7 @@ describe('TournamentRepo', () => {
         tournament: tournament._id,
         template: mapTemplate._id,
         startDateTime: new Date(),
-        status: 'completed',
+        status: STATUSES.COMPLETED,
       });
       map2 = await Map.create({
         name: 'Test Map 2',
@@ -67,7 +70,7 @@ describe('TournamentRepo', () => {
         tournament: tournament._id,
         template: mapTemplate._id,
         startDateTime: new Date(),
-        status: 'completed',
+        status: STATUSES.COMPLETED,
       });
 
       player1 = await Player.create({ firstName: 'Player', lastName: 'One', slug: 'player-one' });
@@ -121,12 +124,14 @@ describe('TournamentRepo', () => {
       const emptyTournamentTemplate = await TournamentTemplate.create({
         name: 'Empty T Template',
         slug: 'empty-t-template',
+        scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
         mapTemplates: [mapTemplate._id],
       });
       const emptyTournament = await Tournament.create({
         name: 'Empty Stats Test Tournament',
         slug: 'empty-stats-test-tournament',
         template: emptyTournamentTemplate._id,
+        scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
         tournamentType: 'family',
         startDate: new Date(),
       });

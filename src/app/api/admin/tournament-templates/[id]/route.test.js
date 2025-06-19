@@ -2,6 +2,7 @@ import { PUT } from './route.js';
 import models from '@/models/index.js';
 import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
 import mongoose from 'mongoose';
+import { TOURNAMENT_SCORING_TYPES } from '@/lib/constants.js';
 
 const { TournamentTemplate } = models;
 
@@ -60,7 +61,8 @@ describe('PUT /api/admin/tournament-templates/[id]', () => {
     const conflictingTemplate = await TournamentTemplate.create({ 
       name: 'Existing Name', 
       slug: 'existing-name',
-      mapTemplates: [testData.mapTemplates[0]._id] 
+      mapTemplates: [testData.mapTemplates[0]._id],
+      scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
     });
 
     const request = new Request(`http://localhost/api/admin/tournament-templates/${templateToUpdate._id}`, {

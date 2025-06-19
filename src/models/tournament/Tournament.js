@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import seoSchema from '@/models/shared/seo-schema.js';
-import { CURRENCY_VALUES, TOURNAMENT_SCORING_TYPES, TOURNAMENT_SCORING_VALUES } from '@/lib/constants';
+import { CURRENCY_VALUES, STATUSES_ENUM, STATUSES, RESULT_TIERS_ENUM } from '@/lib/constants';
 
 // --- Вложенные схемы для участников ---
 
@@ -32,16 +32,23 @@ const tournamentParticipantSchema = new mongoose.Schema({
 });
 
 /**
- * Схема для описания призового фонда.
- * Позволяет задавать несколько призов для разных мест в разных валютах.
+ * Схема для описания правила выдачи приза.
+ * Позволяет гибко настраивать призовой фонд.
  */
-const prizeSchema = new mongoose.Schema({
+const prizeRuleSchema = new mongoose.Schema({
   _id: false,
-  // За какое место предназначен приз (1-е, 2-е и т.д.).
-  place: {
-    type: Number,
-    required: [true, 'Место для приза обязательно.'],
-    min: [1, 'Место не может быть меньше 1.'],
+  // Цель, на которую нацелено правило (например, 'winner', 'top-8', '1-е место')
+  target: {
+    tier: {
+      type: String,
+      enum: RESULT_TIERS_ENUM,
+      comment: 'Категория результата (например, "winner" или "semi-finalist").',
+    },
+    rank: {
+      type: Number,
+      min: 1,
+      comment: 'Конкретное место (например, 1 для первого места).',
+    },
   },
   // Валюта приза.
   currency: {
@@ -87,16 +94,6 @@ const tournamentSchema = new mongoose.Schema({
     ref: 'TournamentTemplate',
     required: true,
   },
-  // Тип турнира в зависимости от логики определения победителя.
-  scoringType: {
-    type: String,
-    required: true,
-    enum: {
-      values: TOURNAMENT_SCORING_VALUES,
-      message: 'Недопустимый тип турнира: {VALUE}.',
-    },
-    default: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
-  },
   // Тип турнира, определяет логику добавления игроков на карты.
   tournamentType: {
     type: String,
@@ -107,8 +104,8 @@ const tournamentSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    enum: ['planned', 'active', 'completed'],
-    default: 'planned',
+    enum: STATUSES_ENUM,
+    default: STATUSES.PLANNED,
   },
   // Дата архивации для мягкого удаления.
   archivedAt: {
@@ -126,7 +123,7 @@ const tournamentSchema = new mongoose.Schema({
     type: Date,
   },
   // Призовой фонд турнира.
-  prizePool: [prizeSchema],
+  prizePool: [prizeRuleSchema],
   // Пул участников, зарегистрированных на турнир.
   participants: [tournamentParticipantSchema],
   // Ссылка на победителя (на один из объектов в массиве participants).

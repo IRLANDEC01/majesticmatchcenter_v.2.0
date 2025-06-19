@@ -2,21 +2,29 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import { tournamentService } from '@/lib/domain/tournaments/tournament-service';
+import { RESULT_TIERS_ENUM } from '@/lib/constants';
 
-const completeSchema = z.object({
-  winnerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID победителя.').optional(),
+const outcomesSchema = z.array(z.object({
+  familyId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID семьи.'),
+  tier: z.enum(RESULT_TIERS_ENUM),
+  rank: z.number().min(1).optional(),
+})).min(1, 'Массив результатов (outcomes) не может быть пустым.');
+
+const completePayloadSchema = z.object({
+  outcomes: outcomesSchema,
 });
 
 /**
- * POST /api/admin/tournaments/{id}/complete
- * Завершает турнир, определяет победителя и начисляет призы.
+ * PATCH /api/admin/tournaments/{id}/complete
+ * Завершает турнир, используя предоставленные результаты (outcomes),
+ * распределяет призы и обновляет статистику.
  */
-export async function POST(request, { params }) {
+export async function PATCH(request, { params }) {
   try {
     const { id } = params;
-    const json = await request.json();
-    
-    const validationResult = completeSchema.safeParse(json);
+    const payload = await request.json();
+
+    const validationResult = completePayloadSchema.safeParse(payload);
     if (!validationResult.success) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
@@ -25,20 +33,6 @@ export async function POST(request, { params }) {
 
     return NextResponse.json(updatedTournament, { status: 200 });
   } catch (error) {
-    return handleApiError(error);
-  }
-}
-
-export async function PATCH(request, { params }) {
-  try {
-    const { id } = params;
-    const payload = await request.json();
-
-    const updatedTournament = await tournamentService.completeTournament(id, payload);
-
-    return NextResponse.json(updatedTournament, { status: 200 });
-  } catch (error) {
-    console.error('INTERNAL_SERVER_ERROR', error);
     return handleApiError(error);
   }
 } 

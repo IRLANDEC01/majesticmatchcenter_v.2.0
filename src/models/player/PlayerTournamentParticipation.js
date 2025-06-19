@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import earningsSchema from '@/models/shared/earnings-schema';
 
 const playerTournamentParticipationSchema = new mongoose.Schema({
   // Связи
@@ -15,6 +16,9 @@ const playerTournamentParticipationSchema = new mongoose.Schema({
   // Результаты
   isWinner: { type: Boolean, default: false }, // Был ли игрок в команде-победителе
   isMvp: { type: Boolean, default: false }, // Был ли игрок MVP турнира
+
+  // Заработанные призы
+  earnings: [earningsSchema],
   
 }, {
   timestamps: true,

@@ -71,8 +71,25 @@ export const FAMILY_MEMBER_ROLES = {
 export const FAMILY_MEMBER_ROLE_VALUES = Object.values(FAMILY_MEMBER_ROLES);
 
 /**
+ * Статусы для турниров и карт.
+ * Используем единый набор для консистентности.
+ */
+export const STATUSES = Object.freeze({
+  PLANNED: 'PLANNED',     // Запланировано, еще не началось
+  ACTIVE: 'ACTIVE',       // Идет прямо сейчас
+  COMPLETED: 'COMPLETED',   // Завершено
+  // Статус ARCHIVED обрабатывается через поле archivedAt, а не здесь.
+});
+
+/**
+* Массив значений статусов для валидации в Mongoose.
+* @type {string[]}
+*/
+export const STATUSES_ENUM = Object.values(STATUSES);
+
+/**
+ * @deprecated
  * Типы статусов турниров.
- * @enum {string}
  */
 export const TOURNAMENT_STATUS_VALUES = {
   NOT_STARTED: 'not_started',
@@ -81,6 +98,14 @@ export const TOURNAMENT_STATUS_VALUES = {
   CANCELED: 'canceled',
 };
 
+/**
+ * @deprecated
+ */
+export const TOURNAMENT_STATUS_ENUM = Object.values(TOURNAMENT_STATUS_VALUES);
+
+/**
+ * @deprecated
+ */
 export const TOURNAMENT_STATUS = Object.freeze({
   ...TOURNAMENT_STATUS_VALUES,
 });
@@ -98,6 +123,12 @@ export const RESULT_TIERS_VALUES = Object.freeze({
   PARTICIPANT: 'participant', // Стандартный результат для всех остальных
   DISQUALIFIED: 'disqualified', // Дисквалифицированный участник
 });
+
+/**
+ * Массив тиров результата для использования в валидаторах Mongoose.
+ * @type {string[]}
+ */
+export const RESULT_TIERS_ENUM = Object.values(RESULT_TIERS_VALUES);
 
 export const RESULT_TIERS = Object.freeze({
   ...RESULT_TIERS_VALUES,
