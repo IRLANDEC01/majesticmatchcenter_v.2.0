@@ -45,7 +45,7 @@ const prizeRuleSchema = new mongoose.Schema({
       comment: 'Категория результата (например, "winner" или "semi-finalist").',
     },
     rank: {
-      type: Number,
+    type: Number,
       min: 1,
       comment: 'Конкретное место (например, 1 для первого места).',
     },

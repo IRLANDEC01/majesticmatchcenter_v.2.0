@@ -11,7 +11,8 @@ describe('/api/admin/maps/[id]/complete', () => {
   beforeAll(dbConnect);
   beforeEach(async () => {
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb();
+    testData = data;
   });
   afterAll(dbDisconnect);
 
@@ -19,9 +20,9 @@ describe('/api/admin/maps/[id]/complete', () => {
     it('должен успешно завершать карту и записывать турнирные очки', async () => {
       // Arrange
       const map = testData.map;
-      const winnerFamily = testData.families[0];
+      const winnerFamily = testData.family;
       const otherFamily = testData.families[1];
-      const mvp = testData.players[0];
+      const mvp = testData.player;
 
       const payload = {
         winnerFamilyId: winnerFamily._id.toString(),

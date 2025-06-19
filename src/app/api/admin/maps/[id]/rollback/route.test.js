@@ -1,8 +1,8 @@
 import { POST } from './route';
-import { dbConnect, dbDisconnect, dbClear, populateDb, GUCCI_STATS } from '@/lib/test-helpers';
+import { dbConnect, dbDisconnect, dbClear, populateDb, GUCCI_STATS } from '@/lib/test-helpers.js';
 import { mapService } from '@/lib/domain/maps/map-service';
 import models from '@/models/index.js';
-import { STATUSES } from '@/lib/constants';
+import { STATUSES } from '@/lib/constants.js';
 
 const { Map } = models;
 
@@ -14,17 +14,28 @@ describe('POST /api/admin/maps/[id]/rollback', () => {
 
   beforeEach(async () => {
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb({
+      numFamilies: 2,
+      numPlayers: 2,
+      maps: [{ status: STATUSES.ACTIVE }]
+    });
+    testData = data;
 
     // Сначала "завершаем" карту, чтобы ее можно было откатить
     const mapToComplete = testData.map;
-    const winningFamily = testData.families[0];
-    const mvpPlayer = testData.players[0];
+    const winningFamily = testData.familyGucci;
+    const mvpPlayer = testData.playerGucci;
 
-    const playerStatsPayload = testData.players.map((player, index) => ({
-      playerId: player._id.toString(),
-      familyId: player.currentFamily.toString(),
-      ...GUCCI_STATS[index % GUCCI_STATS.length],
+    // Явно находим ID семей и их игроков, чтобы не полагаться на testData.players
+    const familiesWithPlayers = [
+      { familyId: testData.familyGucci._id.toString(), playerId: testData.playerGucci._id.toString() },
+      { familyId: testData.familyUzi._id.toString(), playerId: testData.playerUzi._id.toString() }
+    ];
+
+    const playerStatsPayload = familiesWithPlayers.map((fam) => ({
+      playerId: fam.playerId,
+      familyId: fam.familyId,
+      ...GUCCI_STATS[0],
     }));
 
     await mapService.completeMap(mapToComplete._id.toString(), {

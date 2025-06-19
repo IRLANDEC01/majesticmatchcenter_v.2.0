@@ -65,7 +65,6 @@ export class RatingService {
    */
   async recordFamiliesMapResults(mapId, tournamentId, familyResults = [], winnerInfo = {}) {
     if (!familyResults || familyResults.length === 0) {
-      console.log(`[RatingService] Для карты ${mapId} не переданы результаты семей. Пропускаем начисление очков.`);
       return;
     }
 

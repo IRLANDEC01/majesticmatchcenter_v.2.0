@@ -7,6 +7,7 @@ import familyTournamentParticipationRepo from '@/lib/repos/families/family-tourn
 import familyEarningRepo from '@/lib/repos/families/family-earning-repo';
 import playerEarningRepo from '@/lib/repos/players/player-earning-repo';
 import playerTournamentParticipationRepo from '@/lib/repos/players/player-tournament-participation-repo';
+import { STATUSES } from '@/lib/constants';
 
 /**
  * Сервис для управления бизнес-логикой турниров.
@@ -51,10 +52,17 @@ class TournamentService {
 
     const newTournamentData = {
       ...validatedData,
+      description: template.description,
+      rules: template.rules,
       slug,
-      status: 'planned',
+      status: STATUSES.PLANNED,
     };
     
+    // Наследуем prizePool из шаблона, если он не передан в запросе или передан пустым
+    if (!validatedData.prizePool || validatedData.prizePool.length === 0) {
+      newTournamentData.prizePool = template.prizePool;
+    }
+
     return this.tournamentRepo.create(newTournamentData);
   }
 
@@ -133,7 +141,7 @@ class TournamentService {
     if (!tournament) {
       throw new NotFoundError(`Турнир с ID ${tournamentId} не найден.`);
     }
-    if (tournament.status === 'COMPLETED') {
+    if (tournament.status === STATUSES.COMPLETED) {
       throw new ValidationError('Турнир уже завершен.');
     }
 
@@ -146,7 +154,7 @@ class TournamentService {
     // 2. Обработка каждого результата
     for (const outcome of outcomes) {
       const { familyId, tier, rank } = outcome;
-      
+
       const family = tournament.participants.find(p => p.family?._id.toString() === familyId.toString())?.family;
       if (!family) {
         throw new AppError(`Семья с ID ${familyId} не найдена среди участников турнира.`, 400);
@@ -207,7 +215,7 @@ class TournamentService {
 
     // 4. Финальное обновление самого турнира
     const updatedTournament = await this.tournamentRepo.update(tournamentId, {
-      status: 'COMPLETED',
+      status: STATUSES.COMPLETED,
       winner: winnerOutcome.familyId,
       endDate: new Date(),
     });

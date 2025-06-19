@@ -12,20 +12,20 @@ describe('API /api/admin/families', () => {
   afterAll(dbDisconnect);
 
   beforeEach(async () => {
-    // Используем dbClear вместо clearDatabase и populateDb для создания данных
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb({ numPlayers: 3, numFamilies: 2 });
+    testData = data;
   });
 
   describe('POST', () => {
     it('должен успешно создавать семью, назначать владельца и возвращать 201', async () => {
       // Arrange
-      // Создаем нового игрока, который гарантированно не в семье
-      const ownerPlayer = await models.Player.create({ firstName: 'Free', lastName: 'Agent' });
+      // Создадим нового игрока специально для этого теста, чтобы он точно был без семьи
+      const newOwner = await models.Player.create({ firstName: 'NewOwner', lastName: 'Test' });
       const familyData = {
         name: 'The Champions',
         displayLastName: 'Champions',
-        ownerId: ownerPlayer._id.toString(),
+        ownerId: newOwner._id.toString(),
       };
       const request = new Request('http://localhost/api/admin/families', {
         method: 'POST',
@@ -40,14 +40,14 @@ describe('API /api/admin/families', () => {
       // Assert
       expect(response.status).toBe(201);
       expect(body.name).toBe(familyData.name);
-      expect(body.owner.toString()).toBe(ownerPlayer._id.toString());
+      expect(body.owner.toString()).toBe(newOwner._id.toString());
 
       const dbFamily = await Family.findById(body._id);
       expect(dbFamily).not.toBeNull();
-      expect(dbFamily.owner.toString()).toBe(ownerPlayer._id.toString());
+      expect(dbFamily.owner.toString()).toBe(newOwner._id.toString());
 
       expect(dbFamily.members).toHaveLength(1);
-      expect(dbFamily.members[0].player.toString()).toBe(ownerPlayer._id.toString());
+      expect(dbFamily.members[0].player.toString()).toBe(newOwner._id.toString());
       expect(dbFamily.members[0].role).toBe('owner');
 
       const dbStats = await FamilyStats.findOne({ familyId: body._id });
@@ -77,13 +77,8 @@ describe('API /api/admin/families', () => {
 
     it('должен возвращать ошибку 400, если игрок уже состоит в семье', async () => {
       // Arrange
-      // Берем игрока, который УЖЕ состоит в семье (согласно populateDb)
-      let existingPlayerWithOwner = testData.players.find(p => p.currentFamily);
-      if (!existingPlayerWithOwner) {
-        // На случай, если в populateDb такого нет, создадим его вручную
-        const player = await models.Player.create({ firstName: 'Busy', lastName: 'Player', currentFamily: testData.families[0]._id });
-        existingPlayerWithOwner = player;
-      }
+      // Берем игрока, который УЖЕ состоит в семье
+      const existingPlayerWithOwner = testData.playerGucci;
 
       const familyData = {
         name: 'Another Family',
@@ -108,16 +103,16 @@ describe('API /api/admin/families', () => {
 
     it('должен возвращать ошибку 409 при попытке создать дубликат', async () => {
       // Arrange: Используем данные из populateDb
-      const existingFamily = testData.families[0];
+      const existingFamily = testData.familyGucci;
       // Создаем нового игрока, который не состоит в семье
-      const ownerPlayer = await models.Player.create({ firstName: 'Another', lastName: 'Player' });
+      const newOwner = await models.Player.create({ firstName: 'AnotherOwner', lastName: 'Test' });
       const request = new Request('http://localhost/api/admin/families', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: existingFamily.name,
           displayLastName: existingFamily.displayLastName || existingFamily.name,
-          ownerId: ownerPlayer._id.toString(),
+          ownerId: newOwner._id.toString(),
         }),
       });
 
@@ -134,7 +129,7 @@ describe('API /api/admin/families', () => {
   describe('GET', () => {
     it('должен возвращать все неархивированные семьи', async () => {
       // Arrange: populateDb уже создала 2 семьи. Архивируем одну.
-      const familyToArchive = testData.families[1];
+      const familyToArchive = testData.familyUzi;
       await Family.findByIdAndUpdate(familyToArchive._id, { archivedAt: new Date() });
       
       const request = new Request('http://localhost/api/admin/families');
@@ -146,12 +141,12 @@ describe('API /api/admin/families', () => {
       // Assert
       expect(response.status).toBe(200);
       expect(body.length).toBe(1);
-      expect(body[0].name).toBe(testData.families[0].name);
+      expect(body[0].name).toBe(testData.familyGucci.name);
     });
 
     it('должен возвращать все семьи при `include_archived=true`', async () => {
       // Arrange: Архивируем одну из созданных семей
-      const familyToArchive = testData.families[1];
+      const familyToArchive = testData.familyUzi;
       await Family.findByIdAndUpdate(familyToArchive._id, { archivedAt: new Date() });
       
       const request = new Request('http://localhost/api/admin/families?include_archived=true');

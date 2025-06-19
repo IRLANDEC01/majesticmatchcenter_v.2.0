@@ -12,7 +12,8 @@ describe('API /api/admin/tournaments/[id]', () => {
   afterAll(dbDisconnect);
   beforeEach(async () => {
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb();
+    testData = data;
   });
 
   describe('GET', () => {

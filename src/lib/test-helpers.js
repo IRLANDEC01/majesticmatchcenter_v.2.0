@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { connectToDatabase, disconnectFromDatabase } from './db.js';
 import models from '../models/index.js';
-import { STATUSES, TOURNAMENT_SCORING_TYPES } from './constants.js';
+import { STATUSES, TOURNAMENT_SCORING_TYPES, CURRENCY_TYPES, RESULT_TIERS } from './constants.js';
 
 const {
   Family,
@@ -48,110 +48,153 @@ export const dbClear = async () => {
 /**
  * Наполняет базу данных ВАЛИДНЫМ и консистентным набором данных для тестов.
  * @param {object} [config] - Конфигурация для кастомизации создаваемых данных.
- * @returns {Promise<object>} Объект с созданными Mongoose-документами.
+ * @returns {Promise<{testData: object}>} Объект с ключом testData, содержащий созданные Mongoose-документы.
  */
 export const populateDb = async (config = {}) => {
   const context = {};
 
+  // --- Конфигурация по умолчанию ---
+  const {
+    numFamilies = 2,
+    numPlayers = 2,
+    numTournamentTemplates = 1,
+    numTournaments = 1,
+  } = config;
+
+  // --- Предопределенные данные для избежания ошибок валидации ---
+  const playerNames = [
+    { firstName: 'Tom', lastName: 'Gucci' },
+    { firstName: 'Aza', lastName: 'Uzi' },
+    { firstName: 'Leo', lastName: 'Messi' },
+    { firstName: 'Cris', lastName: 'Ronaldo' },
+    { firstName: 'John', lastName: 'Doe' },
+  ];
+  const familyNames = ['Gucci', 'Uzi', 'Faze', 'Navi', 'Vitality'];
+
   // --- Шаблоны ---
-  context.mapTemplate1 = await MapTemplate.create({ name: 'Dust 2', slug: 'de_dust2' });
-  context.mapTemplate2 = await MapTemplate.create({ name: 'Mirage', slug: 'de_mirage' });
-  context.tournamentTemplate = await TournamentTemplate.create({
-    name: 'Majestic Cup: Summer',
-    slug: 'majestic-cup-summer',
-    mapTemplates: [context.mapTemplate1._id, context.mapTemplate2._id],
-  });
+  context.mapTemplateDust2 = await MapTemplate.create({ name: 'Dust 2', slug: 'de_dust2' });
+  context.mapTemplateMirage = await MapTemplate.create({ name: 'Mirage', slug: 'de_mirage' });
+  
+  context.tournamentTemplates = [];
+  if (numTournamentTemplates > 0) {
+    for (let i = 0; i < numTournamentTemplates; i++) {
+      const template = await TournamentTemplate.create({
+        name: `Majestic Cup: Season ${i + 1}`,
+        slug: `majestic-cup-season-${i + 1}`,
+        mapTemplates: [context.mapTemplateDust2._id, context.mapTemplateMirage._id],
+        prizePool: [
+          {
+            target: { tier: RESULT_TIERS.WINNER, rank: 1 },
+            amount: 1000000,
+            currency: CURRENCY_TYPES.GTA_DOLLARS,
+          },
+        ],
+      });
+      context.tournamentTemplates.push(template);
+    }
+    context.tournamentTemplate = context.tournamentTemplates[0];
+    // Для старых тестов, которые могут использовать это имя
+    context.tournamentTemplateMain = context.tournamentTemplate;
+  }
 
   // --- Семьи и Игроки ---
-  const player1_1 = await Player.create({ firstName: 'Tom', lastName: 'Gucci', rating: 1250 });
-  const player2_1 = await Player.create({ firstName: 'Aza', lastName: 'Uzi', rating: 1150 });
+  const families = [];
+  const players = [];
+  for (let i = 0; i < Math.min(numFamilies, numPlayers, familyNames.length, playerNames.length); i++) {
+      const player = await Player.create({
+          firstName: playerNames[i].firstName,
+          lastName: playerNames[i].lastName,
+          rating: 1000 + i * 50
+      });
+      players.push(player);
+
+      const family = await Family.create({
+          name: familyNames[i],
+          displayLastName: familyNames[i],
+          rating: 1200 + i * 50,
+          owner: player._id,
+          members: [{ player: player._id, role: 'owner' }]
+      });
+      await Player.findByIdAndUpdate(player._id, { currentFamily: family._id });
+      families.push(family);
+  }
+
+  context.players = players;
+  context.player = players[0];
+  context.playerGucci = players[0]; // legacy
+  context.playerUzi = players.length > 1 ? players[1] : null; // legacy
   
-  const family1 = await Family.create({ name: 'Gucci', displayLastName: 'Gucci', rating: 1200, owner: player1_1._id, members: [{ player: player1_1._id, role: 'owner' }] });
-  const family2 = await Family.create({ name: 'Uzi', displayLastName: 'Uzi', rating: 1100, owner: player2_1._id, members: [{ player: player2_1._id, role: 'owner' }] });
-  
-  const updatedPlayer1_1 = await Player.findByIdAndUpdate(player1_1._id, { currentFamily: family1._id }, { new: true }).lean();
-  const updatedPlayer2_1 = await Player.findByIdAndUpdate(player2_1._id, { currentFamily: family2._id }, { new: true }).lean();
-  
-  context.families = [family1, family2];
-  context.players = [updatedPlayer1_1, updatedPlayer2_1];
+  context.families = families;
+  context.family = families.length > 0 ? families[0] : null;
+  context.familyGucci = families.length > 0 ? families[0] : null; // legacy
+  context.familyUzi = families.length > 1 ? families[1] : null; // legacy
+
 
   // --- Турниры ---
-  const tournamentData = config.tournaments?.[0] || {};
-  context.tournaments = [
-    await Tournament.create({
-      name: 'Majestic Summer Cup 2024',
-      slug: 'majestic-summer-cup-2024-1',
-      template: context.tournamentTemplate._id,
-      tournamentType: 'family',
-      status: STATUSES.ACTIVE,
-      startDate: new Date(),
-      participants: [
-        { participantType: 'family', family: family1._id },
-        { participantType: 'family', family: family2._id },
-      ],
-      ...tournamentData,
-    })
-  ];
-  context.tournament = context.tournaments[0]; // для обратной совместимости
-
-  // --- Карты ---
-  const mapsConfig = typeof config.maps === 'function' ? config.maps(context) : (config.maps || []);
-  context.maps = [];
-  if (mapsConfig.length > 0) {
-    for (const mapConfig of mapsConfig) {
-      context.maps.push(await Map.create(mapConfig));
-    }
-  } else {
-    context.maps.push(await Map.create({
-        name: 'Dust 2 - Grand Final',
-        slug: 'dust-2-grand-final',
-        tournament: context.tournament._id,
-        template: context.mapTemplate1._id,
+  if (numTournaments > 0 && context.tournamentTemplate) {
+      const tournamentData = config.tournaments?.[0] || {};
+      context.tournament = await Tournament.create({
+        name: 'Majestic Summer Cup 2024',
+        slug: 'majestic-summer-cup-2024-1',
+        template: context.tournamentTemplate._id,
+        tournamentType: 'family',
         status: STATUSES.ACTIVE,
-        startDateTime: new Date(),
-        participants: [
-            { participant: family1._id, players: [player1_1._id] },
-            { participant: family2._id, players: [player2_1._id] },
-        ],
-    }));
-  }
-  context.map = context.maps[0]; // для обратной совместимости
-
-  // --- Участие в картах ---
-  if (config.familyMapParticipations) {
-    const participationsData = typeof config.familyMapParticipations === 'function'
-      ? config.familyMapParticipations(context)
-      : config.familyMapParticipations;
-      
-    // Убедимся, что у каждой записи есть tournamentId
-    const dataWithTournamentId = participationsData.map(p => ({
-      ...p,
-      tournamentId: p.tournamentId || context.tournament._id,
-    }));
-      
-    context.familyMapParticipations = await FamilyMapParticipation.insertMany(dataWithTournamentId);
+        startDate: new Date(),
+        participants: families.map(f => ({ participantType: 'family', family: f._id })),
+        ...tournamentData,
+      });
+      context.tournaments = [context.tournament];
   }
   
   // --- Участие в турнирах ---
-  const ftpData = config.familyTournamentParticipations
-    ? (typeof config.familyTournamentParticipations === 'function' ? config.familyTournamentParticipations(context) : config.familyTournamentParticipations)
-    : context.families.map(f => ({ family: f._id, tournament: context.tournament._id }));
+  if (context.tournament) {
+      const ftpData = config.familyTournamentParticipations
+        ? (typeof config.familyTournamentParticipations === 'function' ? config.familyTournamentParticipations(context) : config.familyTournamentParticipations)
+        : families.map(f => ({ family: f._id, tournament: context.tournament._id }));
 
-  if (ftpData && ftpData.length > 0) {
-    context.familyTournamentParticipations = await FamilyTournamentParticipation.insertMany(ftpData);
+      if (ftpData && ftpData.length > 0) {
+        await FamilyTournamentParticipation.insertMany(ftpData);
+        context.familyTournamentParticipations = await FamilyTournamentParticipation.find({ tournament: context.tournament._id }).lean();
+      }
+  }
+
+
+  // --- Карты ---
+  const mapsConfig = config.maps === null ? [] : (config.maps || [{}]);
+  context.maps = [];
+  if (mapsConfig.length > 0) {
+    const defaultMapData = {
+        name: 'Dust 2 - Grand Final',
+        slug: 'dust-2-grand-final',
+        tournament: context.tournament?._id,
+        template: context.mapTemplateDust2._id,
+        status: STATUSES.ACTIVE,
+        startDateTime: new Date(),
+        participants: context.families?.map(f => ({ participant: f._id, players: f.members.map(m => m.player) })) || [],
+    };
+
+    for (const mapConfig of mapsConfig) {
+        const finalMapData = { ...defaultMapData, ...mapConfig };
+        if (finalMapData.tournament) {
+            context.maps.push(await Map.create(finalMapData));
+        }
+    }
+    if(context.maps.length > 0) {
+        context.map = context.maps[0];
+    }
   }
   
-  if (config.playerTournamentParticipations) {
-    const participationsData = typeof config.playerTournamentParticipations === 'function'
-      ? config.playerTournamentParticipations(context)
-      : config.playerTournamentParticipations;
-    context.playerTournamentParticipations = await PlayerTournamentParticipation.insertMany(participationsData);
+  // Перечитываем документы из базы, чтобы получить "чистые" данные без методов Mongoose
+  const finalContext = {};
+  for(const key in context) {
+      if(context[key] && context[key].constructor.name === 'model') {
+          finalContext[key] = await context[key].constructor.findById(context[key]._id).lean();
+      } else {
+          finalContext[key] = context[key];
+      }
   }
 
-  // Для обратной совместимости со старыми тестами
-  context.mapTemplates = [context.mapTemplate1, context.mapTemplate2];
-
-  return context;
+  return { testData: finalContext };
 };
 
 /**

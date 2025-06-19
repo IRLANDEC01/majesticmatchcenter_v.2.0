@@ -12,17 +12,20 @@ describe('API /api/admin/families/[id]/owner', () => {
 
   beforeEach(async () => {
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb({ numPlayers: 2, numFamilies: 2 });
+    testData = data;
   });
 
   it('должен успешно сменить владельца семьи', async () => {
     // Arrange
-    const family = testData.families[0];
-    const oldOwner = testData.players[0];
-    const newOwner = await Player.create({ firstName: 'New', lastName: 'Owner' });
+    const family = testData.familyGucci;
+    const oldOwner = testData.playerGucci;
+    const newOwner = testData.playerUzi;
+    
     // Добавляем нового игрока в семью
-    family.members.push({ player: newOwner._id });
-    await family.save();
+    await Family.findByIdAndUpdate(family._id, {
+      $push: { members: { player: newOwner._id } },
+    });
 
     const request = new Request(`http://localhost/api/admin/families/${family._id}/owner`, {
       method: 'PATCH',
@@ -38,7 +41,7 @@ describe('API /api/admin/families/[id]/owner', () => {
     expect(response.status).toBe(200);
     expect(body.owner.toString()).toBe(newOwner._id.toString());
 
-    const updatedFamily = await Family.findById(family._id);
+    const updatedFamily = await Family.findById(family._id).lean();
     const oldOwnerMember = updatedFamily.members.find(m => m.player.toString() === oldOwner._id.toString());
     const newOwnerMember = updatedFamily.members.find(m => m.player.toString() === newOwner._id.toString());
     
@@ -48,7 +51,7 @@ describe('API /api/admin/families/[id]/owner', () => {
 
   it('должен возвращать ошибку 400, если новый владелец не является членом семьи', async () => {
     // Arrange
-    const family = testData.families[0];
+    const family = testData.familyGucci;
     const nonMember = await Player.create({ firstName: 'Non', lastName: 'Member' });
 
     const request = new Request(`http://localhost/api/admin/families/${family._id}/owner`, {
@@ -68,8 +71,8 @@ describe('API /api/admin/families/[id]/owner', () => {
   
   it('должен возвращать ошибку 400, если игрок уже является владельцем', async () => {
     // Arrange
-    const family = testData.families[0];
-    const currentOwner = testData.players[0];
+    const family = testData.familyGucci;
+    const currentOwner = testData.playerGucci;
 
     const request = new Request(`http://localhost/api/admin/families/${family._id}/owner`, {
         method: 'PATCH',

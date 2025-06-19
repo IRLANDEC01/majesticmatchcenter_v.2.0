@@ -188,11 +188,31 @@ export class StatisticsService {
    * @returns {Promise<void>}
    */
   async rollbackStatistics(mapId) {
-    // TODO: Реализовать логику отката.
-    // 1. Найти все записи `PlayerMapParticipation` по `mapId`.
-    // 2. Для каждой записи вычесть значения из `PlayerStats` игрока.
-    // 3. Удалить найденные записи `PlayerMapParticipation`.
-    console.log(`[StatisticsService] TODO: Rollback statistics for map ${mapId}`);
+    // TODO: Implement logic to rollback statistics for a map.
+    // This could involve deleting created stats entries or reverting to a previous state.
+  }
+
+  async updatePlayerStatsForMap(mapId, playerStats) {
+    // TODO: Implement logic to update player statistics based on map results.
+    // This will involve finding the relevant PlayerStats documents and updating them.
+    // Здесь должна быть логика для поиска и обновления статистики игроков.
+    // Пока что просто выводим информацию в консоль.
+  }
+
+  /**
+   * Обновляет статистику семей на основе результатов карты.
+   * @param {string} mapId - ID карты.
+   * @param {string} winnerId - ID победившей семьи/команды.
+   */
+  async updateFamilyStatsForMap(mapId, winnerId) {
+    // This will involve finding the relevant FamilyStats documents and updating them.
+    // Здесь должна быть логика для поиска и обновления статистики семей.
+    // Пока что просто выводим информацию в консоль.
+  }
+
+  async rollbackMapStatistics(mapId) {
+    // TODO: Implement logic to rollback statistics for a map.
+    // This could involve deleting created stats entries or reverting to a previous state.
   }
 }
 

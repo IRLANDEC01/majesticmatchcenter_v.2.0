@@ -26,7 +26,7 @@ import { POST, GET } from './route.js';
 import models from '@/models/index.js';
 import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
 
-const { MyModel } = models;
+const { Family } = models;
 
 describe('/api/path/to/endpoint', () => {
   let testData; // Переменная для хранения созданных данных
@@ -61,7 +61,7 @@ describe('/api/path/to/endpoint', () => {
       expect(body.name).toBe(requestData.name);
       
       // Assert: проверяем состояние БД
-      const dbItem = await MyModel.findById(body._id);
+      const dbItem = await Family.findById(body._id);
       expect(dbItem).not.toBeNull();
     });
   });
@@ -69,7 +69,7 @@ describe('/api/path/to/endpoint', () => {
   describe('GET', () => {
     it('должен возвращать сущность, созданную в populateDb', async () => {
         // Arrange: Используем данные, созданные в beforeEach
-        const itemToFind = testData.myModels[0];
+        const itemToFind = testData.familyGucci;
         const request = new Request(`http://localhost/api/.../${itemToFind._id}`);
         
         // Act
@@ -166,3 +166,44 @@ describe('/api/path/to/endpoint', () => {
     // result.data теперь будет { id: '123', name: 'Test', description: '...' }
     // БЕЗ .passthrough() результат был бы просто { id: '123' }
     ``` 
+
+## Принцип самодостаточных тестов (Self-Contained Tests)
+
+В ходе рефакторинга был выработан ключевой принцип для написания надежных и предсказуемых интеграционных тестов для API-маршрутов:
+
+**Каждый тест (`it` блок) должен быть полностью самодостаточным.**
+
+Это означает:
+1.  **Никакой зависимости от `beforeEach`:** Тест не должен полагаться на сложные данные, созданные в хуке `beforeEach`. Этот хук может использоваться для общих действий, таких как `dbClear()`, но не для создания специфичных для теста сущностей.
+2.  **Создание данных внутри теста:** Все необходимые для теста данные (модели игроков, семей, турниров) должны создаваться непосредственно внутри `it` блока. Это делает логику теста абсолютно прозрачной.
+3.  **Очистка перед созданием:** В начале теста, который требует изолированных данных, следует вызывать `dbClear()`, чтобы гарантировать отсутствие "мусора" от предыдущих запусков.
+
+**Пример плохого теста (зависит от `beforeEach`):**
+```javascript
+// beforeEach
+beforeEach(async () => {
+  testData = await populateDb({ numFamilies: 2 }); // Создает много всего
+});
+
+it('should update a family', () => {
+  const familyToUpdate = testData.families[0]; // Неявная зависимость
+  // ... test logic
+});
+```
+
+**Пример хорошего, самодостаточного теста:**
+```javascript
+it('should update a family', async () => {
+  await dbClear(); // 1. Очистка
+  const family = await Family.create({ name: 'Test Family' }); // 2. Создание нужных данных
+  
+  const request = new Request(...); // 3. Логика теста
+  // ...
+});
+```
+
+Этот подход предотвращает каскадные падения тестов, упрощает отладку и делает тестовый набор значительно более стабильным.
+
+## Покрытие кода (Code Coverage)
+
+Мы не гонимся за 100% покрытием. Наша цель — **уверенность в коде**. Мы фокусируемся на тестировании критически важных путей и бизнес-логики. Отчеты о покрытии используются как инструмент для выявления "слепых зон", а не как самоцель. 

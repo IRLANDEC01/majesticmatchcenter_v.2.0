@@ -1,21 +1,8 @@
 import { NextResponse } from 'next/server';
 import { tournamentService } from '@/lib/domain/tournaments/tournament-service.js';
-import { z } from 'zod';
-import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/db.js';
 import { handleApiError } from '@/lib/api/handle-api-error';
-
-// Схема валидации для создания турнира
-const tournamentCreateSchema = z.object({
-  name: z.string().min(3, 'Название должно содержать минимум 3 символа'),
-  description: z.string().optional(),
-  template: z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
-    message: 'Неверный формат ID шаблона',
-  }),
-  tournamentType: z.enum(['family', 'team']),
-  startDate: z.coerce.date(),
-  // Участники больше не являются частью начального создания
-});
+import { createTournamentSchema } from '@/lib/api/schemas/tournaments/tournament-schemas';
 
 /**
  * POST /api/admin/tournaments
@@ -24,7 +11,7 @@ const tournamentCreateSchema = z.object({
 export async function POST(request) {
   try {
     const json = await request.json();
-    const validationResult = tournamentCreateSchema.safeParse(json);
+    const validationResult = createTournamentSchema.safeParse(json);
 
     if (!validationResult.success) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
@@ -33,6 +20,7 @@ export async function POST(request) {
     const newTournament = await tournamentService.createTournament(validationResult.data);
     return NextResponse.json(newTournament, { status: 201 });
   } catch (error) {
+    console.error('ERROR in POST /api/admin/tournaments:', error);
     return handleApiError(error);
   }
 }

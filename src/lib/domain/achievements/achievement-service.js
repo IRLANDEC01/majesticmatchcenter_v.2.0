@@ -12,7 +12,7 @@ export class AchievementService {
     // TODO: Реализовать логику
     // 1. Создать достижение "MVP Карты" для mvpPlayerId
     // 2. Проанализировать статистику и создать другие достижения (если нужно)
-    console.log(`Creating achievements for map ${mapId}...`);
+   
     return Promise.resolve();
   }
 
@@ -23,7 +23,7 @@ export class AchievementService {
   async deleteMapAchievements(mapId) {
     // TODO: Реализовать логику
     // 1. Найти и удалить все PlayerAchievement, где mapId === mapId
-    console.log(`Deleting achievements for map ${mapId}...`);
+
     return Promise.resolve();
   }
 
@@ -39,7 +39,6 @@ export class AchievementService {
     // 1. Создать достижение для MVP (`mapData.mvp`).
     // 2. Проанализировать `statistics`, найти игрока с лучшим K/D, наибольшим уроном и т.д.
     // 3. Создать для них соответствующие записи в `PlayerAchievement`.
-    console.log(`[AchievementService] TODO: Process achievements for map ${mapId}`, mapData, statistics);
   }
 
   /**
@@ -50,8 +49,34 @@ export class AchievementService {
   async rollbackMapAchievements(mapId) {
     // TODO: Реализовать логику.
     // 1. Найти и удалить все записи `PlayerAchievement`, где `sourceMapId` === `mapId`.
-    console.log(`[AchievementService] TODO: Rollback achievements for map ${mapId}`);
+  }
+
+  async createAchievementsForMap(mapId, statistics) {
+    // TODO: Implement logic to create achievements based on map statistics.
+  }
+
+  async deleteAchievementsForMap(mapId) {
+    // TODO: Implement logic to delete achievements associated with a map.
+  }
+
+  /**
+   * Анализирует результаты карты и выдает достижения.
+   * @param {string} mapId - ID карты.
+   * @param {object} mapData - Данные о карте, включая участников.
+   * @param {object} statistics - Агрегированная статистика по карте.
+   */
+  async processMapCompletion(mapId, mapData, statistics) {
+    // TODO: Здесь будет логика определения и выдачи ачивок.
+    // Например, "Первая кровь", "Топ фрагер", "Сделал -5" и т.д.
+  }
+
+  /**
+   * Откатывает достижения, выданные за карту.
+   * @param {string} mapId - ID карты.
+   */
+  async rollbackMapCompletion(mapId) {
+    // TODO: Логика отката ачивок. Скорее всего, простое удаление.
   }
 }
 
-export const achievementService = new AchievementService(); 
+export default new AchievementService(); 

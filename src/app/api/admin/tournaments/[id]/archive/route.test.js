@@ -12,7 +12,8 @@ describe('/api/admin/tournaments/[id]/archive', () => {
   afterAll(dbDisconnect);
   beforeEach(async () => {
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb({ numTournaments: 1 });
+    testData = data;
   });
 
   describe('PATCH', () => {

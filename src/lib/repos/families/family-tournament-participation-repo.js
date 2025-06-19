@@ -25,9 +25,9 @@ class FamilyTournamentParticipationRepo {
    */
   async updateByFamilyAndTournament(familyId, tournamentId, updateData) {
     return FamilyTournamentParticipation.findOneAndUpdate(
-      { familyId, tournamentId },
+      { family: familyId, tournament: tournamentId },
       updateData,
-      { new: true }
+      { new: true, upsert: true }
     ).lean();
   }
 }

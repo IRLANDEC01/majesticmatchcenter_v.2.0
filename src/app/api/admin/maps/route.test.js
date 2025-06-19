@@ -11,7 +11,8 @@ describe('/api/admin/maps', () => {
   afterAll(dbDisconnect);
   beforeEach(async () => {
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb();
+    testData = data;
   });
 
   describe('GET', () => {
@@ -28,14 +29,16 @@ describe('/api/admin/maps', () => {
   describe('POST', () => {
     it('должен успешно создавать карты с инкрементальным slug и возвращать 201', async () => {
       // Arrange
-      const { tournament, mapTemplates } = testData;
-      const mapTemplate = mapTemplates[0];
+      const { tournament, mapTemplateDust2 } = testData;
+      
+      // Удаляем карту, созданную в populateDb, чтобы тест был чистым
+      await Map.deleteMany({});
 
       // --- Создание первой карты ---
       const mapData1 = {
         name: 'First Test Map',
         tournament: tournament._id.toString(),
-        template: mapTemplate._id.toString(),
+        template: mapTemplateDust2._id.toString(),
         startDateTime: new Date(),
       };
 
@@ -48,8 +51,8 @@ describe('/api/admin/maps', () => {
       const response1 = await POST(req1);
       const body1 = await response1.json();
       
-      // populateDb создает 1 карту, поэтому счетчик начнется с 2
-      const expectedSlug1 = `${tournament.slug}-${mapTemplate.slug}-2`;
+      // Счетчик slug должен начаться с 1, так как мы очистили карты
+      const expectedSlug1 = `${tournament.slug}-${mapTemplateDust2.slug}-1`;
       expect(response1.status).toBe(201);
       expect(body1.slug).toBe(expectedSlug1);
 
@@ -57,7 +60,7 @@ describe('/api/admin/maps', () => {
       const mapData2 = {
         name: 'Second Test Map',
         tournament: tournament._id.toString(),
-        template: mapTemplate._id.toString(),
+        template: mapTemplateDust2._id.toString(),
         startDateTime: new Date(),
       };
       
@@ -70,7 +73,7 @@ describe('/api/admin/maps', () => {
       const response2 = await POST(req2);
       const body2 = await response2.json();
       
-      const expectedSlug2 = `${tournament.slug}-${mapTemplate.slug}-3`;
+      const expectedSlug2 = `${tournament.slug}-${mapTemplateDust2.slug}-2`;
       expect(response2.status).toBe(201);
       expect(body2.slug).toBe(expectedSlug2);
     });

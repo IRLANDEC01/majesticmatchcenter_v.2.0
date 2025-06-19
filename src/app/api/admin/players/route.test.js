@@ -11,7 +11,8 @@ describe('API /api/admin/players', () => {
   afterAll(dbDisconnect);
   beforeEach(async () => {
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb();
+    testData = data;
   });
 
   describe('POST', () => {
@@ -41,7 +42,7 @@ describe('API /api/admin/players', () => {
 
     it('должен возвращать 409 при попытке создать дубликат по имени и фамилии', async () => {
       // Arrange: Используем данные, созданные в populateDb
-      const existingPlayer = testData.players[0];
+      const existingPlayer = testData.player;
       const request = new Request('http://localhost/api/admin/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,7 +63,7 @@ describe('API /api/admin/players', () => {
   describe('GET', () => {
     it('должен возвращать только неархивированных игроков по умолчанию', async () => {
       // Arrange: Архивируем одного из созданных игроков
-      const playerToArchive = testData.players[1];
+      const playerToArchive = testData.playerUzi;
       await Player.findByIdAndUpdate(playerToArchive._id, { archivedAt: new Date() });
 
       const request = new Request('http://localhost/api/admin/players');
@@ -75,12 +76,12 @@ describe('API /api/admin/players', () => {
       expect(response.status).toBe(200);
       // populateDb создает 2 игроков, одного мы архивировали, должен остаться 1
       expect(body.length).toBe(1);
-      expect(body[0].firstName).toBe(testData.players[0].firstName);
+      expect(body[0].firstName).toBe(testData.playerGucci.firstName);
     });
 
     it('должен возвращать всех игроков при `include_archived=true`', async () => {
       // Arrange: Архивируем одного игрока
-      const playerToArchive = testData.players[1];
+      const playerToArchive = testData.playerUzi;
       await Player.findByIdAndUpdate(playerToArchive._id, { archivedAt: new Date() });
 
       const url = new URL('http://localhost/api/admin/players');

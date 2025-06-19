@@ -23,7 +23,7 @@ export async function PATCH(request, { params }) {
   try {
     const { id } = params;
     const payload = await request.json();
-
+    
     const validationResult = completePayloadSchema.safeParse(payload);
     if (!validationResult.success) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });

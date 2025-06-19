@@ -1,7 +1,7 @@
 import { GET, POST } from './route.js';
 import models from '@/models/index.js';
 import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
-import { TOURNAMENT_SCORING_TYPES } from '@/lib/constants.js';
+import { RESULT_TIERS, CURRENCY_TYPES } from '@/lib/constants.js';
 
 const { TournamentTemplate } = models;
 
@@ -12,15 +12,23 @@ describe('API /api/admin/tournament-templates', () => {
   afterAll(dbDisconnect);
   beforeEach(async () => {
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb();
+    testData = data;
   });
 
   describe('POST', () => {
-    it.skip('должен успешно создавать шаблон и возвращать 201', async () => {
+    it('должен успешно создавать шаблон и возвращать 201', async () => {
       // Arrange
       const templateData = { 
         name: 'New Unique Tournament Template',
-        mapTemplates: [testData.mapTemplates[0]._id.toString()],
+        mapTemplates: [testData.mapTemplateDust2._id.toString()],
+        description: 'A test description',
+        rules: 'A test ruleset',
+        prizePool: [{
+          target: { tier: RESULT_TIERS.WINNER, rank: 1 },
+          currency: CURRENCY_TYPES.GTA_DOLLARS,
+          amount: 100,
+        }],
       };
       const request = new Request('http://localhost/api/admin/tournament-templates', {
         method: 'POST',
@@ -36,8 +44,10 @@ describe('API /api/admin/tournament-templates', () => {
       expect(response.status).toBe(201);
       expect(body.name).toBe(templateData.name);
       
-      const dbTemplate = await TournamentTemplate.findById(body._id);
+      const dbTemplate = await TournamentTemplate.findById(body._id).lean();
       expect(dbTemplate).not.toBeNull();
+      expect(dbTemplate.prizePool[0].target.tier).toBe(RESULT_TIERS.WINNER);
+      expect(dbTemplate.prizePool[0].amount).toBe(100);
     });
 
     it('должен возвращать 409 при попытке создать дубликат', async () => {
@@ -45,7 +55,7 @@ describe('API /api/admin/tournament-templates', () => {
       const existingTemplate = testData.tournamentTemplate;
       const templateData = { 
         name: existingTemplate.name, // Используем то же имя
-        mapTemplates: [testData.mapTemplates[0]._id.toString()],
+        mapTemplates: [testData.mapTemplateDust2._id.toString()],
       };
 
       const request = new Request('http://localhost/api/admin/tournament-templates', {
@@ -71,8 +81,7 @@ describe('API /api/admin/tournament-templates', () => {
       await TournamentTemplate.create({ 
         name: 'A New Active Template', 
         slug: 'a-new-active-template',
-        mapTemplates: [testData.mapTemplates[0]._id],
-        scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
+        mapTemplates: [testData.mapTemplateDust2._id],
       });
 
       const request = new Request('http://localhost/api/admin/tournament-templates');
@@ -95,8 +104,7 @@ describe('API /api/admin/tournament-templates', () => {
       await TournamentTemplate.create({ 
         name: 'Another Template', 
         slug: 'another-template',
-        mapTemplates: [testData.mapTemplates[0]._id],
-        scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
+        mapTemplates: [testData.mapTemplateDust2._id],
       });
 
       const url = new URL('http://localhost/api/admin/tournament-templates');

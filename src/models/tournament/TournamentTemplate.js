@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { prizeRuleSchema } from './Tournament.js';
 
 const tournamentTemplateSchema = new mongoose.Schema({
   // Название шаблона, например, "Majestic Cup: Summer"
@@ -25,6 +26,15 @@ const tournamentTemplateSchema = new mongoose.Schema({
   defaultImage: {
     type: String,
     trim: true,
+  },
+  // Правила турнира
+  rules: {
+    type: String,
+    trim: true,
+  },
+  // Призовой фонд
+  prizePool: {
+    type: [prizeRuleSchema],
   },
   // Сценарий турнира: массив ID шаблонов карт
   mapTemplates: {

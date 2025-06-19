@@ -12,7 +12,8 @@ describe('/api/admin/maps/[id]', () => {
   afterAll(dbDisconnect);
   beforeEach(async () => {
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb({ maps: [{}] });
+    testData = data;
   });
 
   describe('GET', () => {

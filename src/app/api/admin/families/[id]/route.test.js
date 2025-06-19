@@ -12,13 +12,14 @@ describe('/api/admin/families/[id]', () => {
   afterAll(dbDisconnect);
   beforeEach(async () => {
     await dbClear();
-    testData = await populateDb();
+    const { testData: data } = await populateDb();
+    testData = data;
   });
 
   describe('GET', () => {
     it('должен возвращать семью по ID и статус 200', async () => {
       // Arrange
-      const familyToFind = testData.families[0];
+      const familyToFind = testData.family;
 
       // Act
       const response = await GET(null, { params: { id: familyToFind._id.toString() } });
@@ -42,7 +43,7 @@ describe('/api/admin/families/[id]', () => {
 
     it('должен возвращать 404, если семья архивирована', async () => {
       // Arrange
-      const familyToArchive = testData.families[0];
+      const familyToArchive = testData.family;
       await Family.findByIdAndUpdate(familyToArchive._id, { archivedAt: new Date() });
       
       // Act
@@ -64,7 +65,7 @@ describe('/api/admin/families/[id]', () => {
   describe('PUT', () => {
     it('должен успешно обновлять семью и возвращать статус 200', async () => {
       // Arrange
-      const familyToUpdate = testData.families[0];
+      const familyToUpdate = testData.family;
       const updateData = { description: 'A new description for testing' };
       const request = new Request(`http://localhost/api/admin/families/${familyToUpdate._id}`, {
         method: 'PUT',
@@ -83,8 +84,8 @@ describe('/api/admin/families/[id]', () => {
 
     it('должен возвращать 409 при попытке обновить имя на уже существующее', async () => {
       // Arrange
-      const familyToUpdate = testData.families[1];
-      const conflictingFamily = testData.families[0];
+      const familyToUpdate = testData.familyUzi;
+      const conflictingFamily = testData.familyGucci;
 
       const request = new Request(`http://localhost/api/admin/families/${familyToUpdate._id}`, {
         method: 'PUT',
