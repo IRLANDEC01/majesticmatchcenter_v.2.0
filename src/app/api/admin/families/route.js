@@ -1,18 +1,8 @@
 import { NextResponse } from 'next/server';
 import { familyService } from '@/lib/domain/families/family-service';
 import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
 import { handleApiError } from '@/lib/api/handle-api-error';
-
-// Схема для создания семьи.
-const createFamilySchema = z.object({
-  name: z.string().trim().min(1, 'Название семьи обязательно.'),
-  displayLastName: z.string().trim().min(1, 'Отображаемая фамилия обязательна.'),
-  ownerId: z.string({ required_error: 'ID владельца является обязательным полем.' }).min(1, 'ID владельца не может быть пустым.'),
-  description: z.string().trim().max(5000).optional(),
-  logo: z.string().url('Некорректный URL логотипа.').optional(),
-  banner: z.string().url('Некорректный URL баннера.').optional(),
-});
+import { createFamilySchema, getFamiliesSchema } from '@/lib/api/schemas/families/family-schemas';
 
 /**
  * GET /api/admin/families
@@ -22,9 +12,10 @@ const createFamilySchema = z.object({
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const includeArchived = searchParams.get('include_archived') === 'true';
+    const queryParams = Object.fromEntries(searchParams.entries());
+    const { include_archived } = getFamiliesSchema.parse(queryParams);
 
-    const families = await familyService.getAllFamilies({ includeArchived });
+    const families = await familyService.getAllFamilies({ includeArchived: include_archived });
     return NextResponse.json(families);
   } catch (error) {
     return handleApiError(error);
@@ -37,14 +28,12 @@ export async function GET(request) {
  */
 export async function POST(request) {
   try {
-    const data = await request.json();
-    
-    const validationResult = createFamilySchema.safeParse(data);
-    if (!validationResult.success) {
-      return NextResponse.json({ error: validationResult.error.format() }, { status: 400 });
-    }
+    await connectToDatabase(); // Убедимся, что соединение с БД установлено
+    const body = await request.json();
+    const validatedData = createFamilySchema.parse(body);
 
-    const newFamily = await familyService.createFamily(validationResult.data);
+    const newFamily = await familyService.createFamily(validatedData);
+
     return NextResponse.json(newFamily, { status: 201 });
   } catch (error) {
     return handleApiError(error);

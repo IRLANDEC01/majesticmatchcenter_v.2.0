@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { familyService } from '@/lib/domain/families/family-service';
 import { handleApiError } from '@/lib/api/handle-api-error';
+import { updateFamilySchema } from '@/lib/api/schemas/families/family-schemas';
 
 /**
  * GET /api/admin/families/[id]
@@ -21,9 +22,26 @@ export async function GET(request, { params }) {
  */
 export async function PUT(request, { params }) {
   try {
-    const data = await request.json();
-    const updatedFamily = await familyService.updateFamily(params.id, data);
+    const body = await request.json();
+    const validatedData = updateFamilySchema.parse(body);
+
+    const updatedFamily = await familyService.updateFamily(params.id, validatedData);
     return NextResponse.json(updatedFamily);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+/**
+ * Удаление семьи (мягкое удаление).
+ * @param {Request} request
+ * @param {object} context - Контекст с параметрами маршрута.
+ * @param {string} context.params.id - ID семьи.
+ */
+export async function DELETE(request, { params }) {
+  try {
+    await familyService.archiveFamily(params.id);
+    return new Response(null, { status: 204 });
   } catch (error) {
     return handleApiError(error);
   }

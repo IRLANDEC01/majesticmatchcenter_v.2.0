@@ -1,4 +1,4 @@
-import { DuplicateError, ValidationError } from '@/lib/errors.js';
+import { DuplicateError, ValidationError, NotFoundError } from '@/lib/errors.js';
 import { playerRepo } from '@/lib/repos/players/player-repo.js';
 import { familyRepo } from '@/lib/repos/families/family-repo.js';
 import PlayerStats from '@/models/player/PlayerStats.js';
@@ -40,10 +40,27 @@ class PlayerService {
   /**
    * Получает игрока по ID.
    * @param {string} id - ID игрока.
-   * @returns {Promise<object|null>}
+   * @param {object} [options] - Опции.
+   * @param {boolean} [options.includeArchived=false] - Включить архивированных.
+   * @returns {Promise<object>}
+   * @throws {NotFoundError} Если игрок не найден или архивирован.
    */
-  async getPlayerById(id) {
-    return playerRepo.findById(id);
+  async getPlayerById(id, { includeArchived = false } = {}) {
+    // Запрашиваем из репозитория, принудительно включая архивированных,
+    // чтобы затем обработать логику здесь, в сервисе.
+    const player = await playerRepo.findById(id, { includeArchived: true });
+
+    if (!player) {
+      throw new NotFoundError('Игрок не найден.');
+    }
+
+    // Если игрок архивирован, а мы не просили включать архивированных,
+    // также считаем, что он "не найден" для данного запроса.
+    if (player.archivedAt && !includeArchived) {
+      throw new NotFoundError('Игрок не найден (архивирован).');
+    }
+
+    return player;
   }
 
   /**

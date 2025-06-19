@@ -1,21 +1,8 @@
 import { NextResponse } from 'next/server';
 import { playerService } from '@/lib/domain/players/player-service';
 import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
-import mongoose from 'mongoose';
 import { handleApiError } from '@/lib/api/handle-api-error';
-
-const MongooseID = z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
-  message: 'Некорректный ID.',
-});
-
-const updatePlayerSchema = z.object({
-  firstName: z.string().trim().min(1, 'Имя обязательно.').optional(),
-  lastName: z.string().trim().min(1, 'Фамилия обязательна.').optional(),
-  bio: z.string().trim().max(5000).optional(),
-  avatar: z.string().url('Некорректный URL аватара.').optional(),
-  currentFamily: z.string().nullable().optional(), // Может быть ID или null
-});
+import { updatePlayerSchema } from '@/lib/api/schemas/players/player-schemas';
 
 /**
  * GET /api/admin/players/[id]
@@ -23,21 +10,13 @@ const updatePlayerSchema = z.object({
  */
 export async function GET(request, { params }) {
   try {
-    const idValidation = MongooseID.safeParse(params.id);
-    if (!idValidation.success) {
-      return NextResponse.json({ message: 'Некорректный ID игрока' }, { status: 400 });
-    }
-
     await connectToDatabase();
+    // Валидация ID делегируется в сервис или repo,
+    // а CastError будет пойман в handleApiError
     const player = await playerService.getPlayerById(params.id);
-
-    if (!player) {
-      return NextResponse.json({ message: 'Игрок не найден' }, { status: 404 });
-    }
     return NextResponse.json(player);
   } catch (error) {
-    console.error(`Failed to get player ${params.id}:`, error);
-    return NextResponse.json({ message: 'Ошибка сервера при получении игрока' }, { status: 500 });
+    return handleApiError(error);
   }
 }
 
@@ -47,18 +26,11 @@ export async function GET(request, { params }) {
  */
 export async function PUT(request, { params }) {
   try {
-    const validationResult = updatePlayerSchema.safeParse(await request.json());
+    await connectToDatabase();
+    const json = await request.json();
+    const validatedData = updatePlayerSchema.parse(json);
 
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten() }, { status: 400 });
-    }
-
-    const updatedPlayer = await playerService.updatePlayer(params.id, validationResult.data);
-
-    if (!updatedPlayer) {
-      return NextResponse.json({ message: 'Игрок не найден' }, { status: 404 });
-    }
-
+    const updatedPlayer = await playerService.updatePlayer(params.id, validatedData);
     return NextResponse.json(updatedPlayer);
   } catch (error) {
     return handleApiError(error);

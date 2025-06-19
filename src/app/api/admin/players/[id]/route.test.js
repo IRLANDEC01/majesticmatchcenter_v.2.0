@@ -1,97 +1,82 @@
-import { GET, PUT } from './route.js';
-import models from '@/models/index.js';
-import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
+import { GET, PUT } from './route';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
+import models from '@/models';
 import mongoose from 'mongoose';
 
 const { Player } = models;
 
 describe('/api/admin/players/[id]', () => {
-  let testData;
-
   beforeAll(dbConnect);
   afterAll(dbDisconnect);
-  beforeEach(async () => {
-    await dbClear();
-    const { testData: data } = await populateDb();
-    testData = data;
-  });
+  beforeEach(dbClear);
 
   describe('GET', () => {
+    let testPlayer;
+
+    beforeEach(async () => {
+      testPlayer = await Player.create({ firstName: 'Get', lastName: 'Test' });
+    });
+
     it('должен возвращать игрока по ID и статус 200', async () => {
-      // Arrange
-      const playerToFind = testData.player;
-      
-      // Act
-      const response = await GET(null, { params: { id: playerToFind._id.toString() } });
+      const response = await GET(null, { params: { id: testPlayer._id.toString() } });
       const body = await response.json();
 
-      // Assert
       expect(response.status).toBe(200);
-      expect(body.firstName).toBe(playerToFind.firstName);
+      expect(body.firstName).toBe(testPlayer.firstName);
     });
 
     it('должен возвращать 404, если игрок не найден', async () => {
-      // Arrange
       const nonExistentId = new mongoose.Types.ObjectId();
-
-      // Act
       const response = await GET(null, { params: { id: nonExistentId.toString() } });
-
-      // Assert
       expect(response.status).toBe(404);
     });
 
     it('должен возвращать 404, если игрок архивирован', async () => {
-      // Arrange
-      const playerToArchive = testData.player;
-      await Player.findByIdAndUpdate(playerToArchive._id, { archivedAt: new Date() });
+      testPlayer.archivedAt = new Date();
+      await testPlayer.save();
 
-      // Act
-      const response = await GET(null, { params: { id: playerToArchive._id.toString() } });
-      
-      // Assert
+      const response = await GET(null, { params: { id: testPlayer._id.toString() } });
       expect(response.status).toBe(404);
     });
   });
 
   describe('PUT', () => {
+    let playerToUpdate;
+    let conflictingPlayer;
+
+    beforeEach(async () => {
+      [playerToUpdate, conflictingPlayer] = await Player.create([
+        { firstName: 'Update', lastName: 'Me' },
+        { firstName: 'Conflict', lastName: 'Name' },
+      ]);
+    });
+
     it('должен успешно обновлять игрока', async () => {
-      // Arrange
-      const playerToUpdate = testData.player;
       const updateData = { bio: 'A new bio for testing' };
-      const request = new Request(`http://localhost/api/admin/players/${playerToUpdate._id}`, {
+      const request = new Request('http://localhost', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData),
       });
 
-      // Act
       const response = await PUT(request, { params: { id: playerToUpdate._id.toString() } });
       const body = await response.json();
 
-      // Assert
       expect(response.status).toBe(200);
       expect(body.bio).toBe(updateData.bio);
     });
 
     it('должен возвращать 409 при попытке обновить имя на уже существующее', async () => {
-      // Arrange
-      const playerToUpdate = testData.playerUzi;
-      const conflictingPlayer = testData.playerGucci;
-
-      const request = new Request(`http://localhost/api/admin/players/${playerToUpdate._id}`, {
+      const request = new Request('http://localhost', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          firstName: conflictingPlayer.firstName, 
-          lastName: conflictingPlayer.lastName 
+        body: JSON.stringify({
+          firstName: conflictingPlayer.firstName,
+          lastName: conflictingPlayer.lastName,
         }),
       });
-      
-      // Act
-      const response = await PUT(request, { params: { id: playerToUpdate._id.toString() } });
 
-      // Assert
+      const response = await PUT(request, { params: { id: playerToUpdate._id.toString() } });
       expect(response.status).toBe(409);
     });
   });

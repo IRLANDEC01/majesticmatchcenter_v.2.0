@@ -5,16 +5,6 @@ import { DuplicateError, NotFoundError, ValidationError } from '@/lib/errors';
 import { z } from 'zod';
 import { FAMILY_MEMBER_ROLES } from '@/lib/constants';
 
-// Схема Zod для валидации данных при создании и обновлении семьи.
-const familySchema = z.object({
-  name: z.string().trim().min(1, 'Название семьи обязательно.'),
-  displayLastName: z.string().trim().min(1, 'Отображаемая фамилия обязательна.'),
-  ownerId: z.string({ required_error: 'ID владельца является обязательным полем.' }).min(1, 'ID владельца не может быть пустым.'),
-  description: z.string().trim().max(5000).optional(),
-  logo: z.string().url('Некорректный URL логотипа.').optional().nullable(),
-  banner: z.string().url('Некорректный URL баннера.').optional().nullable(),
-});
-
 /**
  * @class FamilyService
  * @description Сервис для управления бизнес-логикой семей.
@@ -37,11 +27,8 @@ export class FamilyService {
    * @returns {Promise<object>}
    */
   async createFamily(familyData) {
-    const validationResult = familySchema.safeParse(familyData);
-    if (!validationResult.success) {
-      throw new ValidationError(validationResult.error.flatten().fieldErrors);
-    }
-    const { ownerId, ...validatedData } = validationResult.data;
+    // Валидация была перенесена в route.js
+    const { ownerId, name, displayLastName, description, logo, banner } = familyData;
 
     // 1. Проверяем, что игрок-владелец существует и не архивирован.
     const owner = await playerRepo.findById(ownerId);
@@ -55,11 +42,15 @@ export class FamilyService {
     }
 
     // 2. Проверяем уникальность названия семьи
-    await this._validateNameUniqueness(validatedData.name);
+    await this._validateNameUniqueness(name);
 
     // 3. Формируем данные для создания
     const familyToCreate = {
-      ...validatedData,
+      name,
+      displayLastName,
+      description,
+      logo,
+      banner,
       owner: ownerId, // Устанавливаем ID владельца
       members: [
         {
@@ -119,7 +110,17 @@ export class FamilyService {
    * @throws {DuplicateError} Если имя семьи уже занято.
    */
   async updateFamily(id, familyData) {
-    const validationResult = familySchema.partial().safeParse(familyData);
+    // Используем Zod для валидации, но определяем схему локально для этого метода,
+    // так как она отличается от схемы создания (все поля опциональны).
+    const updateSchema = z.object({
+        name: z.string().trim().min(1).optional(),
+        displayLastName: z.string().trim().min(1).optional(),
+        description: z.string().trim().max(5000).optional(),
+        logo: z.string().url().optional().nullable(),
+        banner: z.string().url().optional().nullable(),
+    }).partial();
+
+    const validationResult = updateSchema.safeParse(familyData);
     if (!validationResult.success) {
       throw new ValidationError('Ошибка валидации', validationResult.error.flatten().fieldErrors);
     }

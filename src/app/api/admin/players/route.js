@@ -1,16 +1,11 @@
 import { NextResponse } from 'next/server';
 import { playerService } from '@/lib/domain/players/player-service';
 import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
-import { DuplicateError } from '@/lib/errors';
-
-// Zod-схема для создания игрока, более строгая чем модель Mongoose
-const createPlayerSchema = z.object({
-  firstName: z.string().trim().min(1, 'Имя обязательно.'),
-  lastName: z.string().trim().min(1, 'Фамилия обязательна.'),
-  bio: z.string().trim().max(5000).optional(),
-  avatar: z.string().url('Некорректный URL аватара.').optional(),
-});
+import { handleApiError } from '@/lib/api/handle-api-error';
+import {
+  createPlayerSchema,
+  getPlayersSchema,
+} from '@/lib/api/schemas/players/player-schemas';
 
 /**
  * GET /api/admin/players
@@ -20,12 +15,13 @@ export async function GET(request) {
   try {
     await connectToDatabase();
     const { searchParams } = new URL(request.url);
-    const includeArchived = searchParams.get('include_archived') === 'true';
-    const players = await playerService.getAllPlayers({ includeArchived });
+    const queryParams = Object.fromEntries(searchParams.entries());
+    const { include_archived } = getPlayersSchema.parse(queryParams);
+
+    const players = await playerService.getAllPlayers({ includeArchived: include_archived });
     return NextResponse.json(players);
   } catch (error) {
-    console.error('Failed to get players:', error);
-    return NextResponse.json({ message: 'Ошибка сервера при получении игроков' }, { status: 500 });
+    return handleApiError(error);
   }
 }
 
@@ -37,21 +33,11 @@ export async function POST(request) {
   try {
     await connectToDatabase();
     const json = await request.json();
+    const validatedData = createPlayerSchema.parse(json);
 
-    const validationResult = createPlayerSchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const newPlayer = await playerService.createPlayer(validationResult.data);
+    const newPlayer = await playerService.createPlayer(validatedData);
     return NextResponse.json(newPlayer, { status: 201 });
   } catch (error) {
-    if (error instanceof DuplicateError) {
-      return NextResponse.json({ message: error.message }, { status: 409 });
-    }
-    
-    // Логируем все остальные, непредвиденные ошибки
-    console.error('Failed to create player:', error);
-    return NextResponse.json({ message: 'Ошибка сервера при создании игрока' }, { status: 500 });
+    return handleApiError(error);
   }
 } 
