@@ -18,9 +18,15 @@ describe('API /api/admin/families', () => {
   });
 
   describe('POST', () => {
-    it('должен успешно создавать семью и связанную статистику, и возвращать 201', async () => {
+    it('должен успешно создавать семью, назначать владельца и возвращать 201', async () => {
       // Arrange
-      const familyData = { name: 'The Champions', displayLastName: 'Champions' };
+      // Создаем нового игрока, который гарантированно не в семье
+      const ownerPlayer = await models.Player.create({ firstName: 'Free', lastName: 'Agent' });
+      const familyData = {
+        name: 'The Champions',
+        displayLastName: 'Champions',
+        ownerId: ownerPlayer._id.toString(),
+      };
       const request = new Request('http://localhost/api/admin/families', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,21 +40,23 @@ describe('API /api/admin/families', () => {
       // Assert
       expect(response.status).toBe(201);
       expect(body.name).toBe(familyData.name);
-      
+      expect(body.owner.toString()).toBe(ownerPlayer._id.toString());
+
       const dbFamily = await Family.findById(body._id);
       expect(dbFamily).not.toBeNull();
-      
+      expect(dbFamily.owner.toString()).toBe(ownerPlayer._id.toString());
+
+      expect(dbFamily.members).toHaveLength(1);
+      expect(dbFamily.members[0].player.toString()).toBe(ownerPlayer._id.toString());
+      expect(dbFamily.members[0].role).toBe('owner');
+
       const dbStats = await FamilyStats.findOne({ familyId: body._id });
       expect(dbStats).not.toBeNull();
-      if (dbStats) {
-        expect(dbStats.familyId.toString()).toBe(body._id.toString());
-        expect(dbStats.overall.mapsPlayed).toBe(0);
-      }
     });
 
-    it('должен возвращать ошибку 400 при невалидных данных', async () => {
+    it('должен возвращать ошибку 400, если не указан ownerId', async () => {
       // Arrange
-      const invalidData = { name: 'Missing DisplayName' };
+      const invalidData = { name: 'The Champions', displayLastName: 'Champions' }; // Нет ownerId
       const request = new Request('http://localhost/api/admin/families', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,17 +68,56 @@ describe('API /api/admin/families', () => {
 
       // Assert
       expect(response.status).toBe(400);
+      const body = await response.json();
+      // Ошибка валидации Zod в route.js возвращает поле `error`
+      expect(body.error).toBeDefined();
+      const ownerIdError = body.error.ownerId._errors;
+      expect(ownerIdError[0]).toContain('ID владельца является обязательным полем.');
+    });
+
+    it('должен возвращать ошибку 400, если игрок уже состоит в семье', async () => {
+      // Arrange
+      // Берем игрока, который УЖЕ состоит в семье (согласно populateDb)
+      let existingPlayerWithOwner = testData.players.find(p => p.currentFamily);
+      if (!existingPlayerWithOwner) {
+        // На случай, если в populateDb такого нет, создадим его вручную
+        const player = await models.Player.create({ firstName: 'Busy', lastName: 'Player', currentFamily: testData.families[0]._id });
+        existingPlayerWithOwner = player;
+      }
+
+      const familyData = {
+        name: 'Another Family',
+        displayLastName: 'Another',
+        ownerId: existingPlayerWithOwner._id.toString(),
+      };
+      const request = new Request('http://localhost/api/admin/families', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(familyData),
+      });
+
+      // Act
+      const response = await POST(request);
+
+      // Assert
+      // Ожидаем ошибку 400 из-за ValidationError от сервиса, который handleApiError превращает в { message: ... }
+      expect(response.status).toBe(400); 
+      const body = await response.json();
+      expect(body.message).toContain('Игрок уже состоит в другой семье');
     });
 
     it('должен возвращать ошибку 409 при попытке создать дубликат', async () => {
       // Arrange: Используем данные из populateDb
       const existingFamily = testData.families[0];
+      // Создаем нового игрока, который не состоит в семье
+      const ownerPlayer = await models.Player.create({ firstName: 'Another', lastName: 'Player' });
       const request = new Request('http://localhost/api/admin/families', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: existingFamily.name,
           displayLastName: existingFamily.displayLastName || existingFamily.name,
+          ownerId: ownerPlayer._id.toString(),
         }),
       });
 

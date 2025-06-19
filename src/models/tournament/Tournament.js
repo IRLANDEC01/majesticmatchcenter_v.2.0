@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import seoSchema from '@/models/shared/seo-schema.js';
-import { CURRENCY_VALUES } from '@/lib/constants';
+import { CURRENCY_VALUES, TOURNAMENT_SCORING_TYPES, TOURNAMENT_SCORING_VALUES } from '@/lib/constants';
 
 // --- Вложенные схемы для участников ---
 
@@ -86,6 +86,16 @@ const tournamentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'TournamentTemplate',
     required: true,
+  },
+  // Тип турнира в зависимости от логики определения победителя.
+  scoringType: {
+    type: String,
+    required: true,
+    enum: {
+      values: TOURNAMENT_SCORING_VALUES,
+      message: 'Недопустимый тип турнира: {VALUE}.',
+    },
+    default: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
   },
   // Тип турнира, определяет логику добавления игроков на карты.
   tournamentType: {

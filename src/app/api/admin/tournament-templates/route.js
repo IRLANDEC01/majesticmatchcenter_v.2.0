@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
 import { tournamentTemplateService } from '@/lib/domain/tournament-templates/tournament-template-service';
 import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
+import { handleApiError } from '@/lib/api/handle-api-error';
+import { tournamentTemplateSchema } from '@/lib/api/schemas/tournaments/tournament-schemas';
 
 // Схема валидации для создания шаблона турнира
-const createTemplateSchema = z.object({
-  name: z.string().min(1, 'Название не может быть пустым.'),
-  description: z.string().optional(),
-  mapTemplates: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID шаблона карты'))
-    .min(1, 'Сценарий должен содержать хотя бы один шаблон карты.'),
-});
+// const createTemplateSchema = z.object({
+//   name: z.string().min(1, 'Название не может быть пустым.'),
+//   description: z.string().optional(),
+//   mapTemplates: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID шаблона карты'))
+//     .min(1, 'Сценарий должен содержать хотя бы один шаблон карты.'),
+// });
 
 /**
  * @swagger
@@ -77,7 +78,7 @@ export async function POST(request) {
     await connectToDatabase();
     const json = await request.json();
 
-    const validationResult = createTemplateSchema.safeParse(json);
+    const validationResult = tournamentTemplateSchema.safeParse(json);
     if (!validationResult.success) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
@@ -85,9 +86,6 @@ export async function POST(request) {
     const newTemplate = await tournamentTemplateService.createTemplate(validationResult.data);
     return NextResponse.json(newTemplate, { status: 201 });
   } catch (error) {
-    if (error.code === 11000) {
-      return NextResponse.json({ message: 'Шаблон с таким названием уже существует' }, { status: 409 });
-    }
-    return NextResponse.json({ message: 'Ошибка сервера при создании шаблона турнира' }, { status: 500 });
+    return handleApiError(error);
   }
 } 

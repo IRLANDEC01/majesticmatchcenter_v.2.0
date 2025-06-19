@@ -4,6 +4,7 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/db.js';
 import { handleApiError } from '@/lib/api/handle-api-error';
+import { createTournamentSchema } from '@/lib/api/schemas/tournaments/tournament-schemas';
 
 // Схема валидации для создания турнира
 const tournamentCreateSchema = z.object({
@@ -29,8 +30,14 @@ const tournamentCreateSchema = z.object({
  */
 export async function POST(request) {
   try {
-    const data = await request.json();
-    const newTournament = await tournamentService.createTournament(data);
+    const json = await request.json();
+    const validationResult = createTournamentSchema.safeParse(json);
+
+    if (!validationResult.success) {
+      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
+    }
+
+    const newTournament = await tournamentService.createTournament(validationResult.data);
     return NextResponse.json(newTournament, { status: 201 });
   } catch (error) {
     return handleApiError(error);

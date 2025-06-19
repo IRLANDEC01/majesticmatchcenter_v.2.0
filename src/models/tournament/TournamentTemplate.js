@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { TOURNAMENT_SCORING_TYPES, TOURNAMENT_SCORING_VALUES } from '@/lib/constants';
 
 const tournamentTemplateSchema = new mongoose.Schema({
   // Название шаблона, например, "Majestic Cup: Summer"

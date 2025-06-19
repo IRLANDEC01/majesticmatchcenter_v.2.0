@@ -1,10 +1,12 @@
 import { PATCH } from './route';
 import Family from '@/models/family/Family';
+import Player from '@/models/player/Player';
 import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 import { familyService } from '@/lib/domain/families/family-service';
 
 describe('API /api/admin/families/[id]/archive', () => {
   let testFamily;
+  let testOwner;
 
   beforeAll(async () => {
     await connectToDatabase();
@@ -17,7 +19,13 @@ describe('API /api/admin/families/[id]/archive', () => {
 
   beforeEach(async () => {
     await Family.deleteMany({});
-    testFamily = await Family.create({ name: 'Test Family for Archiving', displayLastName: 'Archive' });
+    await Player.deleteMany({});
+    testOwner = await Player.create({ firstName: 'Owner', lastName: 'ForArchive' });
+    testFamily = await Family.create({
+      name: 'Test Family for Archiving',
+      displayLastName: 'Archive',
+      owner: testOwner._id,
+    });
   });
 
   it('должен успешно архивировать семью', async () => {

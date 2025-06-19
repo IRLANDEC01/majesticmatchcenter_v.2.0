@@ -2,29 +2,7 @@ import { tournamentRepo } from '@/lib/repos/tournaments/tournament-repo';
 import { familyRepo } from '@/lib/repos/families/family-repo';
 import { playerRepo } from '@/lib/repos/players/player-repo';
 import { tournamentTemplateRepo } from '@/lib/repos/tournament-templates/tournament-template-repo.js';
-import { z } from 'zod';
 import { AppError, DuplicateError, NotFoundError, ValidationError } from '@/lib/errors';
-
-const tournamentParticipantSchema = z.object({
-  participantType: z.enum(['family', 'team']),
-  family: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val)).optional(),
-  teamName: z.string().trim().min(1).optional(),
-}).refine(data => (data.participantType === 'family' && data.family) || (data.participantType === 'team' && data.teamName), {
-  message: "Для 'family' нужен 'family' ID, для 'team' нужно 'teamName'",
-});
-
-const tournamentSchema = z.object({
-  name: z.string().trim().min(1, 'Название турнира обязательно.'),
-  template: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID шаблона.'),
-  tournamentType: z.enum(['family', 'team'], { required_error: 'Тип турнира обязателен.' }),
-  startDate: z.coerce.date({ required_error: 'Дата начала обязательна.' }),
-  participants: z.array(tournamentParticipantSchema).min(1, 'Нужен хотя бы один участник.'),
-  prizePool: z.array(z.object({
-    currency: z.string(),
-    amount: z.number().positive(),
-    distribution: z.record(z.number())
-  })).optional(),
-});
 
 /**
  * Сервис для управления бизнес-логикой турниров.
@@ -48,11 +26,7 @@ class TournamentService {
    * @returns {Promise<object>} - Созданный объект турнира.
    */
   async createTournament(tournamentData) {
-    const validationResult = tournamentSchema.safeParse(tournamentData);
-    if (!validationResult.success) {
-      throw new ValidationError('Ошибка валидации', validationResult.error.flatten().fieldErrors);
-    }
-    const validatedData = validationResult.data;
+    const validatedData = tournamentData; // Прямое использование данных после валидации в API
 
     const template = await tournamentTemplateRepo.incrementUsageCount(validatedData.template);
     if (!template) {

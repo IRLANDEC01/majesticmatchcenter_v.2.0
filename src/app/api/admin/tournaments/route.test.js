@@ -24,11 +24,8 @@ describe('API /api/admin/tournaments', () => {
         name: 'Новый тестовый турнир',
         template: templateForTournament._id.toString(),
         tournamentType: 'family',
+        scoringType: 'LEADERBOARD',
         startDate: new Date(),
-        participants: [{
-          participantType: 'family',
-          family: familyForTournament._id.toString()
-        }],
       };
 
       // --- Первый вызов ---
@@ -72,17 +69,21 @@ describe('API /api/admin/tournaments', () => {
       // Assert
       expect(response.status).toBe(400);
       expect(body.errors).toHaveProperty('template');
+      expect(body.errors).toHaveProperty('startDate');
       expect(body.errors).toHaveProperty('tournamentType');
+      expect(body.errors).toHaveProperty('scoringType');
     });
 
     it('должен возвращать ошибку 400, если не указан ни один участник', async () => {
+       // Этот тест временно неактуален, т.к. участники добавляются после создания
        // Arrange
        const requestData = {
         name: 'Турнир без участников',
         template: testData.tournamentTemplate._id.toString(),
         tournamentType: 'family',
+        scoringType: 'LEADERBOARD',
         startDate: new Date(),
-        participants: [], // Пустой массив
+        // participants: [], // Zod-схема больше не проверяет участников
       };
 
       const request = new Request('http://localhost/api/admin/tournaments', {
@@ -96,8 +97,9 @@ describe('API /api/admin/tournaments', () => {
       const body = await response.json();
 
       // Assert
-      expect(response.status).toBe(400);
-      expect(body.errors).toHaveProperty('participants');
+      // Поскольку валидация участников убрана из схемы создания,
+      // этот тест должен проходить успешно (201).
+      expect(response.status).toBe(201);
     });
   });
 

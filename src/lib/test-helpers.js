@@ -62,33 +62,39 @@ export const populateDb = async () => {
   });
 
   // --- Семьи и Игроки ---
-  const family1 = await Family.create({
-    name: 'Gucci',
-    displayLastName: 'Gucci',
-    rating: 1200,
-  });
+  // Сначала создаем игроков, которые станут владельцами
   const player1_1 = await Player.create({
     firstName: 'Tom',
     lastName: 'Gucci',
     rating: 1250,
-    currentFamily: family1._id,
   });
-  family1.members.push({ player: player1_1._id, role: 'leader' });
-  await family1.save();
-  
-  const family2 = await Family.create({
-    name: 'Uzi',
-    displayLastName: 'Uzi',
-    rating: 1100,
-  });
+
   const player2_1 = await Player.create({
     firstName: 'Aza',
     lastName: 'Uzi',
     rating: 1150,
-    currentFamily: family2._id,
   });
-  family2.members.push({ player: player2_1._id, role: 'leader' });
-  await family2.save();
+  
+  // Теперь создаем семьи, указывая владельцев
+  const family1 = await Family.create({
+    name: 'Gucci',
+    displayLastName: 'Gucci',
+    rating: 1200,
+    owner: player1_1._id, // Указываем владельца
+    members: [{ player: player1_1._id, role: 'owner' }], // Сразу добавляем в участники
+  });
+
+  const family2 = await Family.create({
+    name: 'Uzi',
+    displayLastName: 'Uzi',
+    rating: 1100,
+    owner: player2_1._id, // Указываем владельца
+    members: [{ player: player2_1._id, role: 'owner' }], // Сразу добавляем в участники
+  });
+  
+  // Обновляем currentFamily у игроков и получаем обновленные документы
+  const updatedPlayer1_1 = await Player.findByIdAndUpdate(player1_1._id, { currentFamily: family1._id }, { new: true }).lean();
+  const updatedPlayer2_1 = await Player.findByIdAndUpdate(player2_1._id, { currentFamily: family2._id }, { new: true }).lean();
 
   // --- Турнир ---
   const tournament = await Tournament.create({
@@ -122,7 +128,7 @@ export const populateDb = async () => {
     tournament,
     map,
     families: [family1, family2],
-    players: [player1_1, player2_1],
+    players: [updatedPlayer1_1, updatedPlayer2_1],
     mapTemplates: [mapTemplate1, mapTemplate2],
     tournamentTemplate,
   };

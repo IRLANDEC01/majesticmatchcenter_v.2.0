@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import socialLinkSchema from '@/models/shared/social-link-schema.js';
 import seoSchema from '@/models/shared/seo-schema.js';
 import earningsSchema from '@/models/shared/earnings-schema.js';
+import { FAMILY_MEMBER_ROLE_VALUES } from '@/lib/constants.js';
 
 // Схема для текущих участников семьи.
 // История членства будет в отдельной коллекции.
@@ -17,7 +18,7 @@ const memberSchema = new mongoose.Schema({
   role: {
     type: String,
     enum: {
-      values: ['leader', 'caller', 'scouter'],
+      values: FAMILY_MEMBER_ROLE_VALUES,
       message: '{VALUE} не является допустимой ролью.',
     },
   },
@@ -46,6 +47,13 @@ const familySchema = new mongoose.Schema({
       validator: (v) => /^[a-zA-Z]+$/.test(v),
       message: 'Фамилия для отображения может содержать только латинские буквы и быть одним словом.',
     },
+  },
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Player',
+    required: [true, 'Необходимо указать владельца семьи.'],
+    index: true,
+    comment: 'Владелец (основатель) семьи',
   },
   slug: {
     type: String,

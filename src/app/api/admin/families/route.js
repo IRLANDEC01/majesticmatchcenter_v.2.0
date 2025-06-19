@@ -8,6 +8,7 @@ import { handleApiError } from '@/lib/api/handle-api-error';
 const createFamilySchema = z.object({
   name: z.string().trim().min(1, 'Название семьи обязательно.'),
   displayLastName: z.string().trim().min(1, 'Отображаемая фамилия обязательна.'),
+  ownerId: z.string({ required_error: 'ID владельца является обязательным полем.' }).min(1, 'ID владельца не может быть пустым.'),
   description: z.string().trim().max(5000).optional(),
   logo: z.string().url('Некорректный URL логотипа.').optional(),
   banner: z.string().url('Некорректный URL баннера.').optional(),
@@ -37,7 +38,13 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const data = await request.json();
-    const newFamily = await familyService.createFamily(data);
+    
+    const validationResult = createFamilySchema.safeParse(data);
+    if (!validationResult.success) {
+      return NextResponse.json({ error: validationResult.error.format() }, { status: 400 });
+    }
+
+    const newFamily = await familyService.createFamily(validationResult.data);
     return NextResponse.json(newFamily, { status: 201 });
   } catch (error) {
     return handleApiError(error);

@@ -1,5 +1,6 @@
 import Family from '@/models/family/Family.js';
 import { cache } from '@/lib/cache';
+import { FAMILY_MEMBER_ROLES } from '@/lib/constants';
 
 /**
  * @class FamilyRepository
@@ -149,6 +150,40 @@ class FamilyRepository {
     if (family) {
       await this._invalidateCache(family);
     }
+  }
+
+  /**
+   * Атомарно изменяет владельца семьи и роли участников.
+   * @param {string} familyId
+   * @param {string} oldOwnerId
+   * @param {string} newOwnerId
+   * @returns {Promise<object|null>}
+   */
+  async changeOwner(familyId, oldOwnerId, newOwnerId) {
+    const updatedFamily = await Family.findByIdAndUpdate(
+      familyId,
+      {
+        $set: {
+          owner: newOwnerId,
+          'members.$[newOwner].role': FAMILY_MEMBER_ROLES.OWNER, // Устанавливаем роль новому
+        },
+        $unset: {
+          'members.$[oldOwner].role': 1, // Удаляем роль у старого владельца
+        },
+      },
+      {
+        arrayFilters: [
+          { 'oldOwner.player': oldOwnerId },
+          { 'newOwner.player': newOwnerId },
+        ],
+        new: true,
+      }
+    ).lean();
+
+    if (updatedFamily) {
+      await this._invalidateCache(updatedFamily);
+    }
+    return updatedFamily;
   }
 
   /**

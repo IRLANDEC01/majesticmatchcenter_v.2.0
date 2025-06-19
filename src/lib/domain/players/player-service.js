@@ -1,6 +1,8 @@
-import { DuplicateError } from '@/lib/errors.js';
+import { DuplicateError, ValidationError } from '@/lib/errors.js';
 import { playerRepo } from '@/lib/repos/players/player-repo.js';
+import { familyRepo } from '@/lib/repos/families/family-repo.js';
 import PlayerStats from '@/models/player/PlayerStats.js';
+import Family from '@/models/family/Family.js';
 
 /**
  * @class PlayerService
@@ -86,6 +88,15 @@ class PlayerService {
    * @returns {Promise<object|null>}
    */
   async archivePlayer(id) {
+    // Проверяем, не является ли игрок владельцем активной семьи.
+    const ownedFamily = await Family.findOne({ owner: id, archivedAt: null }).lean();
+
+    if (ownedFamily) {
+      throw new ValidationError(
+        `Нельзя заархивировать игрока, так как он является владельцем активной семьи "${ownedFamily.name}". Сначала смените владельца.`
+      );
+    }
+    
     // В будущем здесь может быть логика, например, проверка,
     // можно ли архивировать этого игрока (например, если он капитан активной семьи).
     return playerRepo.archive(id);

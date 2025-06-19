@@ -1,12 +1,15 @@
 import { familyRepo } from '@/lib/repos/families/family-repo.js';
+import { playerRepo } from '@/lib/repos/players/player-repo.js';
 import FamilyStats from '@/models/family/FamilyStats.js';
 import { DuplicateError, NotFoundError, ValidationError } from '@/lib/errors';
 import { z } from 'zod';
+import { FAMILY_MEMBER_ROLES } from '@/lib/constants';
 
 // Схема Zod для валидации данных при создании и обновлении семьи.
 const familySchema = z.object({
   name: z.string().trim().min(1, 'Название семьи обязательно.'),
   displayLastName: z.string().trim().min(1, 'Отображаемая фамилия обязательна.'),
+  ownerId: z.string({ required_error: 'ID владельца является обязательным полем.' }).min(1, 'ID владельца не может быть пустым.'),
   description: z.string().trim().max(5000).optional(),
   logo: z.string().url('Некорректный URL логотипа.').optional().nullable(),
   banner: z.string().url('Некорректный URL баннера.').optional().nullable(),
@@ -38,14 +41,42 @@ export class FamilyService {
     if (!validationResult.success) {
       throw new ValidationError(validationResult.error.flatten().fieldErrors);
     }
-    const validatedData = validationResult.data;
+    const { ownerId, ...validatedData } = validationResult.data;
 
+    // 1. Проверяем, что игрок-владелец существует и не архивирован.
+    const owner = await playerRepo.findById(ownerId);
+    if (!owner) {
+      throw new NotFoundError('Указанный игрок-владелец не найден или архивирован.');
+    }
+
+    // 1a. Проверяем, что игрок не состоит в другой семье.
+    if (owner.currentFamily) {
+      throw new ValidationError('Игрок уже состоит в другой семье и не может быть назначен владельцем.');
+    }
+
+    // 2. Проверяем уникальность названия семьи
     await this._validateNameUniqueness(validatedData.name);
-    
-    const newFamily = await familyRepo.create(validatedData);
+
+    // 3. Формируем данные для создания
+    const familyToCreate = {
+      ...validatedData,
+      owner: ownerId, // Устанавливаем ID владельца
+      members: [
+        {
+          // Автоматически добавляем владельца в участники
+          player: ownerId,
+          role: FAMILY_MEMBER_ROLES.OWNER, // Назначаем роль владельца
+          joinedAt: new Date(),
+        },
+      ],
+    };
+
+    const newFamily = await familyRepo.create(familyToCreate);
     if (newFamily) {
       // После успешного создания семьи, создаем для нее документ статистики
       await FamilyStats.create({ familyId: newFamily._id });
+      // И обновляем поле currentFamily у игрока-владельца
+      await playerRepo.update(ownerId, { currentFamily: newFamily._id });
     }
     return newFamily;
   }
@@ -149,6 +180,40 @@ export class FamilyService {
    */
   async unarchiveFamily(id) {
     return familyRepo.unarchive(id);
+  }
+
+  /**
+   * Изменяет владельца семьи.
+   * @param {string} familyId - ID семьи.
+   * @param {string} newOwnerId - ID нового владельца.
+   * @returns {Promise<object>}
+   */
+  async changeOwner(familyId, newOwnerId) {
+    // 1. Проверяем, что семья и новый владелец существуют
+    const family = await this.getFamilyById(familyId);
+    const newOwner = await playerRepo.findById(newOwnerId);
+
+    if (!newOwner) {
+      throw new NotFoundError('Новый владелец не найден.');
+    }
+
+    // 2. Проверяем, что новый владелец является членом этой семьи
+    const isMember = family.members.some(member => member.player.toString() === newOwnerId);
+    if (!isMember) {
+      throw new ValidationError('Новый владелец должен быть участником семьи.');
+    }
+    
+    // 3. Нельзя назначить владельцем текущего владельца
+    if (family.owner.toString() === newOwnerId) {
+      throw new ValidationError('Этот игрок уже является владельцем семьи.');
+    }
+
+    const oldOwnerId = family.owner.toString();
+
+    // 4. Атомарно обновляем семью
+    const updatedFamily = await familyRepo.changeOwner(familyId, oldOwnerId, newOwnerId);
+
+    return updatedFamily;
   }
 }
 

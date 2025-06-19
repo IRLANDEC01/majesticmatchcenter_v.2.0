@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { playerService } from '@/lib/domain/players/player-service';
-import { connectToDatabase } from '@/lib/db';
+import { handleApiError } from '@/lib/api/handle-api-error';
 import { z } from 'zod';
 
 const patchSchema = z.object({
@@ -13,7 +13,6 @@ const patchSchema = z.object({
  */
 export async function PATCH(request, { params }) {
   try {
-    await connectToDatabase();
     const { id } = params;
     const json = await request.json();
 
@@ -37,7 +36,6 @@ export async function PATCH(request, { params }) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Failed to update player archive state:', error);
-    return NextResponse.json({ message: 'Ошибка сервера' }, { status: 500 });
+    return handleApiError(error);
   }
 } 
