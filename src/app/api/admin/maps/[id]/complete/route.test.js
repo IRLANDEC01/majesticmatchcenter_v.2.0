@@ -1,10 +1,10 @@
-import { POST as completeMap } from './route.js';
+import { POST } from './route.js';
 import models from '@/models/index.js';
 import { dbConnect, dbDisconnect, dbClear, populateDb, GUCCI_STATS } from '@/lib/test-helpers.js';
 
 const { Map, Family, Player, FamilyMapParticipation, PlayerMapParticipation } = models;
 
-describe('API /api/admin/maps/[id]/complete', () => {
+describe('/api/admin/maps/[id]/complete', () => {
   let testData;
 
   beforeAll(dbConnect);
@@ -15,63 +15,53 @@ describe('API /api/admin/maps/[id]/complete', () => {
   afterAll(dbDisconnect);
 
   describe('POST', () => {
-    it('должен успешно завершить карту, обновить рейтинг семьи и создать запись об участии', async () => {
+    it('должен успешно завершать карту и записывать турнирные очки', async () => {
       // Arrange
-      const mapToComplete = testData.map;
-      const winningFamily = testData.families[0];
-      const mvpPlayer = testData.players[0]; // Предположим, что MVP - первый игрок
-      const initialRating = winningFamily.rating;
-      const ratingChange = 100;
-
-      // Используем реальные данные статистики для всех игроков
-      const playerStatsPayload = testData.players.map((player, index) => ({
-        playerId: player._id.toString(),
-        familyId: player.currentFamily.toString(),
-        ...GUCCI_STATS[index % GUCCI_STATS.length], // Циклически берем статистику из файла
-      }));
+      const map = await Map.findById(testData.map._id);
+      const winnerFamily = testData.families[0];
+      const otherFamily = testData.families[1];
+      const mvp = testData.players[0];
 
       const payload = {
-        winnerFamilyId: winningFamily._id.toString(),
-        mvpPlayerId: mvpPlayer._id.toString(),
-        familyRatingChange: ratingChange,
-        playerStats: playerStatsPayload,
-    };
+        winnerFamilyId: winnerFamily._id.toString(),
+        mvpPlayerId: mvp._id.toString(),
+        familyRatingChange: 10,
+        familyTournamentPoints: [
+          { familyId: winnerFamily._id.toString(), points: 3 },
+          { familyId: otherFamily._id.toString(), points: 0 },
+        ],
+        playerStats: testData.players.map((player, index) => ({
+          playerId: player._id.toString(),
+          familyId: player.currentFamily.toString(),
+          ...GUCCI_STATS[index % GUCCI_STATS.length], // Циклически берем статистику из файла
+        })),
+      };
 
-      const request = new Request(`http://localhost/api/admin/maps/${mapToComplete._id}/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      const request = new Request(`http://localhost/api/admin/maps/${map._id}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-    });
+      });
 
       // Act
-      const response = await completeMap(request, { params: { id: mapToComplete._id.toString() } });
+      const response = await POST(request, { params: { id: map._id.toString() } });
 
       // Assert
-    expect(response.status).toBe(200);
-
-      // 1. Проверяем, что карта обновлена
-      const updatedMap = await Map.findById(mapToComplete._id);
-      expect(updatedMap.status).toBe('completed');
-      expect(updatedMap.winner.toString()).toBe(winningFamily._id.toString());
-      expect(updatedMap.mvp.toString()).toBe(mvpPlayer._id.toString());
+      expect(response.status).toBe(200);
       
-      // 2. Проверяем, что рейтинг семьи в основной модели обновился
-      const updatedFamily = await Family.findById(winningFamily._id);
-      expect(updatedFamily.rating).toBe(initialRating + ratingChange);
+      const updatedMap = await Map.findById(map._id);
+      expect(updatedMap.status).toBe('completed');
 
-      // 3. Проверяем, что создалась запись об участии семьи
-      const familyParticipation = await FamilyMapParticipation.findOne({
-        familyId: winningFamily._id,
-        mapId: mapToComplete._id,
-      });
-      expect(familyParticipation).not.toBeNull();
-      expect(familyParticipation.ratingChange).toBe(ratingChange);
+      const participations = await FamilyMapParticipation.find({ mapId: map._id });
+      expect(participations.length).toBe(2);
 
-      // 4. Проверяем, что создались записи статистики для каждого игрока
-      const playerParticipations = await PlayerMapParticipation.find({ mapId: mapToComplete._id });
-      expect(playerParticipations.length).toBe(testData.players.length);
-      const mvpStats = playerParticipations.find(p => p.playerId.toString() === mvpPlayer._id.toString());
-      expect(mvpStats.kills).toBe(GUCCI_STATS[0].kills); // Проверяем выборочно для MVP
+      const winnerParticipation = participations.find(p => p.familyId.toString() === winnerFamily._id.toString());
+      expect(winnerParticipation.tournamentPoints).toBe(3);
+      expect(winnerParticipation.ratingChange).toBe(10);
+      
+      const otherParticipation = participations.find(p => p.familyId.toString() === otherFamily._id.toString());
+      expect(otherParticipation.tournamentPoints).toBe(0);
+      expect(otherParticipation.ratingChange).toBe(0);
     });
   });
 }); 

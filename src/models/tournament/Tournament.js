@@ -109,7 +109,6 @@ const tournamentSchema = new mongoose.Schema({
     required: true,
     enum: ['planned', 'active', 'completed'],
     default: 'planned',
-    index: true,
   },
   // Дата архивации для мягкого удаления.
   archivedAt: {
@@ -153,6 +152,18 @@ tournamentSchema.pre('validate', function(next) {
   }
   next();
 });
+
+// Хук для автоматического исключения архивированных документов из результатов `find`
+tournamentSchema.pre(/^find/, function(next) {
+  // `this` - это объект запроса (query)
+  if (!this.getOptions().includeArchived) {
+    this.where({ archivedAt: { $exists: false } });
+  }
+  next();
+});
+
+// Индекс для ускорения запросов по статусу
+tournamentSchema.index({ status: 1 });
 
 const Tournament = mongoose.models.Tournament || mongoose.model('Tournament', tournamentSchema);
 

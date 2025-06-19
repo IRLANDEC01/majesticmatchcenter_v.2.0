@@ -3,6 +3,7 @@ import Tournament from '@/models/tournament/Tournament.js';
 import PlayerMapParticipation from '@/models/player/PlayerMapParticipation.js';
 import Map from '@/models/map/Map.js';
 import { cache } from '@/lib/cache/index.js';
+import { NotFoundError } from '@/lib/errors.js';
 
 class TournamentRepo {
   /**
@@ -99,18 +100,21 @@ class TournamentRepo {
   /**
    * Архивирует турнир по ID.
    * @param {string} id - ID турнира.
-   * @returns {Promise<object|null>}
+   * @returns {Promise<object>}
+   * @throws {NotFoundError} Если турнир не найден.
    */
   async archive(id) {
     const tournament = await Tournament.findOneAndUpdate(
-      { _id: id, archivedAt: null },
+      { _id: id, archivedAt: { $exists: false } },
       { $set: { archivedAt: new Date() } },
       { new: true }
-    ).lean();
+    ).setOptions({ includeArchived: true }).lean();
 
-    if (tournament) {
-      await this._invalidateCache(tournament);
+    if (!tournament) {
+      throw new NotFoundError('Tournament not found');
     }
+
+    await this._invalidateCache(tournament);
     return tournament;
   }
 

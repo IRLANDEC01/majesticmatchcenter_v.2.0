@@ -81,7 +81,7 @@ class TournamentService {
     return this.tournamentRepo.update(id, data);
   }
 
-  async archiveTournament(id) {
+  async archive(id) {
     return this.tournamentRepo.archive(id);
   }
 
@@ -91,6 +91,40 @@ class TournamentService {
 
   async getStats(id) {
     return this.tournamentRepo.getTournamentStats(id);
+  }
+
+  async completeTournament(tournamentId, payload) {
+    const tournament = await this.tournamentRepo.findById(tournamentId);
+    if (!tournament) {
+      throw new NotFoundError(`Турнир с ID ${tournamentId} не найден.`);
+    }
+    if (tournament.status === 'completed') {
+      throw new ValidationError('Турнир уже завершен.');
+    }
+
+    let winnerId;
+
+    if (tournament.scoringType === 'MANUAL_SELECTION') {
+      if (!payload.winnerId) {
+        throw new ValidationError('Для турниров с ручным выбором необходимо указать ID победителя.');
+      }
+      // TODO: Проверить, что победитель является участником турнира.
+      winnerId = payload.winnerId;
+    } else if (tournament.scoringType === 'LEADERBOARD') {
+      // TODO: Реализовать логику агрегации статистики и определения победителя.
+      // Пока просто бросим ошибку, что функционал не реализован.
+      throw new AppError('Автоматическое определение победителя для LEADERBOARD еще не реализовано.', 501);
+    }
+    
+    // TODO: Реализовать логику начисления призов (Earnings).
+
+    const updatedTournament = await this.tournamentRepo.update(tournamentId, {
+      status: 'completed',
+      winner: winnerId,
+      endDate: new Date(), // Устанавливаем дату окончания в момент завершения
+    });
+
+    return updatedTournament;
   }
 }
 

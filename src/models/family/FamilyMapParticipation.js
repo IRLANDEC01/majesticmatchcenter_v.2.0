@@ -6,6 +6,7 @@ const { Schema } = mongoose;
  * @property {mongoose.Types.ObjectId} familyId - ID семьи
  * @property {mongoose.Types.ObjectId} mapId - ID карты, в которой семья участвовала
  * @property {number} ratingChange - Изменение рейтинга семьи по итогам карты. Может быть 0 или > 0.
+ * @property {number} tournamentPoints - Количество очков, заработанных семьей в рамках турнира за эту карту.
  * @property {string} reason - Причина изменения рейтинга (например, 'map_completion').
  * @property {Date} earnedAt - Дата и время, когда был получен результат.
  */
@@ -29,6 +30,12 @@ const FamilyMapParticipationSchema = new Schema({
     required: true,
     min: [0, 'Изменение рейтинга не может быть отрицательным.'],
     comment: 'Изменение рейтинга семьи по итогам карты. Может быть 0 или > 0.',
+  },
+  tournamentPoints: {
+    type: Number,
+    default: 0,
+    min: [0, 'Количество турнирных очков не может быть отрицательным.'],
+    comment: 'Количество очков, заработанных семьей в рамках турнира за эту карту.',
   },
   reason: {
     type: String,

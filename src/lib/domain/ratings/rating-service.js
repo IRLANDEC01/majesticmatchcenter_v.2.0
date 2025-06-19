@@ -29,6 +29,7 @@ export class RatingService {
   }
 
   /**
+   * @deprecated Используйте recordFamiliesMapResults для записи результатов всех участников.
    * Записывает результат участия семьи в карте.
    * Атомарно обновляет рейтинг семьи и создает запись об участии.
    * @param {string} mapId - ID карты.
@@ -53,6 +54,38 @@ export class RatingService {
       ratingChange,
       reason: RATING_REASONS.MAP_COMPLETION,
     });
+  }
+
+  /**
+   * Записывает результаты всех семей-участниц карты, включая турнирные очки.
+   * @param {string} mapId - ID карты.
+   * @param {Array<{familyId: string, points: number}>} familyResults - Результаты семей.
+   * @param {{winnerFamilyId: string, familyRatingChange: number}} winnerInfo - Информация о победителе для начисления глобального рейтинга.
+   */
+  async recordFamiliesMapResults(mapId, familyResults = [], winnerInfo = {}) {
+    const promises = familyResults.map(result => {
+      const isWinner = result.familyId === winnerInfo.winnerFamilyId;
+      const ratingChange = isWinner ? (winnerInfo.familyRatingChange || 0) : 0;
+
+      const participationData = {
+        mapId,
+        familyId: result.familyId,
+        tournamentPoints: result.points,
+        ratingChange,
+        reason: RATING_REASONS.MAP_COMPLETION,
+      };
+      
+      const participationPromise = this.familyMapParticipationRepo.create(participationData);
+      
+      if (isWinner && ratingChange > 0) {
+        const ratingPromise = this.familyRepo.incrementRating(result.familyId, ratingChange);
+        return Promise.all([participationPromise, ratingPromise]);
+      }
+      
+      return participationPromise;
+    });
+
+    await Promise.all(promises);
   }
 
   /**
