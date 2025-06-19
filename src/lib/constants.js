@@ -68,4 +68,52 @@ export const FAMILY_MEMBER_ROLES = {
  * Массив значений ролей для использования в валидаторах Mongoose (enum).
  * @type {string[]}
  */
-export const FAMILY_MEMBER_ROLE_VALUES = Object.values(FAMILY_MEMBER_ROLES); 
+export const FAMILY_MEMBER_ROLE_VALUES = Object.values(FAMILY_MEMBER_ROLES);
+
+/**
+ * Типы статусов турниров.
+ * @enum {string}
+ */
+export const TOURNAMENT_STATUS_VALUES = {
+  NOT_STARTED: 'not_started',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  CANCELED: 'canceled',
+};
+
+export const TOURNAMENT_STATUS = Object.freeze({
+  ...TOURNAMENT_STATUS_VALUES,
+});
+
+/**
+ * Категории/уровни результатов участия в турнире.
+ * @enum {string}
+ */
+export const RESULT_TIERS_VALUES = Object.freeze({
+  WINNER: 'winner', // Бесспорный победитель
+  RUNNER_UP: 'runner-up', // Второе место, финалист
+  SEMI_FINALIST: 'semi-finalist', // Участник, выбывший в полуфинале (3-4 места)
+  QUARTER_FINALIST: 'quarter-finalist', // Участник, выбывший в четвертьфинале (5-8 места)
+  TOP_TIER: 'top-tier', // Общая категория для участников из топа (например, топ-16)
+  PARTICIPANT: 'participant', // Стандартный результат для всех остальных
+  DISQUALIFIED: 'disqualified', // Дисквалифицированный участник
+});
+
+export const RESULT_TIERS = Object.freeze({
+  ...RESULT_TIERS_VALUES,
+});
+
+/**
+ * Типы событий для Pub/Sub.
+ * @enum {string}
+ */
+export const EVENT_TYPES = {
+  TOURNAMENT_CREATED: 'tournament_created',
+  TOURNAMENT_UPDATED: 'tournament_updated',
+  TOURNAMENT_DELETED: 'tournament_deleted',
+  TOURNAMENT_STATUS_CHANGED: 'tournament_status_changed',
+  TOURNAMENT_RESULT_UPDATED: 'tournament_result_updated',
+  TOURNAMENT_PARTICIPANT_ADDED: 'tournament_participant_added',
+  TOURNAMENT_PARTICIPANT_REMOVED: 'tournament_participant_removed',
+  TOURNAMENT_RESULT_CALCULATED: 'tournament_result_calculated',
+}; 
