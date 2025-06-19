@@ -4,38 +4,40 @@ import PlayerMapParticipation from '@/models/player/PlayerMapParticipation.js';
 import Map from '@/models/map/Map.js';
 import { cache } from '@/lib/cache/index.js';
 import { NotFoundError } from '@/lib/errors.js';
+import FamilyMapParticipation from '@/models/family/FamilyMapParticipation.js';
 
 class TournamentRepo {
   /**
    * Находит турнир по ID.
    * @param {string} id - ID турнира.
    * @param {object} [options] - Опции.
-   * @param {boolean} [options.includeArchived=false] - Включить архивированные.
+   * @param {boolean} [options.includeArchived=false] - Включать ли архивированные.
+   * @param {string|object|Array} [options.populate=null] - Опции для Mongoose populate.
    * @returns {Promise<object|null>}
    */
-  async findById(id, { includeArchived = false } = {}) {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return null;
-    }
+  async findById(id, { includeArchived = false, populate = null } = {}) {
     const cacheKey = `tournament:${id}`;
-    
     if (!includeArchived) {
-      const cached = await cache.get(cacheKey);
-      if (cached?.archivedAt) return null;
-      if (cached) return cached;
+      const cachedTournament = await cache.get(cacheKey);
+      if (cachedTournament) {
+        return cachedTournament;
+      }
     }
 
-    const query = { _id: id };
-    if (!includeArchived) {
-      query.archivedAt = null;
+    const query = Tournament.findById(id);
+
+    if (populate) {
+      query.populate(populate);
     }
 
-    const tournament = await Tournament.findOne(query).lean();
-    
-    if (tournament && !tournament.archivedAt) {
-      await cache.set(cacheKey, tournament, {
-        tags: [`tournament:${id}`, `tournament:slug:${tournament.slug}`, 'tournaments_list'],
-      });
+    if (includeArchived) {
+      query.setOptions({ includeArchived: true });
+    }
+
+    const tournament = await query.lean();
+
+    if (tournament && !includeArchived) {
+      await cache.set(cacheKey, tournament, { tags: [`tournament:${tournament._id}`, `tournament:slug:${tournament.slug}`, 'tournaments_list'] });
     }
     return tournament;
   }
@@ -200,6 +202,40 @@ class TournamentRepo {
     for (const tag of tags) {
         await cache.invalidateByTag(tag);
     }
+  }
+
+  /**
+   * Рассчитывает и возвращает лидерборд для турнира на основе очков.
+   * @param {string} tournamentId - ID турнира.
+   * @returns {Promise<Array<object>>} - Отсортированный массив { familyId, totalPoints }.
+   */
+  async getLeaderboard(tournamentId) {
+    // Этот метод не кэшируется, так как вызывается только в момент завершения турнира.
+    return FamilyMapParticipation.aggregate([
+      // 1. Найти все участия, относящиеся к этому турниру
+      {
+        $match: { tournamentId: new mongoose.Types.ObjectId(tournamentId) }
+      },
+      // 2. Сгруппировать по ID семьи и суммировать очки
+      {
+        $group: {
+          _id: '$familyId',
+          totalPoints: { $sum: '$tournamentPoints' }
+        }
+      },
+      // 3. Отсортировать по убыванию очков
+      {
+        $sort: { totalPoints: -1 }
+      },
+      // 4. Сформировать финальный объект
+      {
+        $project: {
+          _id: 0,
+          familyId: '$_id',
+          totalPoints: '$totalPoints'
+        }
+      }
+    ]);
   }
 
   /**

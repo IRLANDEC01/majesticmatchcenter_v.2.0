@@ -1,4 +1,5 @@
 import mongoose, { Schema, models } from 'mongoose';
+import { CURRENCY_VALUES } from '@/lib/constants';
 
 const PlayerEarningSchema = new Schema(
   {
@@ -27,7 +28,7 @@ const PlayerEarningSchema = new Schema(
     currency: {
       type: String,
       required: true,
-      enum: ['RUB', 'USD', 'EUR'],
+      enum: CURRENCY_VALUES,
     },
     // Сумма (доля) приза
     amount: {

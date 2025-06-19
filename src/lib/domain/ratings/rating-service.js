@@ -59,33 +59,39 @@ export class RatingService {
   /**
    * Записывает результаты всех семей-участниц карты, включая турнирные очки.
    * @param {string} mapId - ID карты.
+   * @param {string} tournamentId - ID турнира.
    * @param {Array<{familyId: string, points: number}>} familyResults - Результаты семей.
    * @param {{winnerFamilyId: string, familyRatingChange: number}} winnerInfo - Информация о победителе для начисления глобального рейтинга.
    */
-  async recordFamiliesMapResults(mapId, familyResults = [], winnerInfo = {}) {
-    const promises = familyResults.map(result => {
+  async recordFamiliesMapResults(mapId, tournamentId, familyResults = [], winnerInfo = {}) {
+    if (!familyResults || familyResults.length === 0) {
+      console.log(`[RatingService] Для карты ${mapId} не переданы результаты семей. Пропускаем начисление очков.`);
+      return;
+    }
+
+    // Используем последовательный цикл for...of для большей надежности и упрощения отладки,
+    // вместо параллельного выполнения через Promise.all.
+    for (const result of familyResults) {
       const isWinner = result.familyId === winnerInfo.winnerFamilyId;
       const ratingChange = isWinner ? (winnerInfo.familyRatingChange || 0) : 0;
 
       const participationData = {
         mapId,
+        tournamentId,
         familyId: result.familyId,
         tournamentPoints: result.points,
         ratingChange,
         reason: RATING_REASONS.MAP_COMPLETION,
       };
       
-      const participationPromise = this.familyMapParticipationRepo.create(participationData);
+      // Последовательно создаем запись об участии
+      await this.familyMapParticipationRepo.create(participationData);
       
+      // И если это победитель, последовательно обновляем его рейтинг
       if (isWinner && ratingChange > 0) {
-        const ratingPromise = this.familyRepo.incrementRating(result.familyId, ratingChange);
-        return Promise.all([participationPromise, ratingPromise]);
+        await this.familyRepo.incrementRating(result.familyId, ratingChange);
       }
-      
-      return participationPromise;
-    });
-
-    await Promise.all(promises);
+    }
   }
 
   /**

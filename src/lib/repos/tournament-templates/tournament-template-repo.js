@@ -54,7 +54,7 @@ class TournamentTemplateRepo {
    * @returns {Promise<object|null>} - Найденный шаблон или null.
    */
   async findByName(name) {
-    return TournamentTemplate.findOne({ name }).lean();
+    return TournamentTemplate.findOne({ name, archivedAt: null }).lean();
   }
 
   /**

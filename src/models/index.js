@@ -6,6 +6,7 @@ import Family from './family/Family.js';
 import FamilyRatingHistory from './family/FamilyRatingHistory.js';
 import FamilyStats from './family/FamilyStats.js';
 import FamilyMapParticipation from './family/FamilyMapParticipation.js';
+import FamilyTournamentParticipation from './family/FamilyTournamentParticipation.js';
 
 import MapModel from './map/Map.js';
 import MapTemplate from './map/MapTemplate.js';
@@ -31,6 +32,7 @@ const models = {
   FamilyRatingHistory,
   FamilyStats,
   FamilyMapParticipation,
+  FamilyTournamentParticipation,
   Map: MapModel,
   MapTemplate,
   Player,

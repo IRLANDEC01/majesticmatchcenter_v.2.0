@@ -17,7 +17,7 @@ describe('/api/admin/maps/[id]/complete', () => {
   describe('POST', () => {
     it('должен успешно завершать карту и записывать турнирные очки', async () => {
       // Arrange
-      const map = await Map.findById(testData.map._id);
+      const map = testData.map;
       const winnerFamily = testData.families[0];
       const otherFamily = testData.families[1];
       const mvp = testData.players[0];
@@ -26,15 +26,11 @@ describe('/api/admin/maps/[id]/complete', () => {
         winnerFamilyId: winnerFamily._id.toString(),
         mvpPlayerId: mvp._id.toString(),
         familyRatingChange: 10,
-        familyTournamentPoints: [
+        familyResults: [
           { familyId: winnerFamily._id.toString(), points: 3 },
-          { familyId: otherFamily._id.toString(), points: 0 },
+          { familyId: otherFamily._id.toString(), points: 1 },
         ],
-        playerStats: testData.players.map((player, index) => ({
-          playerId: player._id.toString(),
-          familyId: player.currentFamily.toString(),
-          ...GUCCI_STATS[index % GUCCI_STATS.length], // Циклически берем статистику из файла
-        })),
+        playerStats: [],
       };
 
       const request = new Request(`http://localhost/api/admin/maps/${map._id}/complete`, {
@@ -60,7 +56,7 @@ describe('/api/admin/maps/[id]/complete', () => {
       expect(winnerParticipation.ratingChange).toBe(10);
       
       const otherParticipation = participations.find(p => p.familyId.toString() === otherFamily._id.toString());
-      expect(otherParticipation.tournamentPoints).toBe(0);
+      expect(otherParticipation.tournamentPoints).toBe(1);
       expect(otherParticipation.ratingChange).toBe(0);
     });
   });

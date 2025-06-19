@@ -39,99 +39,105 @@ export const dbClear = async () => {
   }
 };
 
-
 /**
  * Наполняет базу данных ВАЛИДНЫМ и консистентным набором данных для тестов.
+ * @param {object} [config] - Конфигурация для кастомизации создаваемых данных.
  * @returns {Promise<object>} Объект с созданными Mongoose-документами.
  */
-export const populateDb = async () => {
-  // --- Шаблоны ---
-  const mapTemplate1 = await MapTemplate.create({
-    name: 'Dust 2',
-    slug: 'de_dust2',
-  });
-  const mapTemplate2 = await MapTemplate.create({
-    name: 'Mirage',
-    slug: 'de_mirage',
-  });
+export const populateDb = async (config = {}) => {
+  const context = {};
 
-  const tournamentTemplate = await TournamentTemplate.create({
+  // --- Шаблоны ---
+  context.mapTemplate1 = await MapTemplate.create({ name: 'Dust 2', slug: 'de_dust2' });
+  context.mapTemplate2 = await MapTemplate.create({ name: 'Mirage', slug: 'de_mirage' });
+  context.tournamentTemplate = await TournamentTemplate.create({
     name: 'Majestic Cup: Summer',
     slug: 'majestic-cup-summer',
-    mapTemplates: [mapTemplate1._id, mapTemplate2._id],
+    mapTemplates: [context.mapTemplate1._id, context.mapTemplate2._id],
   });
 
   // --- Семьи и Игроки ---
-  // Сначала создаем игроков, которые станут владельцами
-  const player1_1 = await Player.create({
-    firstName: 'Tom',
-    lastName: 'Gucci',
-    rating: 1250,
-  });
-
-  const player2_1 = await Player.create({
-    firstName: 'Aza',
-    lastName: 'Uzi',
-    rating: 1150,
-  });
+  const player1_1 = await Player.create({ firstName: 'Tom', lastName: 'Gucci', rating: 1250 });
+  const player2_1 = await Player.create({ firstName: 'Aza', lastName: 'Uzi', rating: 1150 });
   
-  // Теперь создаем семьи, указывая владельцев
-  const family1 = await Family.create({
-    name: 'Gucci',
-    displayLastName: 'Gucci',
-    rating: 1200,
-    owner: player1_1._id, // Указываем владельца
-    members: [{ player: player1_1._id, role: 'owner' }], // Сразу добавляем в участники
-  });
-
-  const family2 = await Family.create({
-    name: 'Uzi',
-    displayLastName: 'Uzi',
-    rating: 1100,
-    owner: player2_1._id, // Указываем владельца
-    members: [{ player: player2_1._id, role: 'owner' }], // Сразу добавляем в участники
-  });
+  const family1 = await Family.create({ name: 'Gucci', displayLastName: 'Gucci', rating: 1200, owner: player1_1._id, members: [{ player: player1_1._id, role: 'owner' }] });
+  const family2 = await Family.create({ name: 'Uzi', displayLastName: 'Uzi', rating: 1100, owner: player2_1._id, members: [{ player: player2_1._id, role: 'owner' }] });
   
-  // Обновляем currentFamily у игроков и получаем обновленные документы
   const updatedPlayer1_1 = await Player.findByIdAndUpdate(player1_1._id, { currentFamily: family1._id }, { new: true }).lean();
   const updatedPlayer2_1 = await Player.findByIdAndUpdate(player2_1._id, { currentFamily: family2._id }, { new: true }).lean();
+  
+  context.families = [family1, family2];
+  context.players = [updatedPlayer1_1, updatedPlayer2_1];
 
-  // --- Турнир ---
-  const tournament = await Tournament.create({
-    name: 'Majestic Summer Cup 2024',
-    slug: 'majestic-summer-cup-2024-1',
-    template: tournamentTemplate._id,
-    tournamentType: 'family',
-    status: 'active',
-    startDate: new Date(),
-    participants: [
-      { participantType: 'family', family: family1._id },
-      { participantType: 'family', family: family2._id },
-    ],
-  });
+  // --- Турниры ---
+  const tournamentData = config.tournaments?.[0] || {};
+  context.tournaments = [
+    await Tournament.create({
+      name: 'Majestic Summer Cup 2024',
+      slug: 'majestic-summer-cup-2024-1',
+      template: context.tournamentTemplate._id,
+      tournamentType: 'family',
+      status: 'active',
+      startDate: new Date(),
+      participants: [
+        { participantType: 'family', family: family1._id },
+        { participantType: 'family', family: family2._id },
+      ],
+      ...tournamentData,
+    })
+  ];
+  context.tournament = context.tournaments[0]; // для обратной совместимости
 
-  // --- Карта ---
-  const map = await Map.create({
-    name: 'Dust 2 - Grand Final',
-    slug: 'dust-2-grand-final',
-    tournament: tournament._id,
-    template: mapTemplate1._id,
-    status: 'active',
-    startDateTime: new Date(),
-    participants: [
-        { participant: family1._id, players: [player1_1._id] },
-        { participant: family2._id, players: [player2_1._id] },
-    ],
-  });
+  // --- Карты ---
+  const mapsConfig = typeof config.maps === 'function' ? config.maps(context) : (config.maps || []);
+  context.maps = [];
+  if (mapsConfig.length > 0) {
+    for (const mapConfig of mapsConfig) {
+      context.maps.push(await Map.create(mapConfig));
+    }
+  } else {
+    context.maps.push(await Map.create({
+        name: 'Dust 2 - Grand Final',
+        slug: 'dust-2-grand-final',
+        tournament: context.tournament._id,
+        template: context.mapTemplate1._id,
+        status: 'active',
+        startDateTime: new Date(),
+        participants: [
+            { participant: family1._id, players: [player1_1._id] },
+            { participant: family2._id, players: [player2_1._id] },
+        ],
+    }));
+  }
+  context.map = context.maps[0]; // для обратной совместимости
 
-  return {
-    tournament,
-    map,
-    families: [family1, family2],
-    players: [updatedPlayer1_1, updatedPlayer2_1],
-    mapTemplates: [mapTemplate1, mapTemplate2],
-    tournamentTemplate,
-  };
+  // --- Участие в картах ---
+  if (config.familyMapParticipations) {
+    const participationsData = typeof config.familyMapParticipations === 'function'
+      ? config.familyMapParticipations(context)
+      : config.familyMapParticipations;
+      
+    // Убедимся, что у каждой записи есть tournamentId
+    const dataWithTournamentId = participationsData.map(p => ({
+      ...p,
+      tournamentId: p.tournamentId || context.tournament._id,
+    }));
+      
+    context.familyMapParticipations = await models.FamilyMapParticipation.create(dataWithTournamentId);
+  }
+  
+  // --- Участие в турнирах ---
+  if (config.familyTournamentParticipations) {
+    const participationsData = typeof config.familyTournamentParticipations === 'function'
+      ? config.familyTournamentParticipations(context)
+      : config.familyTournamentParticipations;
+    context.familyTournamentParticipations = await models.FamilyTournamentParticipation.create(participationsData);
+  }
+
+  // Для обратной совместимости со старыми тестами
+  context.mapTemplates = [context.mapTemplate1, context.mapTemplate2];
+
+  return context;
 };
 
 /**

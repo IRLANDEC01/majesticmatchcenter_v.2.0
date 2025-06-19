@@ -5,6 +5,7 @@ const { Schema } = mongoose;
  * @typedef {object} FamilyMapParticipation
  * @property {mongoose.Types.ObjectId} familyId - ID семьи
  * @property {mongoose.Types.ObjectId} mapId - ID карты, в которой семья участвовала
+ * @property {mongoose.Types.ObjectId} tournamentId - ID турнира, в рамках которого проходила карта
  * @property {number} ratingChange - Изменение рейтинга семьи по итогам карты. Может быть 0 или > 0.
  * @property {number} tournamentPoints - Количество очков, заработанных семьей в рамках турнира за эту карту.
  * @property {string} reason - Причина изменения рейтинга (например, 'map_completion').
@@ -24,6 +25,13 @@ const FamilyMapParticipationSchema = new Schema({
     required: true,
     index: true,
     comment: 'ID карты, в которой семья участвовала',
+  },
+  tournamentId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Tournament',
+    required: true,
+    index: true,
+    comment: 'ID турнира, в рамках которого проходила карта',
   },
   ratingChange: {
     type: Number,

@@ -27,4 +27,18 @@ export async function POST(request, { params }) {
   } catch (error) {
     return handleApiError(error);
   }
+}
+
+export async function PATCH(request, { params }) {
+  try {
+    const { id } = params;
+    const payload = await request.json();
+
+    const updatedTournament = await tournamentService.completeTournament(id, payload);
+
+    return NextResponse.json(updatedTournament, { status: 200 });
+  } catch (error) {
+    console.error('INTERNAL_SERVER_ERROR', error);
+    return handleApiError(error);
+  }
 } 

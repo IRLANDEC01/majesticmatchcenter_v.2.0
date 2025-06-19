@@ -25,8 +25,8 @@ const FamilyTournamentParticipationSchema = new Schema(
     // Суммарные призовые, заработанные семьей в этом турнире.
     // Используется как денормализованная витрина. Источник правды - FamilyEarning.
     earnings: {
-      type: earningsSchema,
-      default: () => ({}),
+      type: [earningsSchema],
+      default: [],
     },
   },
   {

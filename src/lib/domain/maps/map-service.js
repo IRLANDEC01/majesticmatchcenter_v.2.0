@@ -23,7 +23,7 @@ const completionSchema = z.object({
   winnerFamilyId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID семьи-победителя.'),
   mvpPlayerId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID MVP.'),
   familyRatingChange: z.number().nonnegative('Рейтинг не может быть отрицательным.'),
-  familyTournamentPoints: z.array(z.object({
+  familyResults: z.array(z.object({
     familyId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val)),
     points: z.number().nonnegative('Турнирные очки не могут быть отрицательными.'),
   })).optional(),
@@ -145,7 +145,7 @@ class MapService {
     if (!validationResult.success) {
       throw new ValidationError('Ошибка валидации при завершении карты', validationResult.error.flatten().fieldErrors);
     }
-    const { winnerFamilyId, mvpPlayerId, familyRatingChange, familyTournamentPoints, playerStats } = validationResult.data;
+    const { winnerFamilyId, mvpPlayerId, familyRatingChange, familyResults, playerStats } = validationResult.data;
 
     const map = await this.repo.findById(mapId);
     if (!map) {
@@ -164,8 +164,7 @@ class MapService {
     const completedMap = await this.repo.update(mapId, updatedMapData);
     
     // Шаг 2 - Вызвать ratingService для обновления рейтинга семьи и записи турнирных очков.
-    // recordFamilyMapResult - устарел, используем новый метод для всех участников.
-    await this.ratingService.recordFamiliesMapResults(mapId, familyTournamentPoints, { winnerFamilyId, familyRatingChange });
+    await this.ratingService.recordFamiliesMapResults(mapId, completedMap.tournament, familyResults, { winnerFamilyId, familyRatingChange });
 
     // Шаг 3 - Вызвать statisticsService для сохранения статистики игроков
     await this.statisticsService.recordPlayerMapStats(mapId, completedMap.tournament, playerStats);
