@@ -1,0 +1,42 @@
+import mongoose, { Schema, models } from 'mongoose';
+
+const FamilyEarningSchema = new Schema(
+  {
+    // Ссылка на семью, получившую приз
+    familyId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Family',
+      required: true,
+      index: true,
+    },
+    // Ссылка на турнир, в котором был получен приз
+    tournamentId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Tournament',
+      required: true,
+      index: true,
+    },
+    // Место, за которое получен приз
+    place: {
+      type: Number,
+      required: true,
+    },
+    // Валюта приза
+    currency: {
+      type: String,
+      required: true,
+      enum: ['RUB', 'USD', 'EUR'], // Допустимые валюты
+    },
+    // Сумма приза
+    amount: {
+      type: Number,
+      required: true,
+    },
+  },
+  {
+    timestamps: true,
+    versionKey: false,
+  }
+);
+
+export default models.FamilyEarning || mongoose.model('FamilyEarning', FamilyEarningSchema); 
