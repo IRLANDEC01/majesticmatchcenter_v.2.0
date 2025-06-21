@@ -1,4 +1,4 @@
-import { mapTemplateRepo } from '@/lib/repos/map-templates/map-template-repo.js';
+import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo.js';
 import { DuplicateError } from '@/lib/errors';
 
 /**
@@ -19,6 +19,10 @@ class MapTemplateService {
    * @returns {Promise<object>} - Созданный объект шаблона карты.
    */
   async createMapTemplate(templateData) {
+    const existingTemplate = await this.repo.findByName(templateData.name);
+    if (existingTemplate) {
+      throw new DuplicateError('Шаблон карты с таким названием уже существует.');
+    }
     return this.repo.create(templateData);
   }
 
@@ -26,9 +30,11 @@ class MapTemplateService {
    * Получает все шаблоны карт.
    * @param {object} [options] - Опции для получения шаблонов.
    * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
+   * @param {string} [options.search] - Строка для поиска.
+   * @param {string} [options.id] - ID для поиска конкретного шаблона.
    * @returns {Promise<Array<object>>} - Массив шаблонов карт.
    */
-  async getAllMapTemplates(options = { includeArchived: false }) {
+  async getAllMapTemplates(options = { includeArchived: false, search: '', id: null }) {
     return this.repo.findAll(options);
   }
 

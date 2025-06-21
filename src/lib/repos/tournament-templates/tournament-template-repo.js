@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import { cache } from '@/lib/cache';
+import { DuplicateError } from '@/lib/errors';
 
 /**
  * Репозиторий для работы с шаблонами турниров.
@@ -75,6 +76,19 @@ class TournamentTemplateRepo {
    * @returns {Promise<TournamentTemplate|null>}
    */
   async update(id, data) {
+    // Проверяем, есть ли уже шаблон с таким именем (исключая текущий)
+    if (data.name) {
+      const existingTemplate = await TournamentTemplate.findOne({
+        name: data.name,
+        _id: { $ne: id },
+        archivedAt: null, // Игнорируем архивированные
+      });
+
+      if (existingTemplate) {
+        throw new DuplicateError('Шаблон турнира с таким названием уже существует.');
+      }
+    }
+
     const updatedTemplate = await TournamentTemplate.findByIdAndUpdate(id, data, { new: true }).lean();
 
     // Инвалидируем кэш для этого шаблона

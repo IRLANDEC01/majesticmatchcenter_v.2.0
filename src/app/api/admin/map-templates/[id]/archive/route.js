@@ -1,11 +1,8 @@
 import { NextResponse } from 'next/server';
-import { mapTemplateService } from '@/lib/domain/map-templates/map-template-service';
 import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
-
-const patchSchema = z.object({
-  archived: z.boolean(),
-});
+import MapTemplate from '@/models/map/MapTemplate';
+import { handleApiError } from '@/lib/api/handle-api-error';
+import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
 
 /**
  * PATCH /api/admin/map-templates/[id]/archive
@@ -13,31 +10,18 @@ const patchSchema = z.object({
  */
 export async function PATCH(request, { params }) {
   try {
+    const { id } = await params;
     await connectToDatabase();
-    const { id } = params;
-    const json = await request.json();
 
-    const validationResult = patchSchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
+    // The intent of this endpoint is to archive. No need for a body.
+    const updatedTemplate = await mapTemplateRepo.archive(id, true);
+
+    if (!updatedTemplate) {
+      return NextResponse.json({ message: 'Map template not found' }, { status: 404 });
     }
 
-    const { archived } = validationResult.data;
-    let result;
-
-    if (archived) {
-      result = await mapTemplateService.archiveMapTemplate(id);
-    } else {
-      result = await mapTemplateService.unarchiveMapTemplate(id);
-    }
-
-    if (!result) {
-      return NextResponse.json({ message: `Map Template with id ${id} not found.` }, { status: 404 });
-    }
-
-    return NextResponse.json(result);
+    return NextResponse.json(updatedTemplate);
   } catch (error) {
-    console.error('Failed to update map template archive state:', error);
-    return NextResponse.json({ message: 'Ошибка сервера' }, { status: 500 });
+    return handleApiError(error, 'Failed to update map template archive state');
   }
 } 

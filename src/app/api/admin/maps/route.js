@@ -1,16 +1,8 @@
 import { NextResponse } from 'next/server';
 import { mapService } from '@/lib/domain/maps/map-service';
 import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
+import { createMapSchema } from '@/lib/api/schemas/maps/map-schemas';
 import { handleApiError } from '@/lib/api/handle-api-error';
-
-const createMapSchema = z.object({
-  name: z.string().min(1, 'Название не может быть пустым.'),
-  slug: z.string().min(1, 'Slug не может быть пустым.').optional(),
-  tournament: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID турнира.'),
-  template: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID шаблона.'),
-  startDateTime: z.string().datetime({ message: 'Некорректный формат даты и времени.' }),
-});
 
 /**
  * GET /api/admin/maps
@@ -33,8 +25,15 @@ export async function GET() {
  */
 export async function POST(request) {
   try {
+    await connectToDatabase();
     const data = await request.json();
-    const newMap = await mapService.createMap(data);
+
+    const validation = createMapSchema.safeParse(data);
+    if (!validation.success) {
+      return NextResponse.json({ errors: validation.error.flatten().fieldErrors }, { status: 400 });
+    }
+
+    const newMap = await mapService.createMap(validation.data);
     return NextResponse.json(newMap, { status: 201 });
   } catch (error) {
     return handleApiError(error);

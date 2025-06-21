@@ -9,16 +9,10 @@ import { statisticsService } from '@/lib/domain/statistics/statistics-service';
 import { AchievementService } from '@/lib/domain/achievements/achievement-service';
 import { ValidationError, NotFoundError, AppError } from '@/lib/errors';
 import { STATUSES } from '@/lib/constants';
+import { createMapSchema } from '@/lib/api/schemas/maps/map-schemas';
 
 // Services are now injected, not instantiated here.
 const achievementService = new AchievementService(); // This one remains as it's not refactored yet.
-
-const mapSchema = z.object({
-  name: z.string().trim().min(1, 'Название карты обязательно.'),
-  tournament: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID турнира.'),
-  template: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID шаблона.'),
-  startDateTime: z.coerce.date({ required_error: 'Дата и время начала обязательны.' }),
-});
 
 const completionSchema = z.object({
   winnerFamilyId: z.string().refine(val => /^[0-9a-fA-F]{24}$/.test(val), 'Некорректный ID семьи-победителя.'),
@@ -87,7 +81,7 @@ class MapService {
    * @returns {Promise<Map>}
    */
   async createMap(data) {
-    const validationResult = mapSchema.safeParse(data);
+    const validationResult = createMapSchema.safeParse(data);
     if (!validationResult.success) {
       throw new ValidationError('Ошибка валидации при создании карты', validationResult.error.flatten().fieldErrors);
     }

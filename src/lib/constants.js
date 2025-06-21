@@ -147,4 +147,10 @@ export const EVENT_TYPES = {
   TOURNAMENT_PARTICIPANT_ADDED: 'tournament_participant_added',
   TOURNAMENT_PARTICIPANT_REMOVED: 'tournament_participant_removed',
   TOURNAMENT_RESULT_CALCULATED: 'tournament_result_calculated',
-}; 
+};
+
+/**
+ * Задержка в миллисекундах для функции debounce при поиске.
+ * Используется для оптимизации запросов к API, чтобы они не отправлялись на каждое нажатие клавиши.
+ */
+export const SEARCH_DEBOUNCE_DELAY_MS = 200; 

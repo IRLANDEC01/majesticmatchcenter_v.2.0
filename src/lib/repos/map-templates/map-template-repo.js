@@ -44,10 +44,20 @@ class MapTemplateRepository {
    * Находит все шаблоны карт.
    * @param {object} [options] - Опции для поиска.
    * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
+   * @param {string} [options.search=''] - Строка для поиска по названию.
+   * @param {string|null} [options.id=null] - ID для поиска конкретного шаблона.
    * @returns {Promise<Array<object>>} - Массив шаблонов.
    */
-  async findAll({ includeArchived = false } = {}) {
-    return MapTemplate.find().setOptions({ includeArchived }).lean();
+  async findAll({ includeArchived = false, search = '', id = null } = {}) {
+    const filter = {};
+
+    if (id) {
+      filter._id = id;
+    } else if (search) {
+      filter.name = { $regex: search, $options: 'i' };
+    }
+
+    return MapTemplate.find(filter).setOptions({ includeArchived }).lean();
   }
 
   /**
@@ -135,6 +145,12 @@ class MapTemplateRepository {
   async unarchive(id) {
     return MapTemplate.findByIdAndUpdate(id, { $unset: { archivedAt: 1 } }, { new: true, includeArchived: true }).lean();
   }
+
+  async searchMapTemplates(searchTerm, limit = 10) {
+    const query = { name: { $regex: searchTerm, $options: 'i' } };
+    return MapTemplate.find(query).limit(limit).lean();
+  }
 }
 
-export const mapTemplateRepo = new MapTemplateRepository(); 
+const mapTemplateRepo = new MapTemplateRepository();
+export default mapTemplateRepo; 
