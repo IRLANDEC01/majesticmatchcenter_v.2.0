@@ -35,19 +35,25 @@ export default function MapTemplatesPage() {
   };
 
   const handleArchive = async (template) => {
-    toast.promise(
-      fetch(`/api/admin/map-templates/${template._id}/archive`, {
-        method: 'PATCH',
-      }),
+    const response = await fetch(
+      `/api/admin/map-templates/${template._id}/archive`,
       {
-        loading: `Архивируем шаблон "${template.name}"...`,
-        success: () => {
-          mutate(); // SWR перезапросит данные с текущим ключом (т.е. с текущим поиском)
-          return `Шаблон "${template.name}" успешно архивирован.`;
-        },
-        error: (err) => `Не удалось архивировать шаблон: ${err.message}`,
+        method: 'PATCH',
       }
     );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      const errorMessage =
+        errorData.message || `HTTP error! status: ${response.status}`;
+      toast.error(`Ошибка: ${errorMessage}`);
+      // Пробрасываем ошибку, чтобы вызывающий код мог ее обработать
+      // (например, чтобы не закрывать диалоговое окно)
+      throw new Error(errorMessage);
+    }
+
+    toast.success(`Шаблон "${template.name}" успешно архивирован.`);
+    mutate(); // SWR перезапросит данные
   };
 
   const handleDialogClose = (wasSaved) => {
@@ -100,8 +106,8 @@ export default function MapTemplatesPage() {
           data={data || []}
           onEdit={handleEdit}
           onArchive={handleArchive}
-          // Явно сообщаем таблице, был ли поиск
-          isSearchActive={!!debouncedSearch}
+          // Передаем сам поисковый запрос, чтобы таблица могла решать, как себя вести
+          searchQuery={debouncedSearch}
         />
       )}
 

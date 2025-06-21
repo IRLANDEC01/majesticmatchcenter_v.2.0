@@ -1,59 +1,35 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
-import { DuplicateError, NotFoundError, ValidationError, AppError } from '@/lib/errors';
+import { DuplicateError, ValidationError, NotFoundError, AppError } from '@/lib/errors';
+
+// Карта обработчиков ошибок, где ключ - конструктор ошибки, а значение - функция-обработчик.
+const errorHandlers = new Map([
+  [ZodError, (error) => NextResponse.json({ errors: error.flatten().fieldErrors }, { status: 400 })],
+  [ValidationError, (error) => NextResponse.json({ message: error.message, errors: error.details }, { status: 400 })],
+  [NotFoundError, (error) => NextResponse.json({ message: error.message }, { status: 404 })],
+  [DuplicateError, (error) => NextResponse.json({ message: error.message }, { status: 409 })],
+  [AppError, (error) => NextResponse.json({ message: error.message }, { status: error.statusCode })],
+]);
 
 /**
  * Централизованный обработчик ошибок для API маршрутов.
- * @param {Error} error - Перехваченная ошибка.
+ * Итерируется по карте обработчиков и использует `instanceof` для надежного определения типа ошибки.
+ * @param {Error} error - Объект ошибки.
+ * @param {string} [context='An unexpected error occurred'] - Контекстное сообщение для лога.
  * @returns {NextResponse} - Стандартизированный ответ с ошибкой.
  */
-export function handleApiError(error) {
-  // Логируем ошибку для отладки, но не в тестовой среде, чтобы не засорять вывод.
+export function handleApiError(error, context = 'An unexpected error occurred') {
+  // Логируем ошибку для отладки, но не в тестовой среде
   if (process.env.NODE_ENV !== 'test') {
-    console.error(error);
+    console.error(`${context}:`, error);
   }
 
-  // Кастомные ошибки приложения
-  if (error instanceof ValidationError) {
-    return NextResponse.json({ message: error.message, errors: error.errors }, { status: 400 });
-  }
-  
-  if (error instanceof AppError) {
-    return NextResponse.json({ message: error.message }, { status: error.statusCode });
+  for (const [ErrorClass, handler] of errorHandlers.entries()) {
+    if (error instanceof ErrorClass) {
+      return handler(error);
+    }
   }
 
-  // Ошибка неверного ID в Mongoose
-  if (error.name === 'CastError') {
-    return NextResponse.json({ message: `Некорректный формат ID для поля ${error.path}` }, { status: 400 });
-  }
-
-  // Ошибка валидации Zod
-  if (error instanceof ZodError) {
-    return NextResponse.json(
-      { message: 'Validation failed', errors: error.flatten().fieldErrors },
-      { status: 400 }
-    );
-  }
-  
-  // Ошибка валидации Mongoose
-  if (error.name === 'ValidationError') {
-    return NextResponse.json(
-      { message: error.message || 'Validation Error', errors: error.errors },
-      { status: 400 }
-    );
-  }
-
-  // Ошибка дублирования ключа Mongoose (E11000)
-  if (error.code === 11000) {
-    return NextResponse.json(
-      { message: 'A record with this key already exists.' },
-      { status: 409 }
-    );
-  }
-  
-  // Неизвестная ошибка
-  return NextResponse.json(
-    { message: 'An unexpected error occurred on the server.' },
-    { status: 500 }
-  );
+  // Для всех остальных непредвиденных ошибок
+  return NextResponse.json({ message: 'Внутренняя ошибка сервера' }, { status: 500 });
 } 

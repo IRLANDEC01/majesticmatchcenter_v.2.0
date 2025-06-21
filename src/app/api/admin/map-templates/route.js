@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { mapTemplateService } from '@/lib/domain/map-templates/map-template-service';
 import { connectToDatabase } from '@/lib/db';
 import { createMapTemplateSchema } from '@/lib/api/schemas/map-templates/map-template-schemas';
 import { DuplicateError } from '@/lib/errors';
 import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
 import { handleApiError } from '@/lib/api/handle-api-error';
+import { ADMIN_SEARCH_RESULTS_LIMIT } from '@/lib/constants';
 
 /**
  * Обработчик GET-запроса для получения шаблонов карт.
@@ -25,6 +27,7 @@ export async function GET(request) {
       id,
       search,
       includeArchived,
+      limit: ADMIN_SEARCH_RESULTS_LIMIT,
     });
 
     return NextResponse.json(templates, { status: 200 });
@@ -49,16 +52,17 @@ export async function POST(request) {
     }
 
     const newTemplate = await mapTemplateService.createMapTemplate(validationResult.data);
+
+    // После успешного создания инвалидируем кэш страницы со списком
+    revalidatePath('/admin/map-templates');
+
     return NextResponse.json(newTemplate, { status: 201 });
   } catch (error) {
-    if (error instanceof DuplicateError) {
-      return NextResponse.json({ message: error.message }, { status: 409 });
-    }
     if (error.code === 11000) {
-      // MongoDB duplicate key error - a fallback
-      return NextResponse.json({ message: 'Шаблон карты с таким названием уже существует' }, { status: 409 });
+      // MongoDB duplicate key error
+      return NextResponse.json({ message: 'Шаблон карты с таким названием или URL уже существует' }, { status: 409 });
     }
-    console.error('Failed to create map template:', error);
-    return NextResponse.json({ message: 'Ошибка сервера при создании шаблона карты' }, { status: 500 });
+    
+    return handleApiError(error);
   }
 } 

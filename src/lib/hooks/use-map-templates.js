@@ -15,8 +15,11 @@ import useSWR from 'swr';
  * }}
  */
 export function useMapTemplates({ search = '' } = {}) {
-  // Ключ SWR. Если search пустой, ключ будет null, и SWR не будет делать запрос.
-  const key = search ? `/api/admin/map-templates?search=${search}` : null;
+  // Ключ SWR. Если search пустой или его длина меньше 2, ключ будет null, и SWR не будет делать запрос.
+  const key =
+    search && search.length >= 2
+      ? `/api/admin/map-templates?search=${search}`
+      : null;
 
   const { data, error, isLoading, mutate } = useSWR(
     key,

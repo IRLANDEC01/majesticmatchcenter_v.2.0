@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { familyService } from '@/lib/domain/families/family-service';
 import { handleApiError } from '@/lib/api/handle-api-error';
-import { updateFamilySchema } from '@/lib/api/schemas/families/family-schemas';
+import { updateFamilySchema, familyIdSchema } from '@/lib/api/schemas/families/family-schemas';
 
 /**
  * GET /api/admin/families/[id]
@@ -9,7 +9,8 @@ import { updateFamilySchema } from '@/lib/api/schemas/families/family-schemas';
  */
 export async function GET(request, { params }) {
   try {
-    const family = await familyService.getFamilyById(params.id);
+    const { id } = familyIdSchema.parse(params);
+    const family = await familyService.getFamilyById(id);
     return NextResponse.json(family);
   } catch (error) {
     return handleApiError(error);
@@ -22,10 +23,11 @@ export async function GET(request, { params }) {
  */
 export async function PUT(request, { params }) {
   try {
+    const { id } = familyIdSchema.parse(params);
     const body = await request.json();
     const validatedData = updateFamilySchema.parse(body);
 
-    const updatedFamily = await familyService.updateFamily(params.id, validatedData);
+    const updatedFamily = await familyService.updateFamily(id, validatedData);
     return NextResponse.json(updatedFamily);
   } catch (error) {
     return handleApiError(error);
@@ -40,7 +42,8 @@ export async function PUT(request, { params }) {
  */
 export async function DELETE(request, { params }) {
   try {
-    await familyService.archiveFamily(params.id);
+    const { id } = familyIdSchema.parse(params);
+    await familyService.archiveFamily(id);
     return new Response(null, { status: 204 });
   } catch (error) {
     return handleApiError(error);

@@ -29,4 +29,13 @@ export const createFamilySchema = z.object({
  * Схема для обновления семьи.
  * Все поля опциональны, так как можно обновлять только часть данных.
  */
-export const updateFamilySchema = createFamilySchema.partial(); 
+export const updateFamilySchema = createFamilySchema.partial();
+
+/**
+ * Схема для валидации ID семьи в параметрах URL.
+ */
+export const familyIdSchema = z.object({
+  id: z.string().refine((val) => /^[0-9a-fA-F]{24}$/.test(val), {
+    message: 'Некорректный ID семьи в параметрах маршрута.',
+  }),
+}); 

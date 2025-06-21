@@ -14,13 +14,13 @@ class MapTemplateRepository {
    */
   async findById(id) {
     const cacheKey = `map_template:${id}`;
-    const cachedTemplate = await cache.get(cacheKey);
+    let template = await cache.get(cacheKey);
 
-    if (cachedTemplate) {
-      return cachedTemplate;
+    if (template) {
+      return template;
     }
 
-    const template = await MapTemplate.findById(id).lean();
+    template = await MapTemplate.findById(id).lean();
 
     if (template) {
       await cache.set(cacheKey, template, {
@@ -60,9 +60,15 @@ class MapTemplateRepository {
    * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
    * @param {string} [options.search=''] - Строка для поиска по названию.
    * @param {string|null} [options.id=null] - ID для поиска конкретного шаблона.
+   * @param {number|null} [options.limit=null] - Ограничение на количество результатов.
    * @returns {Promise<Array<object>>} - Массив шаблонов.
    */
-  async findAll({ includeArchived = false, search = '', id = null } = {}) {
+  async findAll({
+    includeArchived = false,
+    search = '',
+    id = null,
+    limit = null,
+  } = {}) {
     const filter = {};
 
     if (id) {
@@ -71,7 +77,13 @@ class MapTemplateRepository {
       filter.name = { $regex: search, $options: 'i' };
     }
 
-    return MapTemplate.find(filter).setOptions({ includeArchived }).lean();
+    let query = MapTemplate.find(filter).setOptions({ includeArchived });
+
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    return query.lean();
   }
 
   /**
@@ -147,7 +159,18 @@ class MapTemplateRepository {
    * @returns {Promise<MapTemplate|null>}
    */
   async archive(id) {
-    return MapTemplate.findByIdAndUpdate(id, { $set: { archivedAt: new Date() } }, { new: true }).lean();
+    const updatedTemplate = await MapTemplate.findByIdAndUpdate(
+      id,
+      { $set: { archivedAt: new Date() } },
+      { new: true }
+    ).lean();
+
+    if (updatedTemplate) {
+      await cache.invalidateByTag(`map_template:${id}`);
+      await cache.invalidateByTag('map_templates_list');
+    }
+    
+    return updatedTemplate;
   }
 
   /**
@@ -157,7 +180,18 @@ class MapTemplateRepository {
    * @returns {Promise<MapTemplate|null>}
    */
   async unarchive(id) {
-    return MapTemplate.findByIdAndUpdate(id, { $unset: { archivedAt: 1 } }, { new: true, includeArchived: true }).lean();
+    const updatedTemplate = await MapTemplate.findByIdAndUpdate(
+      id,
+      { $unset: { archivedAt: 1 } },
+      { new: true, includeArchived: true }
+    ).lean();
+    
+    if (updatedTemplate) {
+      await cache.invalidateByTag(`map_template:${id}`);
+      await cache.invalidateByTag('map_templates_list');
+    }
+
+    return updatedTemplate;
   }
 
   async searchMapTemplates(searchTerm, limit = 10) {

@@ -22,18 +22,28 @@ export default function MapTemplatesTable({
   data = [],
   onEdit,
   onArchive,
-  isSearchActive,
+  searchQuery,
 }) {
   const [templateToDelete, setTemplateToDelete] = useState(null);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   const handleArchiveClick = (template) => {
     setTemplateToDelete(template);
   };
 
-  const handleConfirmArchive = () => {
+  const handleConfirmArchive = async () => {
     if (!templateToDelete) return;
-    onArchive(templateToDelete);
-    setTemplateToDelete(null);
+
+    setIsArchiving(true);
+    try {
+      await onArchive(templateToDelete);
+      setTemplateToDelete(null);
+    } catch (error) {
+      // Ошибки уже обрабатываются глобально и выводятся в toast,
+      // поэтому здесь дополнительных действий не требуется.
+    } finally {
+      setIsArchiving(false);
+    }
   };
 
   const columns = [
@@ -82,7 +92,7 @@ export default function MapTemplatesTable({
     },
   ];
 
-  if (!isSearchActive) {
+  if (!searchQuery || searchQuery.length < 2) {
     return (
       <EmptyState
         icon={Search}
@@ -109,6 +119,7 @@ export default function MapTemplatesTable({
         isOpen={!!templateToDelete}
         onOpenChange={(isOpen) => !isOpen && setTemplateToDelete(null)}
         onConfirm={handleConfirmArchive}
+        isPending={isArchiving}
         entityName={templateToDelete?.name}
         entityType="шаблон карты"
       />

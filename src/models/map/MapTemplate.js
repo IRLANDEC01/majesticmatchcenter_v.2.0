@@ -6,13 +6,11 @@ const mapTemplateSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Название шаблона является обязательным полем.'],
     trim: true,
-    unique: true,
   },
   // Уникальный идентификатор для URL, например, "ctf-construction"
   slug: {
     type: String,
     required: [true, 'Slug является обязательным полем.'],
-    unique: true,
     trim: true,
     lowercase: true,
   },
@@ -42,6 +40,25 @@ const mapTemplateSchema = new mongoose.Schema({
   versionKey: '__v',
 });
 
+// Частичный уникальный индекс для `name`.
+// Гарантирует уникальность только среди активных (неархивированных) документов.
+mapTemplateSchema.index(
+  { name: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { archivedAt: null },
+  }
+);
+
+// Частичный уникальный индекс для `slug`.
+mapTemplateSchema.index(
+  { slug: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { archivedAt: null },
+  }
+);
+
 // Добавляем pre-save хук для генерации slug из name, если он не предоставлен
 mapTemplateSchema.pre('validate', function(next) {
   if (this.name && !this.slug) {
@@ -54,7 +71,7 @@ mapTemplateSchema.pre('validate', function(next) {
 mapTemplateSchema.pre(/^find/, function(next) {
   // `this` - это объект запроса (query)
   if (!this.getOptions().includeArchived) {
-    this.where({ archivedAt: { $exists: false } });
+    this.where({ archivedAt: null });
   }
   next();
 });

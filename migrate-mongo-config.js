@@ -17,9 +17,11 @@ const config = {
 
     /**
      * Имя базы данных.
-     * Берется из переменной окружения MONGODB_DB_NAME.
+     * НЕ УКАЗЫВАЕТСЯ ЯВНО. Оно должно быть частью `url` для консистентности.
+     * Mongoose и драйвер MongoDB автоматически извлекут имя базы данных из строки подключения.
+     * Это гарантирует, что и приложение, и мигратор используют одну и ту же БД.
      */
-    databaseName: process.env.MONGODB_DB_NAME || "majesticmatchcenter",
+    // databaseName: process.env.MONGODB_DB_NAME || "majesticmatchcenter",
 
     options: {
       useNewUrlParser: true, // Рекомендуется для обратной совместимости

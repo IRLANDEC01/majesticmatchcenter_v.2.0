@@ -3,6 +3,12 @@ import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 import MapTemplate from '@/models/map/MapTemplate';
 import { dbClear } from '@/lib/test-helpers';
 import { MAP_MODES, MAP_VISIBILITY } from '@/lib/constants';
+import { revalidatePath } from 'next/cache';
+
+// Мокируем 'next/cache' для всех тестов в этом файле
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn(),
+}));
 
 describe('API /api/admin/map-templates', () => {
   beforeAll(async () => {
@@ -15,6 +21,8 @@ describe('API /api/admin/map-templates', () => {
 
   beforeEach(async () => {
     await dbClear();
+    // Очищаем мок перед каждым тестом
+    revalidatePath.mockClear();
   });
 
   // --- POST Tests ---
@@ -38,6 +46,9 @@ describe('API /api/admin/map-templates', () => {
       expect(response.status).toBe(201);
       expect(body.name).toBe(validTemplateData.name);
 
+      // Проверяем, что revalidatePath была вызвана с правильным путем
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
+
       const dbTemplate = await MapTemplate.findById(body._id);
       expect(dbTemplate).not.toBeNull();
     });
@@ -53,6 +64,9 @@ describe('API /api/admin/map-templates', () => {
 
       const response = await POST(request);
       expect(response.status).toBe(409);
+
+      // Убедимся, что revalidatePath не была вызвана при ошибке
+      expect(revalidatePath).not.toHaveBeenCalled();
     });
 
     it('должен возвращать ошибку 400, если не предоставлено изображение карты', async () => {
@@ -68,6 +82,9 @@ describe('API /api/admin/map-templates', () => {
 
       expect(response.status).toBe(400);
       expect(body.errors.mapImage).toBeDefined();
+
+      // Убедимся, что revalidatePath не была вызвана при ошибке валидации
+      expect(revalidatePath).not.toHaveBeenCalled();
     });
   });
 

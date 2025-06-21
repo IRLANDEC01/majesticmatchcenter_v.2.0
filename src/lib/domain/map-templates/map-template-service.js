@@ -19,12 +19,15 @@ class MapTemplateService {
    * @returns {Promise<object>} - Созданный объект шаблона карты.
    */
   async createMapTemplate(templateData) {
-    const slug = templateData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-    const existingTemplate = await this.repo.findActiveByNameOrSlug(templateData.name, slug);
+    const slug =
+      templateData.slug ||
+      templateData.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '');
 
-    if (existingTemplate) {
-      throw new DuplicateError('Активный шаблон карты с таким названием или сгенерированным URL уже существует.');
-    }
+    // Убираем ручную проверку. Теперь мы полностью доверяем
+    // частичному уникальному индексу в базе данных.
     return this.repo.create({ ...templateData, slug });
   }
 
@@ -56,14 +59,16 @@ class MapTemplateService {
    * @returns {Promise<object>} - Обновленный объект шаблона карты.
    */
   async updateMapTemplate(id, templateData) {
-    if (templateData.name) {
-      const slug = templateData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-      const existingTemplate = await this.repo.findActiveByNameOrSlug(templateData.name, slug);
-      if (existingTemplate && existingTemplate._id.toString() !== id) {
-        throw new DuplicateError('Активный шаблон карты с таким названием или сгенерированным URL уже существует.');
-      }
-      templateData.slug = slug;
+    if (templateData.name && !templateData.slug) {
+      templateData.slug = templateData.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '');
     }
+
+    // Убираем ручную проверку. База данных сама не позволит
+    // обновить запись, если это приведет к дубликации имени/slug
+    // среди активных документов.
     return this.repo.update(id, templateData);
   }
   

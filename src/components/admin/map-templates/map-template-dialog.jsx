@@ -20,10 +20,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import ImageUploader from '@/components/ui/image-uploader';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 // Шаг 1: Выносим форму в отдельный, стабильный компонент.
-const MapTemplateForm = ({ form, isEditMode, onSubmit }) => {
-  const { control, handleSubmit, formState: { isSubmitting, isDirty } } = form;
+const MapTemplateForm = ({ form, isEditMode, isSubmitting, onSubmit, onClose }) => {
+  const { control, handleSubmit, formState: { isDirty } } = form;
 
   return (
     <Form {...form}>
@@ -74,16 +75,16 @@ const MapTemplateForm = ({ form, isEditMode, onSubmit }) => {
           />
         </fieldset>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => form.props.onClose(false)} disabled={isSubmitting}>
+          <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSubmitting}>
             Отмена
           </Button>
-          <Button type="submit" disabled={isEditMode ? !isDirty || isSubmitting : isSubmitting}>
-            {isSubmitting
-              ? 'Сохранение...'
-              : isEditMode
-              ? 'Сохранить изменения'
-              : 'Создать шаблон'}
-          </Button>
+          <SubmitButton
+            isSubmitting={isSubmitting}
+            disabled={isEditMode ? !isDirty || isSubmitting : isSubmitting}
+            submittingText={isEditMode ? 'Сохранение...' : 'Создание...'}
+          >
+            {isEditMode ? 'Сохранить изменения' : 'Создать шаблон'}
+          </SubmitButton>
         </DialogFooter>
       </form>
     </Form>
@@ -93,6 +94,7 @@ const MapTemplateForm = ({ form, isEditMode, onSubmit }) => {
 
 export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
   const [serverError, setServerError] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = Boolean(template);
 
   const form = useForm({
@@ -102,15 +104,12 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
       description: '',
       mapImage: '',
     },
-    // Передаем onClose в form, чтобы дочерний компонент мог его вызвать
-    props: {
-      onClose,
-    }
   });
 
   useEffect(() => {
     if (isOpen) {
       setServerError(null);
+      setIsSubmitting(false); // Сбрасываем состояние при открытии
       if (isEditMode && template) {
         form.reset({
           name: template.name || '',
@@ -129,6 +128,7 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
 
   async function onSubmit(values) {
     setServerError(null);
+    setIsSubmitting(true);
 
     const submissionValues = { ...values };
     
@@ -167,17 +167,19 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
       }
 
       toast.success(isEditMode ? 'Шаблон карты успешно обновлен!' : 'Шаблон карты успешно создан!');
-      onClose(true);
+      onClose(true); // Закрываем только после успеха
     } catch (error) {
       console.error(error);
       const message = 'Произошла непредвиденная ошибка.';
       setServerError(message);
       toast.error('Критическая ошибка', { description: message });
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
   const handleClose = () => {
-    if (!form.formState.isSubmitting) {
+    if (!isSubmitting) {
       onClose(false);
     }
   };
@@ -204,12 +206,12 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
       <DialogContent
         className="sm:max-w-[425px]"
         onPointerDownOutside={(e) => {
-          if (form.formState.isSubmitting) {
+          if (isSubmitting) {
             e.preventDefault();
           }
         }}
         onEscapeKeyDown={(e) => {
-          if (form.formState.isSubmitting) {
+          if (isSubmitting) {
             e.preventDefault();
           }
         }}
@@ -223,7 +225,7 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
           </DialogDescription>
           {serverError && <div className="text-sm font-medium text-destructive">{serverError}</div>}
         </DialogHeader>
-        {isLoading ? <DialogSkeleton /> : <MapTemplateForm form={form} isEditMode={isEditMode} onSubmit={onSubmit} />}
+        {isLoading ? <DialogSkeleton /> : <MapTemplateForm form={form} isEditMode={isEditMode} isSubmitting={isSubmitting} onSubmit={onSubmit} onClose={handleClose} />}
       </DialogContent>
     </Dialog>
   );
