@@ -19,11 +19,13 @@ class MapTemplateService {
    * @returns {Promise<object>} - Созданный объект шаблона карты.
    */
   async createMapTemplate(templateData) {
-    const existingTemplate = await this.repo.findByName(templateData.name);
+    const slug = templateData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const existingTemplate = await this.repo.findActiveByNameOrSlug(templateData.name, slug);
+
     if (existingTemplate) {
-      throw new DuplicateError('Шаблон карты с таким названием уже существует.');
+      throw new DuplicateError('Активный шаблон карты с таким названием или сгенерированным URL уже существует.');
     }
-    return this.repo.create(templateData);
+    return this.repo.create({ ...templateData, slug });
   }
 
   /**
@@ -55,10 +57,12 @@ class MapTemplateService {
    */
   async updateMapTemplate(id, templateData) {
     if (templateData.name) {
-      const existingTemplate = await this.repo.findByName(templateData.name);
+      const slug = templateData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+      const existingTemplate = await this.repo.findActiveByNameOrSlug(templateData.name, slug);
       if (existingTemplate && existingTemplate._id.toString() !== id) {
-        throw new DuplicateError('Шаблон карты с таким названием уже существует.');
+        throw new DuplicateError('Активный шаблон карты с таким названием или сгенерированным URL уже существует.');
       }
+      templateData.slug = slug;
     }
     return this.repo.update(id, templateData);
   }

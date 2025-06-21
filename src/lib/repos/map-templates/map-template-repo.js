@@ -41,6 +41,20 @@ class MapTemplateRepository {
   }
 
   /**
+   * Находит активный шаблон карты по имени или slug.
+   * Используется для проверки на дубликаты перед созданием/обновлением.
+   * @param {string} name - Имя шаблона.
+   * @param {string} slug - Slug шаблона.
+   * @returns {Promise<object|null>} - Найденный шаблон или null.
+   */
+  async findActiveByNameOrSlug(name, slug) {
+    return MapTemplate.findOne({
+      $or: [{ name }, { slug }],
+      archivedAt: { $eq: null },
+    }).lean();
+  }
+
+  /**
    * Находит все шаблоны карт.
    * @param {object} [options] - Опции для поиска.
    * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
