@@ -1,10 +1,6 @@
 import { PATCH } from './route';
 import Map from '@/models/map/Map';
-import Tournament from '@/models/tournament/Tournament';
-import TournamentTemplate from '@/models/tournament/TournamentTemplate';
-import MapTemplate from '@/models/map/MapTemplate';
-import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
-import { TOURNAMENT_SCORING_TYPES } from '@/lib/constants';
+import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers';
 
 describe('API /api/admin/maps/[id]/archive', () => {
   let testMap;
@@ -14,37 +10,13 @@ describe('API /api/admin/maps/[id]/archive', () => {
 
   beforeEach(async () => {
     await dbClear();
-
-    // Создаем всю цепочку зависимостей для карты
-    const mapTemplate = await MapTemplate.create({ name: 'Test Map Template', slug: 'test-map-template' });
-    const tournamentTemplate = await TournamentTemplate.create({
-      name: 'Test Tournament Template',
-      slug: 'test-tournament-template',
-      mapTemplates: [mapTemplate._id],
-      scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
-    });
-    const tournament = await Tournament.create({
-      name: 'Test Tournament',
-      slug: 'test-tournament',
-      template: tournamentTemplate._id,
-      tournamentType: 'family',
-      scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
-      startDate: new Date(),
-    });
-    testMap = await Map.create({
-      name: 'Test Map',
-      slug: 'test-map',
-      tournament: tournament._id,
-      template: mapTemplate._id,
-      startDateTime: new Date(),
-    });
+    const { testData } = await populateDb();
+    testMap = testData.map;
   });
 
   it('должен успешно архивировать карту', async () => {
     const request = new Request(`http://localhost/api/admin/maps/${testMap._id}/archive`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ archived: true }),
     });
 
     const response = await PATCH(request, { params: { id: testMap._id.toString() } });
@@ -59,31 +31,27 @@ describe('API /api/admin/maps/[id]/archive', () => {
 
   it('должен успешно восстанавливать карту из архива', async () => {
     // Сначала архивируем
-    await testMap.updateOne({ $set: { archivedAt: new Date() } });
+    await Map.findByIdAndUpdate(testMap._id, { $set: { archivedAt: new Date() } });
 
     const request = new Request(`http://localhost/api/admin/maps/${testMap._id}/archive`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ archived: false }),
     });
 
     const response = await PATCH(request, { params: { id: testMap._id.toString() } });
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.archivedAt).toBeUndefined();
+    expect(body.archivedAt).toBeUndefined(); // Восстановленная карта не должна иметь этого поля
 
     const dbMap = await Map.findById(testMap._id);
     expect(dbMap).not.toBeNull();
-    expect(dbMap.archivedAt).toBeUndefined();
+    expect(dbMap.archivedAt).toBeNull();
   });
 
   it('должен возвращать 404, если карта не найдена', async () => {
     const nonExistentId = '60c72b2f9b1d8e001f8e4c5e';
     const request = new Request(`http://localhost/api/admin/maps/${nonExistentId}/archive`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ archived: true }),
     });
 
     const response = await PATCH(request, { params: { id: nonExistentId } });

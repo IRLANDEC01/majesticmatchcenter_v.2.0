@@ -14,4 +14,4 @@ class FamilyEarningRepo {
   }
 }
 
-export default new FamilyEarningRepo(); 
+export default FamilyEarningRepo; 

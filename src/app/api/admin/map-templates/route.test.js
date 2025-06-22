@@ -123,20 +123,6 @@ describe('API /api/admin/map-templates', () => {
       expect(data.every(t => t.name.includes('Test'))).toBe(true);
     });
 
-    it('должен возвращать один шаблон по ID', async () => {
-      const template1 = await MapTemplate.create({ name: 'FindMe', description: 'Desc 1' });
-      await MapTemplate.create({ name: 'NotMe', description: 'Desc 2' });
-
-      const request = new Request(`http://localhost/api/admin/map-templates?id=${template1._id}`);
-      const response = await GET(request);
-      const data = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data.length).toBe(1);
-      expect(data[0].name).toBe('FindMe');
-      expect(data[0]._id.toString()).toBe(template1._id.toString());
-    });
-    
     it('должен возвращать только неархивированные шаблоны по умолчанию', async () => {
       await MapTemplate.create({ name: 'Active Map Template' });
       await MapTemplate.create({ name: 'Archived Map Template', archivedAt: new Date() });
@@ -150,16 +136,18 @@ describe('API /api/admin/map-templates', () => {
       expect(body[0].name).toBe('Active Map Template');
     });
 
-    it('должен возвращать все шаблоны при `include_archived=true`', async () => {
+    it('должен возвращать только архивные шаблоны при `status=archived`', async () => {
       await MapTemplate.create({ name: 'Active Map Template 2' });
       await MapTemplate.create({ name: 'Archived Map Template 2', archivedAt: new Date() });
       
-      const request = new Request('http://localhost/api/admin/map-templates?include_archived=true');
+      const request = new Request('http://localhost/api/admin/map-templates?status=archived');
       const response = await GET(request);
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body.length).toBe(2);
+      expect(body.length).toBe(1);
+      expect(body[0]).toHaveProperty('archivedAt');
+      expect(body[0].name).toBe('Archived Map Template 2');
     });
   });
 }); 

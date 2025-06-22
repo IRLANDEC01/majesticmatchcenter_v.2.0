@@ -107,9 +107,16 @@ mapSchema.pre('save', function(next) {
 mapSchema.pre(/^find/, function(next) {
   // `this` - это объект запроса (query)
   if (!this.getOptions().includeArchived) {
-    this.where({ archivedAt: { $exists: false } });
+    // Ищем документы, у которых поле archivedAt либо равно null, либо не существует.
+    // Это самая надежная проверка для исключения "мягко удаленных" записей.
+    this.where({ archivedAt: null });
   }
   next();
+});
+
+// Виртуальное поле для удобства
+mapSchema.virtual('isArchived').get(function() {
+  return !!this.archivedAt;
 });
 
 // Уникальный индекс, чтобы в одном турнире не было двух карт с одинаковым slug.

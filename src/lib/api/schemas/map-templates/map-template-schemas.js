@@ -27,4 +27,12 @@ export const updateMapTemplateSchema = z.object({
   name: z.string().min(3, 'Название должно содержать минимум 3 символа.').optional(),
   description: z.string().optional(),
   mapImage: z.string().url('Некорректный URL изображения.').optional(),
-}); 
+});
+
+/**
+ * @desc Схема для валидации query-параметров при получении списка шаблонов карт.
+ */
+export const getMapTemplatesSchema = z.object({
+  search: z.string().optional().default(''),
+  status: z.enum(['active', 'archived']).default('active'),
+});

@@ -94,4 +94,4 @@ class PlayerStatsRepository {
   }
 }
 
-export const playerStatsRepository = new PlayerStatsRepository(); 
+export default PlayerStatsRepository; 

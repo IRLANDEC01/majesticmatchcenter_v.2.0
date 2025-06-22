@@ -4,20 +4,22 @@ const mapTemplateSchema = new mongoose.Schema({
   // Название шаблона, например, "Захват флага на 'Стройке'"
   name: {
     type: String,
-    required: [true, 'Название шаблона является обязательным полем.'],
+    required: [true, 'Название шаблона карты обязательно.'],
     trim: true,
+    maxlength: [100, 'Название шаблона карты не может превышать 100 символов.'],
   },
   // Уникальный идентификатор для URL, например, "ctf-construction"
   slug: {
     type: String,
-    required: [true, 'Slug является обязательным полем.'],
+    required: [true, 'Slug шаблона карты обязателен.'],
     trim: true,
-    lowercase: true,
+    maxlength: [100, 'Slug шаблона карты не может превышать 100 символов.'],
   },
   // Краткое описание шаблона карты
   description: {
     type: String,
     trim: true,
+    maxlength: [500, 'Описание шаблона карты не может превышать 500 символов.'],
   },
   // URL на изображение карты (превью)
   mapImage: {
@@ -28,50 +30,46 @@ const mapTemplateSchema = new mongoose.Schema({
   usageCount: {
     type: Number,
     default: 0,
-    min: [0, 'Счетчик использования не может быть отрицательным.'],
+    min: [0, 'Счетчик использований не может быть отрицательным.'],
   },
   archivedAt: {
     type: Date,
+    default: null,
   },
 }, {
   // Добавляет поля createdAt и updatedAt
   timestamps: true,
   // Включаем optimistic concurrency control
   versionKey: '__v',
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true },
+});
+
+// Виртуальное поле для удобной проверки, архивирован ли шаблон
+mapTemplateSchema.virtual('isArchived').get(function () {
+  return this.archivedAt !== null;
 });
 
 // Частичный уникальный индекс для `name`.
 // Гарантирует уникальность только среди активных (неархивированных) документов.
 mapTemplateSchema.index(
-  { name: 1 },
-  {
-    unique: true,
-    partialFilterExpression: { archivedAt: null },
-  }
+  { name: 1, archivedAt: 1 },
+  { unique: true, partialFilterExpression: { archivedAt: null } }
 );
 
 // Частичный уникальный индекс для `slug`.
 mapTemplateSchema.index(
-  { slug: 1 },
-  {
-    unique: true,
-    partialFilterExpression: { archivedAt: null },
-  }
+  { slug: 1, archivedAt: 1 },
+  { unique: true, partialFilterExpression: { archivedAt: null } }
 );
+
+// Индекс для быстрого поиска по статусу архивации
+mapTemplateSchema.index({ archivedAt: 1 });
 
 // Добавляем pre-save хук для генерации slug из name, если он не предоставлен
 mapTemplateSchema.pre('validate', function(next) {
   if (this.name && !this.slug) {
     this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-  }
-  next();
-});
-
-// Хук для автоматического исключения архивированных документов из результатов `find`
-mapTemplateSchema.pre(/^find/, function(next) {
-  // `this` - это объект запроса (query)
-  if (!this.getOptions().includeArchived) {
-    this.where({ archivedAt: null });
   }
   next();
 });

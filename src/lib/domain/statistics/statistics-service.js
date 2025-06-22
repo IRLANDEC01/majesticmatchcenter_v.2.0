@@ -1,12 +1,9 @@
 /**
  * Сервис для управления статистикой игроков и семей.
  */
-import { playerRepo } from '@/lib/repos/players/player-repo';
-import { playerStatsRepository } from '@/lib/repos/statistics/player-stats-repo';
-import { playerMapParticipationRepo } from '@/lib/repos/statistics/player-map-participation-repo';
 import { RATING_REASONS } from '@/lib/constants';
 
-export class StatisticsService {
+export default class StatisticsService {
   constructor({
     playerRepo,
     playerStatsRepo,
@@ -32,22 +29,15 @@ export class StatisticsService {
     const ratingUpdatePromises = [];
 
     for (const stats of playerStats) {
-      // Пока что логика начисления рейтинга простая: 1 убийство = 1 очко.
-      const ratingChange = stats.kills - stats.deaths;
+      const ratingChange = (stats.kills || 0) - (stats.deaths || 0);
 
-      // Создаем документ вручную, чтобы исключить проблемы со spread (...)
       const doc = {
-        // Связи
         playerId: stats.playerId,
         familyId: stats.familyId,
         mapId,
         tournamentId,
-        
-        // Рейтинг
         ratingChange,
         reason: RATING_REASONS.MAP_COMPLETION,
-        
-        // Статистика
         kills: stats.kills,
         deaths: stats.deaths,
         damageDealt: stats.damageDealt,
@@ -60,7 +50,6 @@ export class StatisticsService {
       };
       participationDocs.push(doc);
 
-      // Сразу готовим промис для обновления основного рейтинга игрока
       if (ratingChange !== 0) {
         ratingUpdatePromises.push(
           this.playerRepo.incrementRating(stats.playerId, ratingChange)
@@ -68,7 +57,6 @@ export class StatisticsService {
       }
     }
 
-    // Выполняем все операции параллельно
     await Promise.all([
       this.playerMapParticipationRepo.createMany(participationDocs),
       ...ratingUpdatePromises,
@@ -162,23 +150,18 @@ export class StatisticsService {
    * @returns {Promise<void>}
    */
   async rollbackMapStats(mapId) {
-    // 1. Найти все записи, которые нужно откатить
     const participationRecords = await this.playerMapParticipationRepo.findByMapId(mapId);
     if (!participationRecords || participationRecords.length === 0) {
-      return; // Нечего откатывать
+      return;
     }
     
-    // 2. Сформировать промисы для отката рейтинга в основной модели Player
     const rollbackPromises = participationRecords.map(record => {
-      // Важно: инвертируем изменение. Если было +15, станет -15.
       const ratingChange = -record.ratingChange;
       return this.playerRepo.incrementRating(record.playerId, ratingChange);
     });
     
-    // 3. Дождаться отката рейтингов
     await Promise.all(rollbackPromises);
 
-    // 4. Удалить сами записи об участии
     await this.playerMapParticipationRepo.deleteByMapId(mapId);
   }
 
@@ -214,10 +197,4 @@ export class StatisticsService {
     // TODO: Implement logic to rollback statistics for a map.
     // This could involve deleting created stats entries or reverting to a previous state.
   }
-}
-
-export const statisticsService = new StatisticsService({
-  playerRepo,
-  playerStatsRepo: playerStatsRepository,
-  playerMapParticipationRepo,
-}); 
+} 

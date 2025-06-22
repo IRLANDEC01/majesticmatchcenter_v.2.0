@@ -45,4 +45,4 @@ class PlayerMapParticipationRepository {
   }
 }
 
-export const playerMapParticipationRepo = new PlayerMapParticipationRepository(); 
+export default PlayerMapParticipationRepository; 

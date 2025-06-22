@@ -1,28 +1,28 @@
-import { tournamentRepo } from '@/lib/repos/tournaments/tournament-repo';
-import { familyRepo } from '@/lib/repos/families/family-repo';
-import { playerRepo } from '@/lib/repos/players/player-repo';
-import { tournamentTemplateRepo } from '@/lib/repos/tournament-templates/tournament-template-repo.js';
+import TournamentRepo from '@/lib/repos/tournaments/tournament-repo';
+import FamilyRepo from '@/lib/repos/families/family-repo';
+import PlayerRepo from '@/lib/repos/players/player-repo';
+import TournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo.js';
 import { AppError, DuplicateError, NotFoundError, ValidationError } from '@/lib/errors';
-import familyTournamentParticipationRepo from '@/lib/repos/families/family-tournament-participation-repo';
-import familyEarningRepo from '@/lib/repos/families/family-earning-repo';
-import playerEarningRepo from '@/lib/repos/players/player-earning-repo';
-import playerTournamentParticipationRepo from '@/lib/repos/players/player-tournament-participation-repo';
+import FamilyTournamentParticipationRepo from '@/lib/repos/families/family-tournament-participation-repo';
+import FamilyEarningRepo from '@/lib/repos/families/family-earning-repo';
+import PlayerEarningRepo from '@/lib/repos/players/player-earning-repo';
+import PlayerTournamentParticipationRepo from '@/lib/repos/players/player-tournament-participation-repo';
 import { STATUSES } from '@/lib/constants';
 
 /**
  * Сервис для управления бизнес-логикой турниров.
  */
-class TournamentService {
+export default class TournamentService {
   /**
    * @param {object} repos - Репозитории.
-   * @param {tournamentRepo} repos.tournamentRepo - Репозиторий турниров.
-   * @param {tournamentTemplateRepo} repos.tournamentTemplateRepo - Репозиторий шаблонов турниров.
-   * @param {familyRepo} repos.familyRepo - Репозиторий семей.
-   * @param {playerRepo} repos.playerRepo - Репозиторий игроков.
-   * @param {familyTournamentParticipationRepo} repos.familyTournamentParticipationRepo - Репозиторий участий семей в турнирах.
-   * @param {playerTournamentParticipationRepo} repos.playerTournamentParticipationRepo - Репозиторий участий игроков в турнирах.
-   * @param {familyEarningRepo} repos.familyEarningRepo - Репозиторий призовых семей.
-   * @param {playerEarningRepo} repos.playerEarningRepo - Репозиторий призовых игроков.
+   * @param {TournamentRepo} repos.tournamentRepo - Репозиторий турниров.
+   * @param {TournamentTemplateRepo} repos.tournamentTemplateRepo - Репозиторий шаблонов турниров.
+   * @param {FamilyRepo} repos.familyRepo - Репозиторий семей.
+   * @param {PlayerRepo} repos.playerRepo - Репозиторий игроков.
+   * @param {FamilyTournamentParticipationRepo} repos.familyTournamentParticipationRepo - Репозиторий участий семей в турнирах.
+   * @param {PlayerTournamentParticipationRepo} repos.playerTournamentParticipationRepo - Репозиторий участий игроков в турнирах.
+   * @param {FamilyEarningRepo} repos.familyEarningRepo - Репозиторий призовых семей.
+   * @param {PlayerEarningRepo} repos.playerEarningRepo - Репозиторий призовых игроков.
    */
   constructor(repos) {
     this.tournamentRepo = repos.tournamentRepo;
@@ -223,14 +223,3 @@ class TournamentService {
     return updatedTournament;
   }
 }
-
-export const tournamentService = new TournamentService({
-  tournamentRepo,
-  tournamentTemplateRepo,
-  familyRepo,
-  playerRepo,
-  familyTournamentParticipationRepo,
-  playerTournamentParticipationRepo,
-  familyEarningRepo,
-  playerEarningRepo,
-});

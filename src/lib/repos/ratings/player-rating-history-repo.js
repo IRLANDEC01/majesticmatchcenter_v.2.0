@@ -24,4 +24,4 @@ class PlayerRatingHistoryRepository {
   }
 }
 
-export const playerRatingHistoryRepository = new PlayerRatingHistoryRepository(); 
+export default PlayerRatingHistoryRepository; 

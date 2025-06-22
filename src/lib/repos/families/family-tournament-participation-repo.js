@@ -32,5 +32,4 @@ class FamilyTournamentParticipationRepo {
   }
 }
 
-const familyTournamentParticipationRepo = new FamilyTournamentParticipationRepo();
-export default familyTournamentParticipationRepo; 
+export default FamilyTournamentParticipationRepo; 

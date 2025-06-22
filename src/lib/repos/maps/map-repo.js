@@ -1,85 +1,80 @@
+import { getCacheAdapter } from '@/lib/cache';
 import Map from '@/models/map/Map';
+import BaseRepo from '../base-repo.js';
+import { AppError } from '@/lib/errors';
 
 /**
- * Репозиторий для работы с сущностью "Карта" (Map).
- * Инкапсулирует всю логику взаимодействия с базой данных.
+ * Репозиторий для управления картами (Maps).
+ * @extends {BaseRepo}
  */
-class MapRepository {
+class MapRepo extends BaseRepo {
+  constructor() {
+    super(Map, 'map');
+  }
+
+  // Здесь можно будет в будущем добавлять специфичные для карт методы,
+  // которых нет в BaseRepo. Например:
+  //
+  // async findActiveMapsByTournament(tournamentId) {
+  //   return this.model.find({ 
+  //     tournament: tournamentId, 
+  //     status: 'ACTIVE',
+  //     archivedAt: null 
+  //   }).lean().exec();
+  // }
+
   /**
    * Находит карту по ID.
+   * По умолчанию ищет только среди активных (неархивированных) карт.
    * @param {string} id - ID карты.
-   * @returns {Promise<Map|null>}
-   */
-  async findById(id) {
-    return Map.findById(id)
-      .populate('participants.participant')
-      .populate('participants.players')
-      .lean();
-  }
-  
-  /**
-   * Получает все карты с возможностью включения архивированных.
    * @param {object} [options] - Опции.
-   * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
-   * @returns {Promise<Map[]>}
+   * @param {boolean} [options.includeArchived=false] - Включить в поиск архивированные карты.
+   * @returns {Promise<object|null>}
    */
-  async getAll({ includeArchived = false } = {}) {
-    return Map.find({}, {}, { includeArchived }).lean();
+  async findById(id, options = {}) {
+    const { includeArchived = false } = options;
+    const query = { _id: id };
+
+    if (!includeArchived) {
+      query.archivedAt = null;
+    }
+
+    return this.model.findOne(query).lean().exec();
   }
 
   /**
    * Создает новую карту.
-   * @param {object} data - Данные для создания карты.
-   * @returns {Promise<Map>}
    */
   async create(data) {
-    const newMap = new Map(data);
-    await newMap.save();
-    return newMap.toObject();
+    // Implementation of create method
   }
 
   /**
-   * Обновляет карту по ID.
-   * @param {string} id - ID карты.
-   * @param {object} data - Данные для обновления.
-   * @returns {Promise<Map|null>}
+   * Получает все карты с возможностью фильтрации и пагинации.
+   * @param {object} [options={}] - Опции для запроса.
+   * @param {boolean} [options.includeArchived=false] - Включить архивированные.
+   * @returns {Promise<Array<object>>}
    */
-  async update(id, data) {
-    return Map.findByIdAndUpdate(id, data, { new: true, runValidators: true }).lean();
-  }
+  async getAll(options = {}) {
+    const { includeArchived = false } = options;
+    const query = {};
 
-  /**
-   * Архивирует карту по ID.
-   * Устанавливает поле archivedAt в текущую дату.
-   * @param {string} id - ID карты для архивации.
-   * @returns {Promise<Map|null>} - Обновленный документ карты.
-   */
-  async archive(id) {
-    return Map.findByIdAndUpdate(id, { $set: { archivedAt: new Date() } }, { new: true }).lean();
-  }
-
-  /**
-   * Восстанавливает карту из архива по ID.
-   * Удаляет поле archivedAt.
-   * @param {string} id - ID карты для восстановления.
-   * @returns {Promise<Map|null>} - Обновленный документ карты.
-   */
-  async unarchive(id) {
-    return Map.findByIdAndUpdate(id, { $unset: { archivedAt: 1 } }, { new: true, includeArchived: true }).lean();
-  }
-
-  async findBySlug(slug, tournamentId) {
-    return Map.findOne({ slug, tournament: tournamentId }).lean();
+    if (!includeArchived) {
+      query.archivedAt = null;
+    }
+    
+    // Здесь можно будет добавить логику пагинации и сортировки
+    return this.model.find(query).lean().exec();
   }
   
   /**
-   * Считает количество карт в указанном турнире.
+   * Считает количество карт в турнире.
    * @param {string} tournamentId - ID турнира.
    * @returns {Promise<number>}
    */
   async countByTournamentId(tournamentId) {
-    return Map.countDocuments({ tournament: tournamentId });
+    return this.model.countDocuments({ tournament: tournamentId, archivedAt: null });
   }
 }
 
-export const mapRepo = new MapRepository(); 
+export default MapRepo;

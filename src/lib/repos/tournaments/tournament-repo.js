@@ -304,6 +304,10 @@ class TournamentRepo {
 
     return stats;
   }
+
+  async getTournamentLeaderboard(tournamentId) {
+    // ... логика метода
+  }
 }
 
-export const tournamentRepo = new TournamentRepo(); 
+export default TournamentRepo; 

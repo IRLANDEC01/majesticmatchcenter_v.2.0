@@ -55,29 +55,27 @@ class MapTemplateRepository {
   }
 
   /**
-   * Находит все шаблоны карт.
+   * Находит все шаблоны карт с возможностью фильтрации.
    * @param {object} [options] - Опции для поиска.
-   * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
+   * @param {string} [options.status='active'] - Статус шаблонов ('active' или 'archived').
    * @param {string} [options.search=''] - Строка для поиска по названию.
-   * @param {string|null} [options.id=null] - ID для поиска конкретного шаблона.
    * @param {number|null} [options.limit=null] - Ограничение на количество результатов.
    * @returns {Promise<Array<object>>} - Массив шаблонов.
    */
-  async findAll({
-    includeArchived = false,
-    search = '',
-    id = null,
-    limit = null,
-  } = {}) {
+  async findAll({ status = 'active', search = '', limit = null } = {}) {
     const filter = {};
 
-    if (id) {
-      filter._id = id;
-    } else if (search) {
+    if (status === 'archived') {
+      filter.archivedAt = { $ne: null };
+    } else {
+      filter.archivedAt = { $eq: null };
+    }
+
+    if (search) {
       filter.name = { $regex: search, $options: 'i' };
     }
 
-    let query = MapTemplate.find(filter).setOptions({ includeArchived });
+    let query = MapTemplate.find(filter);
 
     if (limit) {
       query = query.limit(limit);
@@ -182,8 +180,8 @@ class MapTemplateRepository {
   async unarchive(id) {
     const updatedTemplate = await MapTemplate.findByIdAndUpdate(
       id,
-      { $unset: { archivedAt: 1 } },
-      { new: true, includeArchived: true }
+      { $set: { archivedAt: null } },
+      { new: true }
     ).lean();
     
     if (updatedTemplate) {
@@ -200,5 +198,4 @@ class MapTemplateRepository {
   }
 }
 
-const mapTemplateRepo = new MapTemplateRepository();
-export default mapTemplateRepo; 
+export default MapTemplateRepository; 

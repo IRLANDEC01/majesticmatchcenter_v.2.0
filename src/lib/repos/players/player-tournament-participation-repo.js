@@ -21,6 +21,4 @@ class PlayerTournamentParticipationRepo {
   }
 }
 
-const playerTournamentParticipationRepo = new PlayerTournamentParticipationRepo();
-
-export default playerTournamentParticipationRepo; 
+export default PlayerTournamentParticipationRepo; 

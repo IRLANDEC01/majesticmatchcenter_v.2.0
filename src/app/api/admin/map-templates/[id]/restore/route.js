@@ -13,8 +13,8 @@ function getMapTemplateService() {
 }
 
 /**
- * PATCH /api/admin/map-templates/[id]/archive
- * Архивирует шаблон карты.
+ * PATCH /api/admin/map-templates/[id]/restore
+ * Восстанавливает шаблон карты из архива.
  * @param {Request} request
  * @param {object} context - Контекст запроса, включая параметры.
  * @param {object} context.params - Параметры маршрута.
@@ -24,12 +24,12 @@ export async function PATCH(request, { params }) {
   try {
     const { id } = params;
     const mapTemplateService = getMapTemplateService();
-    const archivedTemplate = await mapTemplateService.archiveMapTemplate(id);
+    const restoredTemplate = await mapTemplateService.restoreMapTemplate(id);
 
     revalidatePath('/admin/map-templates');
 
-    return NextResponse.json(archivedTemplate, { status: 200 });
+    return NextResponse.json(restoredTemplate, { status: 200 });
   } catch (error) {
     return handleApiError(error);
   }
-}
+} 

@@ -1,13 +1,13 @@
-import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo.js';
-import { DuplicateError } from '@/lib/errors';
+import MapTemplateRepo from '@/lib/repos/map-templates/map-template-repo.js';
+import { DuplicateError, NotFoundError } from '@/lib/errors';
 
 /**
  * Cервис для управления бизнес-логикой шаблонов карт.
  */
-class MapTemplateService {
+export default class MapTemplateService {
   /**
    * @param {object} repos - Репозитории.
-   * @param {import('@/lib/repos/map-templates/map-template-repo').mapTemplateRepo} repos.mapTemplateRepo - Репозиторий шаблонов карт.
+   * @param {MapTemplateRepo} repos.mapTemplateRepo - Репозиторий шаблонов карт.
    */
   constructor(repos) {
     this.repo = repos.mapTemplateRepo;
@@ -19,27 +19,31 @@ class MapTemplateService {
    * @returns {Promise<object>} - Созданный объект шаблона карты.
    */
   async createMapTemplate(templateData) {
-    const slug =
-      templateData.slug ||
-      templateData.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)+/g, '');
+    try {
+      const slug =
+        templateData.slug ||
+        templateData.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)+/g, '');
 
-    // Убираем ручную проверку. Теперь мы полностью доверяем
-    // частичному уникальному индексу в базе данных.
-    return this.repo.create({ ...templateData, slug });
+      return await this.repo.create({ ...templateData, slug });
+    } catch (error) {
+      if (error.code === 11000) {
+        throw new DuplicateError('Шаблон с таким названием или slug уже существует.');
+      }
+      throw error;
+    }
   }
 
   /**
    * Получает все шаблоны карт.
    * @param {object} [options] - Опции для получения шаблонов.
-   * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
+   * @param {string} [options.status='active'] - Статус для фильтрации ('active' или 'archived').
    * @param {string} [options.search] - Строка для поиска.
-   * @param {string} [options.id] - ID для поиска конкретного шаблона.
    * @returns {Promise<Array<object>>} - Массив шаблонов карт.
    */
-  async getAllMapTemplates(options = { includeArchived: false, search: '', id: null }) {
+  async getAllMapTemplates(options = { status: 'active', search: '' }) {
     return this.repo.findAll(options);
   }
 
@@ -49,7 +53,11 @@ class MapTemplateService {
    * @returns {Promise<object|null>} - Найденный шаблон или null.
    */
   async getMapTemplateById(id) {
-    return this.repo.findById(id);
+    const template = await this.repo.findById(id);
+    if (!template) {
+      throw new NotFoundError(`Шаблон карты с ID ${id} не найден.`);
+    }
+    return template;
   }
 
   /**
@@ -59,17 +67,32 @@ class MapTemplateService {
    * @returns {Promise<object>} - Обновленный объект шаблона карты.
    */
   async updateMapTemplate(id, templateData) {
-    if (templateData.name && !templateData.slug) {
-      templateData.slug = templateData.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)+/g, '');
+    // Сначала проверим, существует ли документ
+    const existingTemplate = await this.repo.findById(id);
+    if (!existingTemplate) {
+      throw new NotFoundError(`Шаблон карты с ID ${id} для обновления не найден.`);
     }
+    
+    try {
+      if (templateData.name && !templateData.slug) {
+        templateData.slug = templateData.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)+/g, '');
+      }
 
-    // Убираем ручную проверку. База данных сама не позволит
-    // обновить запись, если это приведет к дубликации имени/slug
-    // среди активных документов.
-    return this.repo.update(id, templateData);
+      // Убираем ручную проверку. База данных сама не позволит
+      // обновить запись, если это приведет к дубликации имени/slug
+      // среди активных документов.
+      return await this.repo.update(id, templateData);
+    } catch (error) {
+      // "Переводим" ошибку базы данных на язык доменных ошибок
+      if (error.code === 11000) {
+        throw new DuplicateError('Шаблон с таким названием или slug уже существует.');
+      }
+      // Если это другая ошибка, пробрасываем ее дальше
+      throw error;
+    }
   }
   
   /**
@@ -78,8 +101,11 @@ class MapTemplateService {
    * @returns {Promise<object|null>}
    */
   async archiveMapTemplate(templateId) {
-    // TODO: Добавить бизнес-логику, например, проверку, что нельзя архивировать используемый шаблон
-    return this.repo.archive(templateId);
+    const archivedTemplate = await this.repo.archive(templateId);
+    if (!archivedTemplate) {
+      throw new NotFoundError(`Шаблон карты с ID ${templateId} для архивации не найден.`);
+    }
+    return archivedTemplate;
   }
   
   /**
@@ -87,9 +113,11 @@ class MapTemplateService {
    * @param {string} templateId - ID шаблона для восстановления.
    * @returns {Promise<object|null>}
    */
-  async unarchiveMapTemplate(templateId) {
-    return this.repo.unarchive(templateId);
+  async restoreMapTemplate(templateId) {
+    const restoredTemplate = await this.repo.unarchive(templateId);
+    if (!restoredTemplate) {
+      throw new NotFoundError(`Шаблон карты с ID ${templateId} для восстановления не найден.`);
+    }
+    return restoredTemplate;
   }
-}
-
-export const mapTemplateService = new MapTemplateService({ mapTemplateRepo }); 
+} 

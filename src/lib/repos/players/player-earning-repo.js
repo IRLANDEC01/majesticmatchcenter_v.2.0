@@ -14,4 +14,4 @@ class PlayerEarningRepo {
   }
 }
 
-export default new PlayerEarningRepo(); 
+export default PlayerEarningRepo; 

@@ -199,4 +199,4 @@ class FamilyRepository {
   }
 }
 
-export const familyRepo = new FamilyRepository(); 
+export default FamilyRepository; 

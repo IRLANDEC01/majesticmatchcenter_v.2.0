@@ -19,8 +19,10 @@ const errorHandlers = new Map([
  * @returns {NextResponse} - Стандартизированный ответ с ошибкой.
  */
 export function handleApiError(error, context = 'An unexpected error occurred') {
-  // Логируем ошибку для отладки, но не в тестовой среде
-  if (process.env.NODE_ENV !== 'test') {
+  // Логируем ошибку для отладки. В тестовой среде выводим полный объект ошибки.
+  if (process.env.NODE_ENV === 'test') {
+    console.error('TEST_ERROR_DETAIL:', error);
+  } else {
     console.error(`${context}:`, error);
   }
 
@@ -32,4 +34,4 @@ export function handleApiError(error, context = 'An unexpected error occurred') 
 
   // Для всех остальных непредвиденных ошибок
   return NextResponse.json({ message: 'Внутренняя ошибка сервера' }, { status: 500 });
-} 
+}

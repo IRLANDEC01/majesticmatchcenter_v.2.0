@@ -1,6 +1,12 @@
 import { GET, POST } from './route.js';
 import models from '@/models/index.js';
 import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
+import { revalidatePath } from 'next/cache';
+
+// Мокируем 'next/cache' для всех тестов в этом файле
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn(),
+}));
 
 const { Map, Tournament, MapTemplate } = models;
 
@@ -55,6 +61,10 @@ describe('/api/admin/maps', () => {
       const expectedSlug1 = `${tournament.slug}-${mapTemplateDust2.slug}-1`;
       expect(response1.status).toBe(201);
       expect(body1.slug).toBe(expectedSlug1);
+
+      // Проверяем, что revalidatePath была вызвана
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/tournaments');
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/maps');
 
       // --- Создание второй карты ---
       const mapData2 = {

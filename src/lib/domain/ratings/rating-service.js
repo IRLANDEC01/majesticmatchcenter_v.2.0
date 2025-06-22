@@ -4,10 +4,6 @@
  * @typedef {import('@/models/map/Map').Map} Map
  */
 
-import { familyRepo } from '@/lib/repos/families/family-repo';
-import { playerRepo } from '@/lib/repos/players/player-repo';
-import { familyMapParticipationRepo } from '@/lib/repos/ratings/family-map-participation-repo';
-import { playerRatingHistoryRepository } from '@/lib/repos/ratings/player-rating-history-repo';
 import { ValidationError } from '@/lib/errors';
 import { RATING_REASONS } from '@/lib/constants';
 
@@ -15,17 +11,19 @@ import { RATING_REASONS } from '@/lib/constants';
  * Сервис для управления рейтингами игроков и семей.
  * Инкапсулирует логику начисления и отката изменений рейтинга.
  */
-export class RatingService {
+export default class RatingService {
   constructor({
     familyRepo,
     playerRepo,
     familyMapParticipationRepo,
     playerRatingHistoryRepo,
+    familyTournamentParticipationRepo,
   }) {
     this.familyRepo = familyRepo;
     this.playerRepo = playerRepo;
     this.familyMapParticipationRepo = familyMapParticipationRepo;
     this.playerRatingHistoryRepo = playerRatingHistoryRepo;
+    this.familyTournamentParticipationRepo = familyTournamentParticipationRepo;
   }
 
   /**
@@ -45,8 +43,6 @@ export class RatingService {
       return; // Ничего не делаем, если изменение рейтинга равно нулю.
     }
 
-    // Эта операция должна быть атомарной. В идеале - транзакция.
-    // Пока что для простоты делаем последовательно.
     await this.familyRepo.incrementRating(familyId, ratingChange);
     await this.familyMapParticipationRepo.create({
       mapId,
@@ -68,8 +64,6 @@ export class RatingService {
       return;
     }
 
-    // Используем последовательный цикл for...of для большей надежности и упрощения отладки,
-    // вместо параллельного выполнения через Promise.all.
     for (const result of familyResults) {
       const isWinner = result.familyId === winnerInfo.winnerFamilyId;
       const ratingChange = isWinner ? (winnerInfo.familyRatingChange || 0) : 0;
@@ -83,12 +77,18 @@ export class RatingService {
         reason: RATING_REASONS.MAP_COMPLETION,
       };
       
-      // Последовательно создаем запись об участии
       await this.familyMapParticipationRepo.create(participationData);
       
-      // И если это победитель, последовательно обновляем его рейтинг
       if (isWinner && ratingChange > 0) {
         await this.familyRepo.incrementRating(result.familyId, ratingChange);
+      }
+      
+      if (result.points > 0) {
+          await this.familyTournamentParticipationRepo.updateByFamilyAndTournament(
+            result.familyId,
+            tournamentId,
+            { $inc: { tournamentPoints: result.points } }
+          );
       }
     }
   }
@@ -102,7 +102,6 @@ export class RatingService {
   async updatePlayerRatings(mapId, parsedStats) {
     const promises = parsedStats.map(async (stat) => {
       const { playerId, kills } = stat;
-      // Рейтинг начисляется по количеству убийств
       const change = kills || 0;
 
       if (change === 0) {
@@ -132,35 +131,29 @@ export class RatingService {
   }
 
   /**
-   * Обновляет рейтинги семей на основе ручного ввода администратора.
-   * @param {string} mapId - ID завершаемой карты.
-   * @param {Array<{familyId: string, change: number}>} ratingChanges - Массив объектов с ID семей и очками рейтинга.
-   * @param {Array<string>} participantFamilyIds - "Белый список" ID семей, которые действительно участвовали в карте.
-   * @returns {Promise<void>}
-   */
-  async updateFamilyRatings(mapId, ratingChanges, participantFamilyIds) {
-    // Этот метод устарел и будет удален.
-    // Логика перенесена в recordFamilyMapResult и будет расширена для всех участников.
-    console.warn('DEPRECATED: updateFamilyRatings is called');
-  }
-
-  /**
    * Откатывает все изменения рейтинга, связанные с определенной картой.
    * @param {string} mapId - ID карты для отката.
    * @returns {Promise<void>}
    */
   async rollbackMapRatings(mapId) {
     const familyRollback = async () => {
-      // Находим все записи, чтобы знать, на сколько откатывать рейтинг
       const participations = await this.familyMapParticipationRepo.findByMapId(mapId);
       
-      const promises = participations.map(p => 
-        this.familyRepo.incrementRating(p.familyId, -p.ratingChange)
-      );
+      const promises = participations.map(async (p) => {
+          if (p.ratingChange > 0) {
+            await this.familyRepo.incrementRating(p.familyId, -p.ratingChange);
+          }
+          if (p.tournamentPoints > 0) {
+              await this.familyTournamentParticipationRepo.updateByFamilyAndTournament(
+                p.familyId,
+                p.tournamentId,
+                { $inc: { tournamentPoints: -p.tournamentPoints } }
+              );
+          }
+      });
       
       await Promise.all(promises);
       
-      // Удаляем записи только после успешного отката рейтинга
       if (participations.length > 0) {
         await this.familyMapParticipationRepo.deleteByMapId(mapId);
       }
@@ -176,11 +169,4 @@ export class RatingService {
 
     await Promise.all([familyRollback(), playerRollback()]);
   }
-}
-
-export const ratingService = new RatingService({
-  familyRepo,
-  playerRepo,
-  familyMapParticipationRepo,
-  playerRatingHistoryRepo: playerRatingHistoryRepository,
-}); 
+} 

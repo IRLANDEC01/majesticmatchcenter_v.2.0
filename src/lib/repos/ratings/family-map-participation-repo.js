@@ -1,9 +1,9 @@
-import FamilyMapParticipation from '@/models/family/FamilyMapParticipation';
+import FamilyMapParticipation from '@/models/family/FamilyMapParticipation.js';
 
 /**
  * Репозиторий для работы с записями об участии семей в картах.
  */
-class FamilyMapParticipationRepository {
+class FamilyMapParticipationRepo {
   /**
    * Создает новую запись об участии семьи в карте.
    * @param {object} data - Данные для создания.
@@ -35,4 +35,4 @@ class FamilyMapParticipationRepository {
   }
 }
 
-export const familyMapParticipationRepo = new FamilyMapParticipationRepository(); 
+export default FamilyMapParticipationRepo; 

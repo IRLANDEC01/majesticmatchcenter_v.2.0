@@ -1,32 +1,15 @@
 import Player from '@/models/player/Player.js';
-import { cache } from '@/lib/cache';
+import BaseRepo from '../base-repo.js';
 
 /**
  * @class PlayerRepository
  * @description Репозиторий для работы с данными игроков.
+ * @extends {BaseRepo}
  */
-class PlayerRepository {
-  /**
-   * Находит игрока по ID.
-   * @param {string} id - ID игрока.
-   * @param {object} [options] - Опции.
-   * @param {boolean} [options.includeArchived=false] - Включить архивированных игроков.
-   * @returns {Promise<object|null>}
-   */
-  async findById(id, { includeArchived = false } = {}) {
-    const cacheKey = `player:${id}`;
-    if (!includeArchived) {
-      const cached = await cache.get(cacheKey);
-      if (cached) return cached;
-    }
-
-    const player = await Player.findById(id).setOptions({ includeArchived }).lean();
-    if (player && !includeArchived) {
-      await cache.set(cacheKey, player, {
-        tags: [`player:${id}`, 'players_list'],
-      });
-    }
-    return player;
+class PlayerRepository extends BaseRepo {
+  constructor() {
+    // Передаем модель и префикс для кеша в родительский конструктор
+    super(Player, 'player');
   }
 
   /**
@@ -35,7 +18,7 @@ class PlayerRepository {
    * @returns {Promise<object|null>}
    */
   async findBySlug(slug) {
-    return Player.findOne({ slug, archivedAt: null }).lean();
+    return this.model.findOne({ slug, archivedAt: null }).lean();
   }
 
   /**
@@ -45,7 +28,7 @@ class PlayerRepository {
    * @returns {Promise<object|null>}
    */
   async findByName(firstName, lastName) {
-    return Player.findOne({ firstName, lastName, archivedAt: null }).lean();
+    return this.model.findOne({ firstName, lastName, archivedAt: null }).lean();
   }
 
   /**
@@ -55,74 +38,23 @@ class PlayerRepository {
    * @param {boolean} [options.includeArchived=false] - Включить архивированных игроков.
    * @returns {Promise<Array<object>>}
    */
-  async findAll({ filter = {}, includeArchived = false } = {}) {
-    const query = includeArchived ? filter : { ...filter, archivedAt: null };
-    return Player.find(query).setOptions({ includeArchived }).lean();
+  async findAll({ includeArchived = false, filter = {} } = {}) {
+    const finalFilter = includeArchived ? filter : { ...filter, archivedAt: null };
+    return this.model.find(finalFilter).lean();
   }
 
-  /**
-   * Создает нового игрока.
-   * @param {object} data - Данные для создания.
-   * @returns {Promise<object>}
-   */
-  async create(data) {
-    const player = new Player(data);
-    await player.save();
-    await cache.invalidateByTag('players_list');
-    return player.toObject();
-  }
+  // Методы findById, create, update, archive, restore наследуются из BaseRepo
+  // и автоматически обрабатывают кеш.
 
   /**
-   * Обновляет данные игрока.
-   * @param {string} id - ID игрока.
-   * @param {object} data - Данные для обновления.
-   * @returns {Promise<object|null>}
-   */
-  async update(id, data) {
-    const player = await Player.findByIdAndUpdate(id, data, { new: true }).lean();
-    if (player) {
-      await cache.invalidateByTag(`player:${id}`);
-      await cache.invalidateByTag('players_list');
-    }
-    return player;
-  }
-
-  /**
-   * Архивирует игрока (мягкое удаление).
+   * Архивирует игрока и убирает его из семьи.
+   * @override
    * @param {string} id - ID игрока.
    * @returns {Promise<object|null>}
    */
   async archive(id) {
-    const player = await Player.findByIdAndUpdate(
-      id,
-      { $set: { archivedAt: new Date() } },
-      { new: true }
-    ).lean();
-
-    if (player) {
-      await cache.invalidateByTag(`player:${id}`);
-      await cache.invalidateByTag('players_list');
-    }
-    return player;
-  }
-
-  /**
-   * Восстанавливает игрока из архива.
-   * @param {string} id - ID игрока.
-   * @returns {Promise<object|null>}
-   */
-  async unarchive(id) {
-    const player = await Player.findByIdAndUpdate(
-      id,
-      { $unset: { archivedAt: 1 } },
-      { new: true, includeArchived: true }
-    ).lean();
-    
-    if (player) {
-      await cache.invalidateByTag(`player:${id}`);
-      await cache.invalidateByTag('players_list');
-    }
-    return player;
+    // Переопределяем базовый метод, чтобы добавить логику отвязки от семьи
+    return this.update(id, { archivedAt: new Date(), family: null });
   }
 
   /**
@@ -133,18 +65,35 @@ class PlayerRepository {
    */
   async incrementRating(playerId, amount) {
     if (amount === 0) return;
-
-    const player = await Player.findByIdAndUpdate(
+    const player = await this.model.findByIdAndUpdate(
       playerId,
       { $inc: { rating: amount } },
       { new: true }
     ).lean();
 
     if (player) {
-      await cache.invalidateByTag(`player:${player._id}`);
-      await cache.invalidateByTag('players_list');
+      await this.cache.delete(this.getCacheKey(playerId));
     }
+  }
+
+  /**
+   * Устанавливает семью для игрока.
+   * @param {string} playerId - ID игрока.
+   * @param {string} familyId - ID семьи.
+   * @returns {Promise<object>}
+   */
+  async setFamily(playerId, familyId) {
+    return this.update(playerId, { family: familyId });
+  }
+
+  /**
+   * Убирает игрока из семьи.
+   * @param {string} playerId - ID игрока.
+   * @returns {Promise<object>}
+   */
+  async unsetFamily(playerId) {
+    return this.update(playerId, { $unset: { family: 1 } });
   }
 }
 
-export const playerRepo = new PlayerRepository();
+export default PlayerRepository;

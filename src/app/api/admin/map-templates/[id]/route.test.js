@@ -85,7 +85,7 @@ describe('/api/admin/map-templates/[id]', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData),
       });
-
+      
       const response = await PATCH(request, { params: { id: testTemplate._id } });
 
       expect(response.status).toBe(409); // Conflict

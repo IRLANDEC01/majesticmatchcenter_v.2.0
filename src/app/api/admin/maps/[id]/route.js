@@ -1,23 +1,57 @@
 import { NextResponse } from 'next/server';
-import { mapService } from '@/lib/domain/maps/map-service';
-import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
 import { handleApiError } from '@/lib/api/handle-api-error';
-import { NotFoundError } from '@/lib/errors';
 
-// Схема для обновления. Все поля опциональны.
-const updateMapSchema = z.object({
-  name: z.string().min(1, 'Название не может быть пустым.').optional(),
-  slug: z.string().min(1, 'Slug не может быть пустым.').optional(),
-  description: z.string().optional(),
-  template: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID шаблона.').optional(),
-  startDateTime: z.string().datetime({ message: 'Некорректный формат даты и времени.' }).optional(),
-});
+// Классы сервисов
+import MapService from '@/lib/domain/maps/map-service';
+import RatingService from '@/lib/domain/ratings/rating-service';
+import StatisticsService from '@/lib/domain/statistics/statistics-service';
+import { AchievementService } from '@/lib/domain/achievements/achievement-service';
 
-// Схема для PATCH запроса (архивация/восстановление)
-const patchMapSchema = z.object({
-  archived: z.boolean(),
-});
+// Классы репозиториев
+import MapRepository from '@/lib/repos/maps/map-repo';
+import TournamentRepository from '@/lib/repos/tournaments/tournament-repo';
+import MapTemplateRepository from '@/lib/repos/map-templates/map-template-repo';
+import FamilyRepository from '@/lib/repos/families/family-repo';
+import PlayerRepository from '@/lib/repos/players/player-repo';
+import FamilyMapParticipationRepo from '@/lib/repos/ratings/family-map-participation-repo';
+import PlayerMapParticipationRepo from '@/lib/repos/statistics/player-map-participation-repo';
+import FamilyTournamentParticipationRepo from '@/lib/repos/families/family-tournament-participation-repo';
+import PlayerStatsRepository from '@/lib/repos/statistics/player-stats-repo';
+import PlayerRatingHistoryRepository from '@/lib/repos/ratings/player-rating-history-repo';
+
+
+// Фабричная функция для создания сервиса со всеми зависимостями
+function getMapService() {
+  const ratingService = new RatingService({
+    familyRepo: new FamilyRepository(),
+    playerRepo: new PlayerRepository(),
+    familyMapParticipationRepo: new FamilyMapParticipationRepo(),
+    playerRatingHistoryRepo: new PlayerRatingHistoryRepository(),
+    familyTournamentParticipationRepo: new FamilyTournamentParticipationRepo(),
+  });
+  
+  const statisticsService = new StatisticsService({
+    playerRepo: new PlayerRepository(),
+    playerMapParticipationRepo: new PlayerMapParticipationRepo(),
+    playerStatsRepo: new PlayerStatsRepository(),
+  });
+
+  return new MapService(
+    {
+      mapRepo: new MapRepository(),
+      tournamentRepo: new TournamentRepository(),
+      mapTemplateRepo: new MapTemplateRepository(),
+      familyRepo: new FamilyRepository(),
+      playerRepo: new PlayerRepository(),
+    },
+    {
+      ratingService,
+      statisticsService,
+      achievementService: new AchievementService(),
+    }
+  );
+}
+
 
 /**
  * GET /api/admin/maps/[id]
@@ -26,11 +60,12 @@ const patchMapSchema = z.object({
 export async function GET(request, { params }) {
   try {
     const { id } = params;
+    // Простая валидация формата ID, чтобы отсечь заведомо неверные запросы
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return NextResponse.json({ message: 'Некорректный ID карты' }, { status: 400 });
     }
 
-    await connectToDatabase();
+    const mapService = getMapService();
     const map = await mapService.getMapById(id);
 
     if (!map) {
@@ -39,8 +74,7 @@ export async function GET(request, { params }) {
 
     return NextResponse.json(map);
   } catch (error) {
-    console.error(`Failed to get map ${params.id}:`, error);
-    return NextResponse.json({ message: 'Ошибка сервера при получении карты' }, { status: 500 });
+    return handleApiError(error, `Failed to get map ${params.id}`);
   }
 }
 
@@ -54,62 +88,25 @@ export async function PUT(request, { params }) {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return NextResponse.json({ message: 'Некорректный ID карты' }, { status: 400 });
     }
-
-    await connectToDatabase();
+    
+    const mapService = getMapService();
     const json = await request.json();
-
-    const validationResult = updateMapSchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const updatedMap = await mapService.updateMap(id, validationResult.data);
-
-    if (!updatedMap) {
-      throw new NotFoundError(`Map with id ${id} not found.`);
-    }
+    const updatedMap = await mapService.updateMap(id, json);
 
     return NextResponse.json(updatedMap);
   } catch (error) {
-    return handleApiError(error);
+    return handleApiError(error, `Failed to update map ${params.id}`);
   }
 }
 
 /**
  * PATCH /api/admin/maps/[id]
- * Архивирует или восстанавливает карту.
+ * Этот маршрут больше не используется для архивации.
+ * Используйте /api/admin/maps/[id]/archive
  */
 export async function PATCH(request, { params }) {
-  try {
-    const { id } = params;
-    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return NextResponse.json({ message: 'Некорректный ID карты' }, { status: 400 });
-    }
-
-    await connectToDatabase();
-    const json = await request.json();
-
-    const validationResult = patchMapSchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const { archived } = validationResult.data;
-    let result;
-
-    if (archived) {
-      result = await mapService.archiveMap(id);
-    } else {
-      result = await mapService.unarchiveMap(id);
-    }
-
-    if (!result) {
-      return NextResponse.json({ message: 'Карта не найдена' }, { status: 404 });
-    }
-
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error(`Failed to update map status ${params.id}:`, error);
-    return NextResponse.json({ message: 'Ошибка сервера при изменении статуса карты' }, { status: 500 });
-  }
+    return NextResponse.json(
+        { message: 'This endpoint is deprecated. Use /archive or /restore instead.'}, 
+        { status: 410 } // 410 Gone
+    );
 } 

@@ -161,4 +161,4 @@ class TournamentTemplateRepo {
   }
 }
 
-export const tournamentTemplateRepo = new TournamentTemplateRepo(); 
+export default TournamentTemplateRepo; 
