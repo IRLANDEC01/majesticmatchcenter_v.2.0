@@ -87,16 +87,7 @@ export const STATUSES = Object.freeze({
 */
 export const STATUSES_ENUM = Object.values(STATUSES);
 
-/**
- * @deprecated
- * Типы статусов турниров.
- */
-export const TOURNAMENT_STATUS_VALUES = {
-  NOT_STARTED: 'not_started',
-  IN_PROGRESS: 'in_progress',
-  COMPLETED: 'completed',
-  CANCELED: 'canceled',
-};
+
 
 /**
  * @deprecated
@@ -134,20 +125,7 @@ export const RESULT_TIERS = Object.freeze({
   ...RESULT_TIERS_VALUES,
 });
 
-/**
- * Типы событий для Pub/Sub.
- * @enum {string}
- */
-export const EVENT_TYPES = {
-  TOURNAMENT_CREATED: 'tournament_created',
-  TOURNAMENT_UPDATED: 'tournament_updated',
-  TOURNAMENT_DELETED: 'tournament_deleted',
-  TOURNAMENT_STATUS_CHANGED: 'tournament_status_changed',
-  TOURNAMENT_RESULT_UPDATED: 'tournament_result_updated',
-  TOURNAMENT_PARTICIPANT_ADDED: 'tournament_participant_added',
-  TOURNAMENT_PARTICIPANT_REMOVED: 'tournament_participant_removed',
-  TOURNAMENT_RESULT_CALCULATED: 'tournament_result_calculated',
-};
+
 
 /**
  * Задержка в миллисекундах для функции debounce при поиске.

@@ -75,7 +75,6 @@
   - `firstName`: Имя игрока
   - `lastName`: Фамилия игрока
   - `slug`: URL-friendly идентификатор
-  - `nickname`: Игровой ник
   - `avatar`: Аватар игрока
   - `rating`: Рейтинг игрока
   - `status`: Статус игрока (active, inactive)
