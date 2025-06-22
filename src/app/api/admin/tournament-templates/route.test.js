@@ -96,11 +96,15 @@ describe('API /api/admin/tournament-templates', () => {
       expect(body[0].name).toBe('A New Active Template');
     });
 
-    it('должен возвращать все шаблоны при `include_archived=true`', async () => {
+    it('должен возвращать только архивные шаблоны при `status=archived`', async () => {
       // Arrange
-      // populateDb создает один шаблон. Архивируем его.
-      await TournamentTemplate.findByIdAndUpdate(testData.tournamentTemplate._id, { archivedAt: new Date() });
-      // Создаем еще один, чтобы в итоге было 2
+      // populateDb создает один активный шаблон. Архивируем его.
+      const archivedTemplate = await TournamentTemplate.findByIdAndUpdate(
+        testData.tournamentTemplate._id, 
+        { archivedAt: new Date() },
+        { new: true }
+      );
+      // Создаем еще один, активный, чтобы он НЕ попал в выборку
       await TournamentTemplate.create({ 
         name: 'Another Template', 
         slug: 'another-template',
@@ -108,7 +112,7 @@ describe('API /api/admin/tournament-templates', () => {
       });
 
       const url = new URL('http://localhost/api/admin/tournament-templates');
-      url.searchParams.set('include_archived', 'true');
+      url.searchParams.set('status', 'archived');
       const request = new Request(url);
       
       // Act
@@ -117,7 +121,8 @@ describe('API /api/admin/tournament-templates', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      expect(body.length).toBe(2);
+      expect(body.length).toBe(1);
+      expect(body[0].name).toBe(archivedTemplate.name);
     });
   });
 }); 

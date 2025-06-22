@@ -1,44 +1,48 @@
 import { NextResponse } from 'next/server';
-import { tournamentTemplateService } from '@/lib/domain/tournament-templates/tournament-template-service';
-import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
-import TournamentTemplate from '@/models/tournament/TournamentTemplate';
-import { tournamentTemplateRepo } from '@/lib/repos/tournament-templates/tournament-template-repo';
+import { revalidatePath } from 'next/cache';
 import { handleApiError } from '@/lib/api/handle-api-error';
-
-const updateTemplateSchema = z.object({
-  name: z.string().min(1, 'Название не может быть пустым.').optional(),
-  description: z.string().optional(),
-  mapTemplates: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Некорректный ID шаблона карты')).optional(),
-});
+import { updateTournamentTemplateSchema } from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
+import { tournamentTemplateService } from '@/lib/domain/tournament-templates/tournament-template-service';
 
 /**
- * PUT /api/admin/tournament-templates/[id]
- * Обновляет существующий шаблон турнира.
+ * GET handler for fetching a single tournament template by ID.
+ * @param {Request} request
+ * @param {{ params: { id: string } }} context
+ * @returns {Promise<NextResponse>}
  */
-export async function PUT(request, { params }) {
+export async function GET(request, { params }) {
   try {
     const { id } = params;
-    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return NextResponse.json({ message: 'Некорректный ID шаблона' }, { status: 400 });
-    }
+    const template = await tournamentTemplateService.getTemplateById(id);
+    return NextResponse.json(template);
+  } catch (error) {
+    return handleApiError(error, `Failed to get tournament template ${params.id}`);
+  }
+}
 
-    await connectToDatabase();
+/**
+ * PATCH handler for updating a tournament template.
+ * @param {Request} request
+ * @param {{ params: { id: string } }} context
+ * @returns {Promise<NextResponse>}
+ */
+export async function PATCH(request, { params }) {
+  try {
+    const { id } = params;
     const json = await request.json();
 
-    const validationResult = updateTemplateSchema.safeParse(json);
+    const validationResult = updateTournamentTemplateSchema.safeParse(json);
     if (!validationResult.success) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const updatedTemplate = await tournamentTemplateRepo.update(params.id, validationResult.data);
+    const updatedTemplate = await tournamentTemplateService.updateTemplate(id, validationResult.data);
 
-    if (!updatedTemplate) {
-      return NextResponse.json({ message: 'Шаблон турнира не найден' }, { status: 404 });
-    }
+    revalidatePath('/admin/tournament-templates');
+    revalidatePath(`/admin/tournament-templates/${id}`);
 
     return NextResponse.json(updatedTemplate);
   } catch (error) {
-    return handleApiError(error);
+    return handleApiError(error, `Failed to update tournament template ${params.id}`);
   }
-} 
+}

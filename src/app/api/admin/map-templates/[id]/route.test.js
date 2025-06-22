@@ -67,9 +67,10 @@ describe('/api/admin/map-templates/[id]', () => {
       expect(response.status).toBe(200);
       expect(body.name).toBe(updateData.name);
 
-      // Проверяем, что revalidatePath была вызвана
-      expect(revalidatePath).toHaveBeenCalledTimes(1);
+      // Проверяем, что revalidatePath была вызвана дважды
+      expect(revalidatePath).toHaveBeenCalledTimes(2);
       expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
+      expect(revalidatePath).toHaveBeenCalledWith(`/admin/map-templates/${testTemplate._id}/edit`);
 
       const dbTemplate = await MapTemplate.findById(testTemplate._id);
       expect(dbTemplate.name).toBe(updateData.name);

@@ -198,4 +198,4 @@ class MapTemplateRepository {
   }
 }
 
-export default MapTemplateRepository; 
+export default new MapTemplateRepository(); 

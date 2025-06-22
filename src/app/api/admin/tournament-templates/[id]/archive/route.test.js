@@ -52,11 +52,11 @@ describe('API /api/admin/tournament-templates/[id]/archive', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.archivedAt).toBeUndefined();
+    expect(body.archivedAt).toBeNull();
 
     const dbTemplate = await TournamentTemplate.findById(testTemplate._id);
     expect(dbTemplate).not.toBeNull();
-    expect(dbTemplate.archivedAt).toBeUndefined();
+    expect(dbTemplate.archivedAt).toBeNull();
   });
 
   it('должен возвращать 404, если шаблон не найден', async () => {

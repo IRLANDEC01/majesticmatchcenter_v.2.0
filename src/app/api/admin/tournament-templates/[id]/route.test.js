@@ -1,91 +1,125 @@
-import { PUT } from './route.js';
-import models from '@/models/index.js';
-import { dbClear, populateDb } from '@/lib/test-helpers.js';
+import { GET, PATCH } from './route.js';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
+import MapTemplate from '@/models/map/MapTemplate.js';
+import TournamentTemplate from '@/models/tournament/TournamentTemplate.js';
+import { revalidatePath } from 'next/cache';
 import mongoose from 'mongoose';
 
-const { TournamentTemplate, MapTemplate } = models;
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn(),
+}));
 
-describe('PUT /api/admin/tournament-templates/[id]', () => {
-  let testData;
+describe('API /api/admin/tournament-templates/[id]', () => {
+  beforeAll(dbConnect);
+  afterAll(dbDisconnect);
 
-  // Глобальные хуки из jest.setup.js управляют соединением.
+  let activeMapTemplate;
   beforeEach(async () => {
     await dbClear();
-    const { testData: data } = await populateDb({ numTournamentTemplates: 2 });
-    testData = data;
+    revalidatePath.mockClear();
+    activeMapTemplate = await MapTemplate.create({
+      name: 'Test Map',
+      slug: 'test-map',
+    });
   });
 
-  it('должен обновлять шаблон и возвращать его со статусом 200', async () => {
-    // Arrange
-    const templateToUpdate = testData.tournamentTemplate;
-    const updateData = { name: 'Updated Super Tournament Name' };
-    
-    const request = new Request(`http://localhost/api/admin/tournament-templates/${templateToUpdate._id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData),
+  describe('GET', () => {
+    it('должен успешно находить и возвращать шаблон по ID', async () => {
+      const template = await TournamentTemplate.create({
+        name: 'Find Me',
+        slug: 'find-me',
+        mapTemplates: [activeMapTemplate._id],
+      });
+
+      const request = new Request(`http://localhost/api/admin/tournament-templates/${template._id}`);
+      const response = await GET(request, { params: { id: template._id.toString() } });
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.name).toBe('Find Me');
     });
 
-    // Act
-    const response = await PUT(request, { params: { id: templateToUpdate._id.toString() } });
-    const body = await response.json();
+    it('должен возвращать 404, если шаблон не найден', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const request = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}`);
+      const response = await GET(request, { params: { id: nonExistentId } });
 
-    // Assert
-    expect(response.status).toBe(200);
-    expect(body.name).toBe(updateData.name);
+      expect(response.status).toBe(404);
+    });
   });
 
-  it('должен возвращать 404, если шаблон не найден', async () => {
-    // Arrange
-    const nonExistentId = new mongoose.Types.ObjectId().toString();
-    const updateData = { name: 'Non-existent Tournament' };
-    
-    const request = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData),
+  describe('PATCH', () => {
+    it('должен успешно обновлять шаблон и возвращать 200', async () => {
+      const template = await TournamentTemplate.create({
+        name: 'Original Name',
+        slug: 'original-name',
+        mapTemplates: [activeMapTemplate._id],
+      });
+      const updateData = { name: 'Updated Name' };
+
+      const request = new Request(`http://localhost/api/admin/tournament-templates/${template._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
+
+      const response = await PATCH(request, { params: { id: template._id.toString() } });
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.name).toBe('Updated Name');
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/tournament-templates');
+      expect(revalidatePath).toHaveBeenCalledWith(`/admin/tournament-templates/${template._id}`);
     });
 
-    // Act
-    const response = await PUT(request, { params: { id: nonExistentId } });
+    it('должен возвращать 404, если шаблон для обновления не найден', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const request = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Does not matter' }),
+      });
+      const response = await PATCH(request, { params: { id: nonExistentId } });
+      expect(response.status).toBe(404);
+    });
 
-    // Assert
-    expect(response.status).toBe(404);
+    it('должен возвращать 409 при попытке обновить имя на уже существующее', async () => {
+      await TournamentTemplate.create({
+        name: 'Existing Name',
+        slug: 'existing-name',
+        mapTemplates: [activeMapTemplate._id],
+      });
+      const templateToUpdate = await TournamentTemplate.create({
+        name: 'My Name',
+        slug: 'my-name',
+        mapTemplates: [activeMapTemplate._id],
+      });
+
+      const request = new Request(`http://localhost/api/admin/tournament-templates/${templateToUpdate._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Existing Name' }),
+      });
+      const response = await PATCH(request, { params: { id: templateToUpdate._id.toString() } });
+      expect(response.status).toBe(409);
+    });
+
+    it('должен возвращать 404 при попытке обновить с несуществующим шаблоном карты', async () => {
+      const template = await TournamentTemplate.create({
+        name: 'Original Name For Map Test',
+        slug: 'original-name-for-map-test',
+        mapTemplates: [activeMapTemplate._id],
+      });
+      const nonExistentMapId = new mongoose.Types.ObjectId().toString();
+
+      const request = new Request(`http://localhost/api/admin/tournament-templates/${template._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mapTemplates: [nonExistentMapId] }),
+      });
+      
+      const response = await PATCH(request, { params: { id: template._id.toString() } });
+      expect(response.status).toBe(404);
+    });
   });
-
-  it('должен возвращать 409 при попытке обновить имя на уже существующее', async () => {
-    // Arrange
-    // Создаем два уникальных шаблона прямо в тесте для изоляции
-    await dbClear();
-    const mapTemplate = await MapTemplate.create({ name: 'Test Map', slug: 'test-map' });
-
-    const templateA = await TournamentTemplate.create({
-      name: 'Existing Template Name',
-      slug: 'existing-template-name',
-      prizePool: [],
-      mapTemplates: [mapTemplate._id],
-    });
-    const templateB = await TournamentTemplate.create({
-      name: 'New Template Name',
-      slug: 'new-template-name',
-      prizePool: [],
-      mapTemplates: [mapTemplate._id],
-    });
-
-    const updatedData = {
-      name: templateA.name, // Пытаемся установить имя, которое уже занято
-    };
-
-    const request = new Request(`http://localhost/api/admin/tournament-templates/${templateB._id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedData),
-    });
-
-    // Act
-    const response = await PUT(request, { params: { id: templateB._id.toString() } });
-
-    // Assert
-    expect(response.status).toBe(409);
-  });
-}); 
+});

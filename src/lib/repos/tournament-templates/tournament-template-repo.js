@@ -8,16 +8,27 @@ import { DuplicateError } from '@/lib/errors';
  */
 class TournamentTemplateRepo {
   /**
-   * Находит все шаблоны турниров.
+   * Находит все шаблоны турниров с возможностью фильтрации и поиска.
    * @param {object} [options] - Опции для поиска.
+   * @param {string} [options.status='active'] - Статус для фильтрации ('active' или 'archived').
+   * @param {string} [options.search=''] - Строка для поиска по названию.
    * @param {boolean} [options.populateMapTemplates=false] - Флаг для populate связанных шаблонов карт.
-   * @param {boolean} [options.includeArchived=false] - Включить ли архивированные.
    * @returns {Promise<TournamentTemplate[]>}
    */
-  async findAll({ populateMapTemplates = false, includeArchived = false } = {}) {
-    const query = TournamentTemplate.find();
-    
-    query.setOptions({ includeArchived });
+  async findAll({ status = 'active', search = '', populateMapTemplates = false } = {}) {
+    const filter = {};
+
+    if (status === 'archived') {
+      filter.archivedAt = { $ne: null };
+    } else {
+      filter.archivedAt = { $eq: null };
+    }
+
+    if (search) {
+      filter.name = { $regex: search, $options: 'i' };
+    }
+
+    const query = TournamentTemplate.find(filter);
 
     if (populateMapTemplates) {
       query.populate('mapTemplates');
@@ -55,7 +66,7 @@ class TournamentTemplateRepo {
    * @returns {Promise<object|null>} - Найденный шаблон или null.
    */
   async findByName(name) {
-    return TournamentTemplate.findOne({ name, archivedAt: null }).lean();
+    return TournamentTemplate.findOne({ name, archivedAt: { $eq: null } }).lean();
   }
 
   /**
@@ -76,19 +87,6 @@ class TournamentTemplateRepo {
    * @returns {Promise<TournamentTemplate|null>}
    */
   async update(id, data) {
-    // Проверяем, есть ли уже шаблон с таким именем (исключая текущий)
-    if (data.name) {
-      const existingTemplate = await TournamentTemplate.findOne({
-        name: data.name,
-        _id: { $ne: id },
-        archivedAt: null, // Игнорируем архивированные
-      });
-
-      if (existingTemplate) {
-        throw new DuplicateError('Шаблон турнира с таким названием уже существует.');
-      }
-    }
-
     const updatedTemplate = await TournamentTemplate.findByIdAndUpdate(id, data, { new: true }).lean();
 
     // Инвалидируем кэш для этого шаблона
@@ -147,18 +145,40 @@ class TournamentTemplateRepo {
    * @returns {Promise<TournamentTemplate|null>}
    */
   async archive(id) {
-    return TournamentTemplate.findByIdAndUpdate(id, { $set: { archivedAt: new Date() } }, { new: true }).lean();
+    const updatedTemplate = await TournamentTemplate.findByIdAndUpdate(
+      id,
+      { $set: { archivedAt: new Date() } },
+      { new: true }
+    ).lean();
+
+    if (updatedTemplate) {
+      await cache.invalidateByTag(`tournament_template:${updatedTemplate._id}`);
+      await cache.invalidateByTag('tournament_templates_list');
+    }
+
+    return updatedTemplate;
   }
 
   /**
    * Восстанавливает шаблон турнира из архива по ID.
-   * Удаляет поле archivedAt.
+   * Устанавливает поле archivedAt в null.
    * @param {string} id - ID шаблона для восстановления.
    * @returns {Promise<TournamentTemplate|null>}
    */
   async unarchive(id) {
-    return TournamentTemplate.findByIdAndUpdate(id, { $unset: { archivedAt: 1 } }, { new: true, includeArchived: true }).lean();
+    const updatedTemplate = await TournamentTemplate.findByIdAndUpdate(
+      id,
+      { $set: { archivedAt: null } },
+      { new: true }
+    ).lean();
+
+    if (updatedTemplate) {
+      await cache.invalidateByTag(`tournament_template:${updatedTemplate._id}`);
+      await cache.invalidateByTag('tournament_templates_list');
+    }
+
+    return updatedTemplate;
   }
 }
 
-export default TournamentTemplateRepo; 
+export default new TournamentTemplateRepo(); 

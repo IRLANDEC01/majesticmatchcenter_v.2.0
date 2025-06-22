@@ -7,13 +7,11 @@ const tournamentTemplateSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Название шаблона турнира является обязательным полем.'],
     trim: true,
-    unique: true,
   },
   // Уникальный идентификатор для URL, например, "majestic-cup-summer"
   slug: {
     type: String,
     required: [true, 'Slug является обязательным полем.'],
-    unique: true,
     trim: true,
     lowercase: true,
   },
@@ -61,19 +59,22 @@ const tournamentTemplateSchema = new mongoose.Schema({
   versionKey: '__v',
 });
 
+// Частичный уникальный индекс для `name`.
+tournamentTemplateSchema.index(
+  { name: 1 },
+  { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } }
+);
+
+// Частичный уникальный индекс для `slug`.
+tournamentTemplateSchema.index(
+  { slug: 1 },
+  { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } }
+);
+
 // Добавляем pre-save хук для генерации slug из name, если он не предоставлен
 tournamentTemplateSchema.pre('validate', function(next) {
   if (this.name && !this.slug) {
     this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-  }
-  next();
-});
-
-// Хук для автоматического исключения архивированных документов из результатов `find`
-tournamentTemplateSchema.pre(/^find/, function(next) {
-  // `this` - это объект запроса (query)
-  if (!this.getOptions().includeArchived) {
-    this.where({ archivedAt: { $exists: false } });
   }
   next();
 });

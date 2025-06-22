@@ -2,16 +2,7 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import { updateMapTemplateSchema } from '@/lib/api/schemas/map-templates/map-template-schemas';
-
-// Import Classes
-import MapTemplateService from '@/lib/domain/map-templates/map-template-service';
-import MapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
-
-// Helper function to instantiate the service and its dependencies
-function getMapTemplateService() {
-  const mapTemplateRepo = new MapTemplateRepo();
-  return new MapTemplateService({ mapTemplateRepo });
-}
+import { mapTemplateService } from '@/lib/domain/map-templates/map-template-service';
 
 /**
  * GET /api/admin/map-templates/{id}
@@ -24,11 +15,10 @@ function getMapTemplateService() {
 export async function GET(request, { params }) {
   try {
     const { id } = params;
-    const mapTemplateService = getMapTemplateService();
     const template = await mapTemplateService.getMapTemplateById(id);
     return NextResponse.json(template);
   } catch (error) {
-    return handleApiError(error);
+    return handleApiError(error, `Failed to get map template ${params.id}`);
   }
 }
 
@@ -50,13 +40,13 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const mapTemplateService = getMapTemplateService();
     const updatedTemplate = await mapTemplateService.updateMapTemplate(id, validationResult.data);
 
     revalidatePath('/admin/map-templates');
+    revalidatePath(`/admin/map-templates/${id}/edit`);
 
     return NextResponse.json(updatedTemplate, { status: 200 });
   } catch (error) {
-    return handleApiError(error);
+    return handleApiError(error, `Failed to update map template ${params.id}`);
   }
 } 

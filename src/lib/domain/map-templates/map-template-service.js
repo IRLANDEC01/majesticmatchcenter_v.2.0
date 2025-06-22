@@ -120,4 +120,11 @@ export default class MapTemplateService {
     }
     return restoredTemplate;
   }
-} 
+}
+
+// Импортируем репозиторий и создаем синглтон-экземпляр сервиса
+import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo.js';
+
+export const mapTemplateService = new MapTemplateService({
+  mapTemplateRepo,
+}); 
