@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import { updateTournamentTemplateSchema } from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
-import { tournamentTemplateService } from '@/lib/domain/tournament-templates/tournament-template-service';
+import tournamentTemplateService from '@/lib/domain/tournament-templates/tournament-template-service';
 
 /**
  * GET handler for fetching a single tournament template by ID.
@@ -29,9 +29,9 @@ export async function GET(request, { params }) {
 export async function PATCH(request, { params }) {
   try {
     const { id } = params;
-    const json = await request.json();
+    const body = await request.json();
 
-    const validationResult = updateTournamentTemplateSchema.safeParse(json);
+    const validationResult = updateTournamentTemplateSchema.safeParse(body);
     if (!validationResult.success) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
@@ -39,10 +39,10 @@ export async function PATCH(request, { params }) {
     const updatedTemplate = await tournamentTemplateService.updateTemplate(id, validationResult.data);
 
     revalidatePath('/admin/tournament-templates');
-    revalidatePath(`/admin/tournament-templates/${id}`);
+    revalidatePath(`/admin/tournament-templates/edit/${updatedTemplate.slug}`);
 
     return NextResponse.json(updatedTemplate);
   } catch (error) {
-    return handleApiError(error, `Failed to update tournament template ${params.id}`);
+    return handleApiError(error, 'обновлении шаблона турнира');
   }
 }

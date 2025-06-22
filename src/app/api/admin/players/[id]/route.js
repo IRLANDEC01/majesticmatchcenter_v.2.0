@@ -1,18 +1,15 @@
 import { NextResponse } from 'next/server';
-import { playerService } from '@/lib/domain/players/player-service';
-import { connectToDatabase } from '@/lib/db';
+import playerService from '@/lib/domain/players/player-service';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import { updatePlayerSchema } from '@/lib/api/schemas/players/player-schemas';
+import { revalidatePath } from 'next/cache';
 
 /**
  * GET /api/admin/players/[id]
  * Получает игрока по ID.
  */
-export async function GET(request, { params }) {
+export async function GET(req, { params }) {
   try {
-    await connectToDatabase();
-    // Валидация ID делегируется в сервис или repo,
-    // а CastError будет пойман в handleApiError
     const player = await playerService.getPlayerById(params.id);
     return NextResponse.json(player);
   } catch (error) {
@@ -21,16 +18,23 @@ export async function GET(request, { params }) {
 }
 
 /**
- * PUT /api/admin/players/[id]
+ * PATCH /api/admin/players/[id]
  * Обновляет игрока.
  */
-export async function PUT(request, { params }) {
+export async function PATCH(req, { params }) {
   try {
-    await connectToDatabase();
-    const json = await request.json();
+    const { id } = params;
+    const json = await req.json();
     const validatedData = updatePlayerSchema.parse(json);
 
-    const updatedPlayer = await playerService.updatePlayer(params.id, validatedData);
+    const updatedPlayer = await playerService.updatePlayer(id, validatedData);
+
+    revalidatePath('/admin/players');
+    revalidatePath(`/admin/players/${id}`);
+    if (updatedPlayer.slug) {
+      revalidatePath(`/players/${updatedPlayer.slug}`);
+    }
+
     return NextResponse.json(updatedPlayer);
   } catch (error) {
     return handleApiError(error);

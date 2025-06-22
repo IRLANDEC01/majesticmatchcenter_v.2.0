@@ -2,8 +2,11 @@
  * Сервис для управления статистикой игроков и семей.
  */
 import { RATING_REASONS } from '@/lib/constants';
+import playerRepo from '@/lib/repos/players/player-repo.js';
+import playerStatsRepo from '@/lib/repos/statistics/player-stats-repo.js';
+import playerMapParticipationRepo from '@/lib/repos/statistics/player-map-participation-repo.js';
 
-export default class StatisticsService {
+class StatisticsService {
   constructor({
     playerRepo,
     playerStatsRepo,
@@ -197,4 +200,12 @@ export default class StatisticsService {
     // TODO: Implement logic to rollback statistics for a map.
     // This could involve deleting created stats entries or reverting to a previous state.
   }
-} 
+}
+
+const statisticsService = new StatisticsService({
+  playerRepo,
+  playerStatsRepo,
+  playerMapParticipationRepo,
+});
+
+export default statisticsService; 

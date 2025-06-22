@@ -7,11 +7,17 @@
 import { ValidationError } from '@/lib/errors';
 import { RATING_REASONS } from '@/lib/constants';
 
+import familyRepo from '@/lib/repos/families/family-repo.js';
+import playerRepo from '@/lib/repos/players/player-repo.js';
+import familyMapParticipationRepo from '@/lib/repos/ratings/family-map-participation-repo.js';
+import playerRatingHistoryRepo from '@/lib/repos/ratings/player-rating-history-repo.js';
+import familyTournamentParticipationRepo from '@/lib/repos/families/family-tournament-participation-repo.js';
+
 /**
  * Сервис для управления рейтингами игроков и семей.
  * Инкапсулирует логику начисления и отката изменений рейтинга.
  */
-export default class RatingService {
+class RatingService {
   constructor({
     familyRepo,
     playerRepo,
@@ -169,4 +175,14 @@ export default class RatingService {
 
     await Promise.all([familyRollback(), playerRollback()]);
   }
-} 
+}
+
+const ratingService = new RatingService({
+  familyRepo,
+  playerRepo,
+  familyMapParticipationRepo,
+  playerRatingHistoryRepo,
+  familyTournamentParticipationRepo,
+});
+
+export default ratingService; 

@@ -5,8 +5,14 @@ import Map from '@/models/map/Map.js';
 import { cache } from '@/lib/cache/index.js';
 import { NotFoundError } from '@/lib/errors.js';
 import FamilyMapParticipation from '@/models/family/FamilyMapParticipation.js';
+import BaseRepo from '../base-repo';
+import { STATUSES } from '@/lib/constants.js';
 
-class TournamentRepo {
+class TournamentRepo extends BaseRepo {
+  constructor() {
+    super(Tournament, 'tournament');
+  }
+
   /**
    * Находит турнир по ID.
    * @param {string} id - ID турнира.
@@ -308,6 +314,15 @@ class TournamentRepo {
   async getTournamentLeaderboard(tournamentId) {
     // ... логика метода
   }
+
+  async findActiveTournamentsByTemplate(templateId) {
+    const query = {
+      template: templateId,
+      status: { $in: [STATUSES.PLANNED, STATUSES.ACTIVE] },
+    };
+    return this.model.find(query).countDocuments().exec();
+  }
 }
 
-export default TournamentRepo; 
+const tournamentRepo = new TournamentRepo();
+export default tournamentRepo; 

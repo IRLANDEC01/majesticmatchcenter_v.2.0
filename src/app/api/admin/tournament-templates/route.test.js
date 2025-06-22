@@ -1,27 +1,33 @@
 import { GET, POST } from './route.js';
-import models from '@/models/index.js';
-import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
+import TournamentTemplate from '@/models/tournament/TournamentTemplate.js';
+import MapTemplate from '@/models/map/MapTemplate.js';
 import { RESULT_TIERS, CURRENCY_TYPES } from '@/lib/constants.js';
+import { revalidatePath } from 'next/cache';
 
-const { TournamentTemplate } = models;
+// Мокируем внешние зависимости. Сервисы и репозитории НЕ мокируем!
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn(),
+}));
 
 describe('API /api/admin/tournament-templates', () => {
-  let testData;
+  let mapTemplate;
 
   beforeAll(dbConnect);
   afterAll(dbDisconnect);
   beforeEach(async () => {
     await dbClear();
-    const { testData: data } = await populateDb();
-    testData = data;
+    revalidatePath.mockClear();
+    // Создаем общую для всех тестов сущность, от которой есть зависимость
+    mapTemplate = await MapTemplate.create({ name: 'Test Map' });
   });
 
   describe('POST', () => {
-    it('должен успешно создавать шаблон и возвращать 201', async () => {
+    it('должен успешно создавать шаблон, вызывать revalidatePath и возвращать 201', async () => {
       // Arrange
-      const templateData = { 
+      const templateData = {
         name: 'New Unique Tournament Template',
-        mapTemplates: [testData.mapTemplateDust2._id.toString()],
+        mapTemplates: [mapTemplate._id.toString()],
         description: 'A test description',
         rules: 'A test ruleset',
         prizePool: [{
@@ -48,14 +54,17 @@ describe('API /api/admin/tournament-templates', () => {
       expect(dbTemplate).not.toBeNull();
       expect(dbTemplate.prizePool[0].target.tier).toBe(RESULT_TIERS.WINNER);
       expect(dbTemplate.prizePool[0].amount).toBe(100);
+
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/tournament-templates');
+      expect(revalidatePath).toHaveBeenCalledTimes(1);
     });
 
-    it('должен возвращать 409 при попытке создать дубликат', async () => {
+    it('должен возвращать 409 при попытке создать дубликат по имени', async () => {
       // Arrange
-      const existingTemplate = testData.tournamentTemplate;
+      await TournamentTemplate.create({ name: 'Existing Template', mapTemplates: [mapTemplate._id] });
       const templateData = { 
-        name: existingTemplate.name, // Используем то же имя
-        mapTemplates: [testData.mapTemplateDust2._id.toString()],
+        name: 'Existing Template', // Используем то же имя
+        mapTemplates: [mapTemplate._id.toString()],
       };
 
       const request = new Request('http://localhost/api/admin/tournament-templates', {
@@ -69,19 +78,21 @@ describe('API /api/admin/tournament-templates', () => {
       
       // Assert
       expect(response.status).toBe(409);
+      expect(revalidatePath).not.toHaveBeenCalled();
     });
   });
 
   describe('GET', () => {
-    it('должен возвращать только неархивированные шаблоны по умолчанию', async () => {
+    it('должен возвращать только активные шаблоны по умолчанию', async () => {
       // Arrange
-      // populateDb создает один активный шаблон. Архивируем его.
-      await TournamentTemplate.findByIdAndUpdate(testData.tournamentTemplate._id, { archivedAt: new Date() });
-      // Создаем новый, чтобы было что найти
       await TournamentTemplate.create({ 
-        name: 'A New Active Template', 
-        slug: 'a-new-active-template',
-        mapTemplates: [testData.mapTemplateDust2._id],
+        name: 'Active Template', 
+        mapTemplates: [mapTemplate._id],
+      });
+      await TournamentTemplate.create({ 
+        name: 'Archived Template', 
+        mapTemplates: [mapTemplate._id],
+        archivedAt: new Date(),
       });
 
       const request = new Request('http://localhost/api/admin/tournament-templates');
@@ -92,23 +103,21 @@ describe('API /api/admin/tournament-templates', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      expect(body.length).toBe(1);
-      expect(body[0].name).toBe('A New Active Template');
+      expect(body.data.length).toBe(1);
+      expect(body.total).toBe(1);
+      expect(body.data[0].name).toBe('Active Template');
     });
 
     it('должен возвращать только архивные шаблоны при `status=archived`', async () => {
       // Arrange
-      // populateDb создает один активный шаблон. Архивируем его.
-      const archivedTemplate = await TournamentTemplate.findByIdAndUpdate(
-        testData.tournamentTemplate._id, 
-        { archivedAt: new Date() },
-        { new: true }
-      );
-      // Создаем еще один, активный, чтобы он НЕ попал в выборку
       await TournamentTemplate.create({ 
-        name: 'Another Template', 
-        slug: 'another-template',
-        mapTemplates: [testData.mapTemplateDust2._id],
+        name: 'Active Template', 
+        mapTemplates: [mapTemplate._id],
+      });
+      const archivedTemplate = await TournamentTemplate.create({ 
+        name: 'Archived Template', 
+        mapTemplates: [mapTemplate._id],
+        archivedAt: new Date(),
       });
 
       const url = new URL('http://localhost/api/admin/tournament-templates');
@@ -121,8 +130,9 @@ describe('API /api/admin/tournament-templates', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      expect(body.length).toBe(1);
-      expect(body[0].name).toBe(archivedTemplate.name);
+      expect(body.data.length).toBe(1);
+      expect(body.total).toBe(1);
+      expect(body.data[0].name).toBe(archivedTemplate.name);
     });
   });
 }); 

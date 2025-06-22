@@ -1,52 +1,31 @@
-import { DuplicateError, NotFoundError, ValidationError } from '@/lib/errors';
+import { DuplicateError, NotFoundError, ValidationError, AppError } from '@/lib/errors';
+import tournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo';
+import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
+import tournamentRepo from '@/lib/repos/tournaments/tournament-repo';
 
-/**
- * Cервис для управления бизнес-логикой шаблонов турниров.
- */
-export default class TournamentTemplateService {
-  /**
-   * @param {object} repos - Репозитории.
-   * @param {import('@/lib/repos/tournament-templates/tournament-template-repo').default} repos.tournamentTemplateRepo - Репозиторий шаблонов турниров.
-   * @param {import('@/lib/repos/map-templates/map-template-repo').default} repos.mapTemplateRepo - Репозиторий шаблонов карт.
-   */
+class TournamentTemplateService {
   constructor(repos) {
     this.tournamentTemplateRepo = repos.tournamentTemplateRepo;
     this.mapTemplateRepo = repos.mapTemplateRepo;
+    this.tournamentRepo = repos.tournamentRepo;
   }
   
-  /**
-   * Проверяет, что все переданные ID шаблонов карт существуют и являются активными.
-   * @param {string[]} mapTemplateIds - Массив ID шаблонов карт.
-   * @private
-   */
   async _validateMapTemplates(mapTemplateIds) {
     if (!mapTemplateIds || mapTemplateIds.length === 0) {
       throw new ValidationError('Необходимо указать хотя бы один шаблон карты.');
     }
-
-    const mapTemplates = await Promise.all(
-      mapTemplateIds.map(id => this.mapTemplateRepo.findById(id))
-    );
-
-    const notFound = mapTemplates.some(template => !template);
-    if (notFound) {
+    const mapTemplates = await this.mapTemplateRepo.find({ filter: { _id: { $in: mapTemplateIds } } });
+    if (mapTemplates.data.length !== mapTemplateIds.length) {
       throw new NotFoundError('Один или несколько указанных шаблонов карт не найдены.');
     }
-
-    const archived = mapTemplates.some(template => template.archivedAt);
+    const archived = mapTemplates.data.some(template => template.archivedAt);
     if (archived) {
       throw new ValidationError('Нельзя использовать архивные шаблоны карт.');
     }
   }
 
-  /**
-   * Создает новый шаблон турнира.
-   * @param {object} templateData - Данные для создания шаблона.
-   * @returns {Promise<object>} - Созданный объект шаблона турнира.
-   */
   async createTemplate(templateData) {
     await this._validateMapTemplates(templateData.mapTemplates);
-    
     try {
       return await this.tournamentTemplateRepo.create(templateData);
     } catch (error) {
@@ -57,20 +36,10 @@ export default class TournamentTemplateService {
     }
   }
 
-  /**
-   * Получает все шаблоны турниров.
-   * @param {object} [options] - Опции для получения шаблонов.
-   * @returns {Promise<Array<object>>} - Массив шаблонов турниров.
-   */
   async getAllTemplates(options = {}) {
-    return this.tournamentTemplateRepo.findAll(options);
+    return this.tournamentTemplateRepo.find(options);
   }
 
-  /**
-   * Получает шаблон турнира по ID.
-   * @param {string} id - ID шаблона.
-   * @returns {Promise<object>} - Найденный шаблон.
-   */
   async getTemplateById(id) {
     const template = await this.tournamentTemplateRepo.findById(id);
     if (!template) {
@@ -79,20 +48,11 @@ export default class TournamentTemplateService {
     return template;
   }
 
-  /**
-   * Обновляет шаблон турнира.
-   * @param {string} id - ID шаблона.
-   * @param {object} templateData - Данные для обновления.
-   * @returns {Promise<object>} - Обновленный объект шаблона турнира.
-   */
   async updateTemplate(id, templateData) {
-    // Проверяем, существует ли обновляемый документ
     await this.getTemplateById(id);
-    
     if (templateData.mapTemplates) {
       await this._validateMapTemplates(templateData.mapTemplates);
     }
-    
     try {
       return await this.tournamentTemplateRepo.update(id, templateData);
     } catch (error) {
@@ -103,38 +63,34 @@ export default class TournamentTemplateService {
     }
   }
   
-  /**
-   * Архивирует шаблон турнира.
-   * @param {string} templateId - ID шаблона для архивации.
-   * @returns {Promise<object>}
-   */
   async archiveTemplate(templateId) {
-    const template = await this.tournamentTemplateRepo.archive(templateId);
-    if (!template) {
-      throw new NotFoundError(`Шаблон турнира с ID ${templateId} не найден.`);
+    const existingTemplate = await this.getTemplateById(templateId);
+
+    const activeTournaments = await this.tournamentRepo.find({ 
+      filter: { template: templateId, status: { $ne: 'completed' } } 
+    });
+
+    if (activeTournaments.total > 0) {
+      throw new AppError('Нельзя архивировать шаблон, который используется в активных или запланированных турнирах.', 409);
     }
-    return template;
+    
+    return this.tournamentTemplateRepo.archive(existingTemplate._id);
   }
 
-  /**
-   * Восстанавливает шаблон турнира из архива.
-   * @param {string} templateId - ID шаблона для восстановления.
-   * @returns {Promise<object>}
-   */
-  async unarchiveTemplate(templateId) {
-    const template = await this.tournamentTemplateRepo.unarchive(templateId);
-    if (!template) {
-      throw new NotFoundError(`Шаблон турнира с ID ${templateId} не найден.`);
+  async restoreTemplate(templateId) {
+    // Используем findById с опцией, чтобы найти даже архивированный.
+    const existingTemplate = await this.tournamentTemplateRepo.findById(templateId, { includeArchived: true });
+    if (!existingTemplate) {
+      throw new NotFoundError(`Шаблон турнира с ID ${templateId} не найден для восстановления.`);
     }
-    return template;
+    return this.tournamentTemplateRepo.restore(templateId);
   }
 }
 
-// Импортируем репозитории и создаем синглтон-экземпляр сервиса
-import tournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo';
-import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
-
-export const tournamentTemplateService = new TournamentTemplateService({
+const tournamentTemplateService = new TournamentTemplateService({
   tournamentTemplateRepo,
   mapTemplateRepo,
+  tournamentRepo,
 });
+
+export default tournamentTemplateService;

@@ -1,7 +1,7 @@
 /**
  * Сервис для управления достижениями игроков.
  */
-export class AchievementService {
+class AchievementService {
   /**
    * Создает записи о достижениях по результатам карты.
    * @param {string} mapId - ID карты.

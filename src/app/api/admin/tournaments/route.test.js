@@ -1,21 +1,16 @@
 import { GET, POST } from './route.js';
 import models from '@/models/index.js';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db.js';
 import { populateDb, dbClear } from '@/lib/test-helpers.js';
 import { CURRENCY_TYPES, RESULT_TIERS, STATUSES } from '@/lib/constants.js';
+import tournamentRepo from '@/lib/repos/tournaments/tournament-repo';
+import { Types } from 'mongoose';
 
 const { Tournament, TournamentTemplate } = models;
 
+jest.mock('@/lib/repos/tournaments/tournament-repo');
+
 describe('API /api/admin/tournaments', () => {
   let testData;
-
-  beforeAll(async () => {
-    await connectToDatabase();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
 
   beforeEach(async () => {
     await dbClear();

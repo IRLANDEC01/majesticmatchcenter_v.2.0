@@ -1,41 +1,54 @@
 import { GET, PUT } from './route.js';
-import models from '@/models/index.js';
-import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
+import Family from '@/models/family/Family';
+import Player from '@/models/player/Player';
+import { revalidatePath } from 'next/cache';
 import mongoose from 'mongoose';
 
-const { Family } = models;
+// Мокируем внешние зависимости
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn(),
+}));
 
 describe('/api/admin/families/[id]', () => {
-  let testData;
+  let owner;
 
-  beforeAll(dbConnect);
-  afterAll(dbDisconnect);
+  beforeAll(async () => {
+    await dbConnect();
+  });
+
+  afterAll(async () => {
+    await dbDisconnect();
+  });
+  
   beforeEach(async () => {
     await dbClear();
-    const { testData: data } = await populateDb();
-    testData = data;
+    revalidatePath.mockClear();
+    owner = await Player.create({ firstName: 'Test', lastName: 'Owner' });
   });
 
   describe('GET', () => {
     it('должен возвращать семью по ID и статус 200', async () => {
       // Arrange
-      const familyToFind = testData.family;
+      const family = await Family.create({ name: 'Test Family', displayLastName: 'Test', owner: owner._id });
+      const request = new Request(`http://localhost/api/admin/families/${family._id}`);
 
       // Act
-      const response = await GET(null, { params: { id: familyToFind._id.toString() } });
+      const response = await GET(request, { params: { id: family._id.toString() } });
       const body = await response.json();
 
       // Assert
       expect(response.status).toBe(200);
-      expect(body.name).toBe(familyToFind.name);
+      expect(body.name).toBe(family.name);
     });
 
     it('должен возвращать 404, если семья не найдена', async () => {
       // Arrange
       const nonExistentId = new mongoose.Types.ObjectId();
+      const request = new Request(`http://localhost/api/admin/families/${nonExistentId}`);
       
       // Act
-      const response = await GET(null, { params: { id: nonExistentId.toString() } });
+      const response = await GET(request, { params: { id: nonExistentId.toString() } });
 
       // Assert
       expect(response.status).toBe(404);
@@ -43,11 +56,11 @@ describe('/api/admin/families/[id]', () => {
 
     it('должен возвращать 404, если семья архивирована', async () => {
       // Arrange
-      const familyToArchive = testData.family;
-      await Family.findByIdAndUpdate(familyToArchive._id, { archivedAt: new Date() });
+      const family = await Family.create({ name: 'Archived Family', displayLastName: 'Archived', owner: owner._id, archivedAt: new Date() });
+      const request = new Request(`http://localhost/api/admin/families/${family._id}`);
       
       // Act
-      const response = await GET(null, { params: { id: familyToArchive._id.toString() } });
+      const response = await GET(request, { params: { id: family._id.toString() } });
 
       // Assert
       expect(response.status).toBe(404);
@@ -55,7 +68,8 @@ describe('/api/admin/families/[id]', () => {
 
     it('должен возвращать 400 при невалидном ID', async () => {
       // Act
-      const response = await GET(null, { params: { id: 'invalid-id' } });
+      const request = new Request(`http://localhost/api/admin/families/invalid-id`);
+      const response = await GET(request, { params: { id: 'invalid-id' } });
 
       // Assert
       expect(response.status).toBe(400);
@@ -63,34 +77,38 @@ describe('/api/admin/families/[id]', () => {
   });
 
   describe('PUT', () => {
-    it('должен успешно обновлять семью и возвращать статус 200', async () => {
+    it('должен успешно обновлять семью и вызывать revalidatePath', async () => {
       // Arrange
-      const familyToUpdate = testData.family;
-      const updateData = { description: 'A new description for testing' };
-      const request = new Request(`http://localhost/api/admin/families/${familyToUpdate._id}`, {
+      const family = await Family.create({ name: 'Original Name', displayLastName: 'Original', owner: owner._id });
+      const updateData = { description: 'A new description' };
+      const request = new Request(`http://localhost/api/admin/families/${family._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData),
       });
 
       // Act
-      const response = await PUT(request, { params: { id: familyToUpdate._id.toString() } });
+      const response = await PUT(request, { params: { id: family._id.toString() } });
       const body = await response.json();
 
       // Assert
       expect(response.status).toBe(200);
       expect(body.description).toBe(updateData.description);
+      
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/families');
+      expect(revalidatePath).toHaveBeenCalledWith(`/admin/families/${family._id}`);
+      expect(revalidatePath).toHaveBeenCalledTimes(2);
     });
 
     it('должен возвращать 409 при попытке обновить имя на уже существующее', async () => {
       // Arrange
-      const familyToUpdate = testData.familyUzi;
-      const conflictingFamily = testData.familyGucci;
+      await Family.create({ name: 'Existing Name', displayLastName: 'Existing', owner: owner._id });
+      const familyToUpdate = await Family.create({ name: 'Original Name', displayLastName: 'Original', owner: owner._id });
 
       const request = new Request(`http://localhost/api/admin/families/${familyToUpdate._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: conflictingFamily.name }),
+        body: JSON.stringify({ name: 'Existing Name' }),
       });
       
       // Act
@@ -100,4 +118,4 @@ describe('/api/admin/families/[id]', () => {
       expect(response.status).toBe(409);
     });
   });
-}); 
+});

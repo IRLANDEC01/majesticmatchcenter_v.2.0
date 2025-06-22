@@ -22,7 +22,57 @@ class PlayerRepository extends BaseRepo {
   }
 
   /**
+   * Находит игрока по имени и "публичной" фамилии (собственной или семейной).
+   * Использует aggregation pipeline для $lookup данных семьи.
+   * @param {string} firstName - Имя игрока.
+   * @param {string} lastName - Фамилия для поиска (может быть displayLastName семьи).
+   * @returns {Promise<object|null>}
+   */
+  async findByNameWithFamily(firstName, lastName) {
+    const results = await this.model.aggregate([
+      // Шаг 1: Найти кандидатов по имени и статусу
+      {
+        $match: {
+          firstName,
+          archivedAt: null,
+        },
+      },
+      // Шаг 2: Подтянуть (join) данные из коллекции семей
+      {
+        $lookup: {
+          from: 'families', // Имя коллекции в MongoDB
+          localField: 'currentFamily',
+          foreignField: '_id',
+          as: 'familyData',
+        },
+      },
+      // Шаг 3: Развернуть массив familyData (он всегда будет из одного элемента или пуст)
+      {
+        $unwind: {
+          path: '$familyData',
+          preserveNullAndEmptyArrays: true, // Сохранить игроков без семьи
+        },
+      },
+      // Шаг 4: Финальная фильтрация по фамилии
+      {
+        $match: {
+          $or: [
+            { lastName }, // Проверяем собственную фамилию
+            { 'familyData.displayLastName': lastName }, // Проверяем фамилию семьи
+          ],
+        },
+      },
+      // Шаг 5: Ограничить результат одним документом
+      { $limit: 1 },
+    ]);
+
+    // aggregate возвращает массив, поэтому берем первый элемент или null
+    return results[0] || null;
+  }
+
+  /**
    * Находит игрока по имени и фамилии.
+   * @deprecated Используйте findByNameWithFamily для учета логики displayLastName
    * @param {string} firstName - Имя игрока.
    * @param {string} lastName - Фамилия игрока.
    * @returns {Promise<object|null>}
@@ -96,4 +146,5 @@ class PlayerRepository extends BaseRepo {
   }
 }
 
-export default PlayerRepository;
+const playerRepo = new PlayerRepository();
+export default playerRepo;

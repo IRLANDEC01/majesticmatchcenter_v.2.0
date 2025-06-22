@@ -1,31 +1,40 @@
 import { PATCH } from './route.js';
-import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
-import models from '@/models/index.js';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
+import Family from '@/models/family/Family.js';
+import Player from '@/models/player/Player.js';
+import { revalidatePath } from 'next/cache';
+import { FAMILY_MEMBER_ROLES } from '@/lib/constants.js';
 
-const { Family, Player } = models;
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn(),
+}));
 
 describe('API /api/admin/families/[id]/owner', () => {
-  let testData;
-
   beforeAll(dbConnect);
   afterAll(dbDisconnect);
 
   beforeEach(async () => {
     await dbClear();
-    const { testData: data } = await populateDb({ numPlayers: 2, numFamilies: 2 });
-    testData = data;
+    revalidatePath.mockClear();
   });
 
   it('должен успешно сменить владельца семьи', async () => {
     // Arrange
-    const family = testData.familyGucci;
-    const oldOwner = testData.playerGucci;
-    const newOwner = testData.playerUzi;
+    const oldOwner = await Player.create({ firstName: 'Old', lastName: 'Owner' });
+    const newOwner = await Player.create({ firstName: 'New', lastName: 'Owner' });
     
-    // Добавляем нового игрока в семью
-    await Family.findByIdAndUpdate(family._id, {
-      $push: { members: { player: newOwner._id } },
+    const family = await Family.create({
+      name: 'Test Family',
+      displayLastName: 'Test',
+      owner: oldOwner._id,
+      members: [
+        { player: oldOwner._id, role: FAMILY_MEMBER_ROLES.OWNER, joinedAt: new Date() },
+        { player: newOwner._id, joinedAt: new Date() },
+      ],
     });
+    
+    await Player.findByIdAndUpdate(oldOwner._id, { familyId: family._id });
+    await Player.findByIdAndUpdate(newOwner._id, { familyId: family._id });
 
     const request = new Request(`http://localhost/api/admin/families/${family._id}/owner`, {
       method: 'PATCH',
@@ -49,9 +58,10 @@ describe('API /api/admin/families/[id]/owner', () => {
     expect(newOwnerMember.role).toBe('owner');
   });
 
-  it('должен возвращать ошибку 400, если новый владелец не является членом семьи', async () => {
+  it('должен возвращать 400, если новый владелец не является членом семьи', async () => {
     // Arrange
-    const family = testData.familyGucci;
+    const owner = await Player.create({ firstName: 'Owner', lastName: 'Owner' });
+    const family = await Family.create({ name: 'Test Family', displayLastName: 'Test', owner: owner._id, members: [{ player: owner._id }] });
     const nonMember = await Player.create({ firstName: 'Non', lastName: 'Member' });
 
     const request = new Request(`http://localhost/api/admin/families/${family._id}/owner`, {
@@ -69,10 +79,10 @@ describe('API /api/admin/families/[id]/owner', () => {
     expect(body.message).toContain('Новый владелец должен быть участником семьи');
   });
   
-  it('должен возвращать ошибку 400, если игрок уже является владельцем', async () => {
+  it('должен возвращать 409, если игрок уже является владельцем', async () => {
     // Arrange
-    const family = testData.familyGucci;
-    const currentOwner = testData.playerGucci;
+    const currentOwner = await Player.create({ firstName: 'Current', lastName: 'Owner' });
+    const family = await Family.create({ name: 'Test Family', displayLastName: 'Test', owner: currentOwner._id, members: [{ player: currentOwner._id }] });
 
     const request = new Request(`http://localhost/api/admin/families/${family._id}/owner`, {
         method: 'PATCH',
@@ -85,7 +95,7 @@ describe('API /api/admin/families/[id]/owner', () => {
     const body = await response.json();
 
     // Assert
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(409);
     expect(body.message).toContain('Этот игрок уже является владельцем семьи');
   });
-}); 
+});

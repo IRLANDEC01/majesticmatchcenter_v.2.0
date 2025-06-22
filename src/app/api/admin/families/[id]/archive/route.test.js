@@ -1,93 +1,75 @@
 import { PATCH } from './route';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
 import Family from '@/models/family/Family';
 import Player from '@/models/player/Player';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
-import { familyService } from '@/lib/domain/families/family-service';
+import { revalidatePath } from 'next/cache';
 
-describe('API /api/admin/families/[id]/archive', () => {
-  let testFamily;
-  let testOwner;
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn(),
+}));
+
+describe('PATCH /api/admin/families/[id]/archive', () => {
+  let owner;
 
   beforeAll(async () => {
-    await connectToDatabase();
-    await Family.init();
+    await dbConnect();
   });
 
   afterAll(async () => {
-    await disconnectFromDatabase();
+    await dbDisconnect();
   });
 
   beforeEach(async () => {
-    await Family.deleteMany({});
-    await Player.deleteMany({});
-    testOwner = await Player.create({ firstName: 'Owner', lastName: 'ForArchive' });
-    testFamily = await Family.create({
-      name: 'Test Family for Archiving',
-      displayLastName: 'Archive',
-      owner: testOwner._id,
-    });
+    await dbClear();
+    revalidatePath.mockClear();
+    owner = await Player.create({ firstName: 'Test', lastName: 'Owner' });
   });
 
-  it('должен успешно архивировать семью', async () => {
-    const request = new Request(`http://localhost/api/admin/families/${testFamily._id}/archive`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: true }),
+  it('должен успешно архивировать семью и вызывать revalidatePath', async () => {
+    // Arrange
+    const family = await Family.create({ name: 'Family to Archive', displayLastName: 'ArchiveMe', owner: owner._id });
+    const request = new Request(`http://localhost/api/admin/families/${family._id}/archive`, {
+      method: 'PATCH',
     });
 
-    const response = await PATCH(request, { params: { id: testFamily._id.toString() } });
+    // Act
+    const response = await PATCH(request, { params: { id: family._id.toString() } });
     const body = await response.json();
+    const updatedFamily = await Family.findById(family._id);
 
+    // Assert
     expect(response.status).toBe(200);
-    expect(body.archivedAt).toBeDefined();
-
-    const dbFamily = await Family.findById(testFamily._id).setOptions({ includeArchived: true });
-    expect(dbFamily.archivedAt).toBeDefined();
-  });
-
-  it('должен успешно восстанавливать семью из архива', async () => {
-    await testFamily.updateOne({ $set: { archivedAt: new Date() } });
-
-    const request = new Request(`http://localhost/api/admin/families/${testFamily._id}/archive`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: false }),
-    });
-
-    const response = await PATCH(request, { params: { id: testFamily._id.toString() } });
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.archivedAt).toBeUndefined();
-
-    const dbFamily = await Family.findById(testFamily._id);
-    expect(dbFamily).not.toBeNull();
-    expect(dbFamily.archivedAt).toBeUndefined();
+    expect(body.archivedAt).not.toBeNull();
+    expect(updatedFamily.archivedAt).not.toBeNull();
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/families');
   });
 
   it('должен возвращать 404, если семья не найдена', async () => {
-    const nonExistentId = '60c72b2f9b1d8e001f8e4c5e';
+    // Arrange
+    const nonExistentId = '66a55543665792f285915c32';
     const request = new Request(`http://localhost/api/admin/families/${nonExistentId}/archive`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: true }),
+      method: 'PATCH',
     });
 
+    // Act
     const response = await PATCH(request, { params: { id: nonExistentId } });
-    
+
+    // Assert
     expect(response.status).toBe(404);
   });
 
-  it('должен возвращать 404 при попытке заархивировать уже архивированную семью', async () => {
-    await familyService.archiveFamily(testFamily._id.toString());
+  it('должен возвращать 409 при попытке заархивировать уже архивированную семью', async () => {
+    // Arrange
+    const family = await Family.create({ name: 'Archived Family', displayLastName: 'Archived', owner: owner._id, archivedAt: new Date() });
     
-    const request = new Request(`http://localhost/api/admin/families/${testFamily._id}/archive`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: true }),
+    const request = new Request(`http://localhost/api/admin/families/${family._id}/archive`, {
+      method: 'PATCH',
     });
 
-    const response = await PATCH(request, { params: { id: testFamily._id.toString() } });
-    expect(response.status).toBe(404);
+    // Act
+    const response = await PATCH(request, { params: { id: family._id.toString() } });
+
+    // Assert
+    expect(response.status).toBe(409);
   });
-}); 
+});

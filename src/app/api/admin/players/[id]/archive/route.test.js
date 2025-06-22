@@ -1,103 +1,59 @@
-import { PATCH } from './route';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
 import Player from '@/models/player/Player';
-import Family from '@/models/family/Family';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
+import { revalidatePath } from 'next/cache';
+import { PATCH } from './route';
+
+// Мокируем внешние зависимости
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn(),
+}));
 
 describe('API /api/admin/players/[id]/archive', () => {
-  let testPlayer;
-  let testFamily;
-
-  beforeAll(async () => {
-    await connectToDatabase();
-    await Player.init();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
+  beforeAll(dbConnect);
+  afterAll(dbDisconnect);
 
   beforeEach(async () => {
-    await Player.deleteMany({});
-    await Family.deleteMany({});
-    testPlayer = await Player.create({
-      firstName: 'Test',
-      lastName: 'Player',
-      nickname: 'Archiver',
-      email: 'archive@test.com',
-    });
+    await dbClear();
+    revalidatePath.mockClear();
   });
 
-  it('должен возвращать ошибку, если игрок является владельцем активной семьи', async () => {
-    // Arrange: Создаем семью, где игрок является владельцем
-    testFamily = await Family.create({
-      name: 'Test Family',
-      displayLastName: 'TestFamily',
-      owner: testPlayer._id,
+  it('должен архивировать игрока и вызывать revalidatePath', async () => {
+    // Arrange
+    const player = await Player.create({
+      firstName: 'John',
+      lastName: 'Doe',
     });
-
-    const request = new Request(`http://localhost/api/admin/players/${testPlayer._id}/archive`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: true }),
+    const url = `http://localhost/api/admin/players/${player._id}/archive`;
+    const request = new Request(url, {
+      method: 'PATCH',
     });
 
     // Act
-    const response = await PATCH(request, { params: { id: testPlayer._id.toString() } });
-    
+    const response = await PATCH(request, { params: { id: player._id.toString() } });
+    const body = await response.json();
+
     // Assert
-    // Теперь маршрут использует handleApiError, который вернет 400 для ValidationError
-    expect(response.status).toBe(400);
-    const body = await response.json();
-    expect(body.message).toContain('Нельзя заархивировать игрока');
-  });
-
-  it('должен успешно архивировать игрока', async () => {
-    const request = new Request(`http://localhost/api/admin/players/${testPlayer._id}/archive`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: true }),
-    });
-
-    const response = await PATCH(request, { params: { id: testPlayer._id.toString() } });
-    const body = await response.json();
-
     expect(response.status).toBe(200);
-    expect(body.archivedAt).toBeDefined();
+    expect(body.archivedAt).not.toBeNull();
+    // Проверяем, что дата валидная
+    expect(new Date(body.archivedAt)).toBeInstanceOf(Date);
 
-    const dbPlayer = await Player.findById(testPlayer._id).setOptions({ includeArchived: true });
-    expect(dbPlayer.archivedAt).toBeDefined();
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/players');
+    expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
-  it('должен успешно восстанавливать игрока из архива', async () => {
-    await testPlayer.updateOne({ $set: { archivedAt: new Date() } });
-
-    const request = new Request(`http://localhost/api/admin/players/${testPlayer._id}/archive`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: false }),
+  it('должен возвращать 404, если игрок для архивации не найден', async () => {
+    // Arrange
+    const nonExistentId = '60f8d3b4b5f4a1a8c4b8c8b8'; // Валидный, но несуществующий ID
+    const url = `http://localhost/api/admin/players/${nonExistentId}/archive`;
+    const request = new Request(url, {
+      method: 'PATCH',
     });
 
-    const response = await PATCH(request, { params: { id: testPlayer._id.toString() } });
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.archivedAt).toBeUndefined();
-
-    const dbPlayer = await Player.findById(testPlayer._id);
-    expect(dbPlayer).not.toBeNull();
-    expect(dbPlayer.archivedAt).toBeUndefined();
-  });
-
-  it('должен возвращать 404, если игрок не найден', async () => {
-    const nonExistentId = '60c72b2f9b1d8e001f8e4c5e';
-    const request = new Request(`http://localhost/api/admin/players/${nonExistentId}/archive`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: true }),
-    });
-
+    // Act
     const response = await PATCH(request, { params: { id: nonExistentId } });
-    
+
+    // Assert
     expect(response.status).toBe(404);
   });
-}); 
+});

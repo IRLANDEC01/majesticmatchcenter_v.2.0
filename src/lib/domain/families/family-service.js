@@ -1,221 +1,171 @@
-import { familyRepo } from '@/lib/repos/families/family-repo.js';
-import { playerRepo } from '@/lib/repos/players/player-repo.js';
+import { DuplicateError, NotFoundError, ValidationError, ConflictError } from '@/lib/errors.js';
+import familyRepo from '@/lib/repos/families/family-repo.js';
+import playerRepo from '@/lib/repos/players/player-repo.js';
 import FamilyStats from '@/models/family/FamilyStats.js';
-import { DuplicateError, NotFoundError, ValidationError } from '@/lib/errors';
-import { z } from 'zod';
-import { FAMILY_MEMBER_ROLES } from '@/lib/constants';
+import { FAMILY_MEMBER_ROLES } from '@/lib/constants.js';
 
 /**
  * @class FamilyService
  * @description Сервис для управления бизнес-логикой семей.
  */
-export class FamilyService {
-  /**
-   * Проверяет, уникально ли имя семьи.
-   * @private
-   */
+class FamilyService {
+  constructor(repo, playerRepository) {
+    this.repo = repo;
+    this.playerRepo = playerRepository;
+  }
+
   async _validateNameUniqueness(name, currentFamilyId = null) {
-    const existingFamily = await familyRepo.findByName(name);
-    if (existingFamily && (!currentFamilyId || existingFamily._id.toString() !== currentFamilyId)) {
-      throw new DuplicateError('Семья с таким названием уже существует.');
+    const existingActiveFamily = await this.repo.findByNameAndStatus(name, 'active');
+    if (existingActiveFamily && (!currentFamilyId || existingActiveFamily._id.toString() !== currentFamilyId)) {
+      throw new DuplicateError('Семья с таким названием уже существует среди активных.');
     }
   }
 
-  /**
-   * Создает новую семью и связанную с ней статистику.
-   * @param {object} familyData - Данные для создания.
-   * @returns {Promise<object>}
-   */
   async createFamily(familyData) {
-    // Валидация была перенесена в route.js
     const { ownerId, name, displayLastName, description, logo, banner } = familyData;
 
-    // 1. Проверяем, что игрок-владелец существует и не архивирован.
-    const owner = await playerRepo.findById(ownerId);
+    const owner = await this.playerRepo.findById(ownerId);
     if (!owner) {
       throw new NotFoundError('Указанный игрок-владелец не найден или архивирован.');
     }
 
-    // 1a. Проверяем, что игрок не состоит в другой семье.
-    if (owner.currentFamily) {
-      throw new ValidationError('Игрок уже состоит в другой семье и не может быть назначен владельцем.');
+    if (owner.familyId) {
+      throw new ConflictError('Игрок уже состоит в другой семье и не может быть назначен владельцем.');
     }
 
-    // 2. Проверяем уникальность названия семьи
     await this._validateNameUniqueness(name);
 
-    // 3. Формируем данные для создания
     const familyToCreate = {
       name,
       displayLastName,
       description,
       logo,
       banner,
-      owner: ownerId, // Устанавливаем ID владельца
+      owner: ownerId,
       members: [
         {
-          // Автоматически добавляем владельца в участники
           player: ownerId,
-          role: FAMILY_MEMBER_ROLES.OWNER, // Назначаем роль владельца
+          role: FAMILY_MEMBER_ROLES.OWNER,
           joinedAt: new Date(),
         },
       ],
     };
 
-    const newFamily = await familyRepo.create(familyToCreate);
+    const newFamily = await this.repo.create(familyToCreate);
     if (newFamily) {
-      // После успешного создания семьи, создаем для нее документ статистики
       await FamilyStats.create({ familyId: newFamily._id });
-      // И обновляем поле currentFamily у игрока-владельца
-      await playerRepo.update(ownerId, { currentFamily: newFamily._id });
+      await this.playerRepo.update(ownerId, { familyId: newFamily._id });
     }
     return newFamily;
   }
 
-  /**
-   * Получает все семьи.
-   * @param {object} [options] - Опции.
-   * @param {boolean} [options.includeArchived=false] - Включить архивированные семьи.
-   * @returns {Promise<Array<object>>}
-   */
-  async getAllFamilies(options) {
-    return familyRepo.findAll(options);
+  async getFamilies(options) {
+    return this.repo.find(options);
   }
 
-  /**
-   * Получает семью по ID.
-   * @param {string} id - ID семьи.
-   * @param {object} [options] - Опции.
-   * @param {boolean} [options.includeArchived=false] - Включить архивированные.
-   * @returns {Promise<object>}
-   * @throws {NotFoundError} Если семья не найдена или архивирована (и не запрошена).
-   */
   async getFamilyById(id, { includeArchived = false } = {}) {
-    const family = await familyRepo.findById(id);
-
-    if (!family || (!includeArchived && family.archivedAt)) {
-      throw new NotFoundError('Семья не найдена.');
+    const family = await this.repo.findById(id, { includeArchived });
+    if (!family) {
+      throw new NotFoundError('Семья не найдена или архивирована.');
     }
-
     return family;
   }
 
-  /**
-   * Обновляет данные семьи.
-   * @param {string} id - ID семьи.
-   * @param {object} familyData - Новые данные.
-   * @returns {Promise<object>}
-   * @throws {NotFoundError} Если семья не найдена.
-   * @throws {ValidationError} Если данные невалидны.
-   * @throws {DuplicateError} Если имя семьи уже занято.
-   */
   async updateFamily(id, familyData) {
-    // Используем Zod для валидации, но определяем схему локально для этого метода,
-    // так как она отличается от схемы создания (все поля опциональны).
-    const updateSchema = z.object({
-        name: z.string().trim().min(1).optional(),
-        displayLastName: z.string().trim().min(1).optional(),
-        description: z.string().trim().max(5000).optional(),
-        logo: z.string().url().optional().nullable(),
-        banner: z.string().url().optional().nullable(),
-    }).partial();
-
-    const validationResult = updateSchema.safeParse(familyData);
-    if (!validationResult.success) {
-      throw new ValidationError('Ошибка валидации', validationResult.error.flatten().fieldErrors);
+    await this.getFamilyById(id); // Проверяем, что семья существует
+    if (familyData.name) {
+      await this._validateNameUniqueness(familyData.name, id);
     }
-    const validatedData = validationResult.data;
+    const updatedFamily = await this.repo.update(id, familyData);
+    return updatedFamily;
+  }
 
-    if (validatedData.name) {
-      await this._validateNameUniqueness(validatedData.name, id);
+  async addMember(familyId, playerId) {
+    const family = await this.getFamilyById(familyId);
+    const player = await this.playerRepo.findById(playerId);
+    if (!player) {
+      throw new NotFoundError('Игрок не найден или архивирован.');
     }
 
-    const updatedFamily = await familyRepo.update(id, validatedData);
-
-    if (!updatedFamily) {
-      throw new NotFoundError('Семья для обновления не найдена.');
+    if (player.familyId) {
+      throw new ConflictError('Игрок уже состоит в другой семье.');
     }
+
+    const isAlreadyMember = family.members.some(member => member.player.toString() === playerId);
+    if (isAlreadyMember) {
+      throw new ConflictError('Игрок уже является участником этой семьи.');
+    }
+
+    const memberData = { player: playerId, joinedAt: new Date() };
+    const updatedFamily = await this.repo.update(familyId, { $push: { members: memberData } });
+    await this.playerRepo.update(playerId, { familyId });
 
     return updatedFamily;
   }
 
-  /**
-   * Добавляет участника в семью.
-   * @param {string} familyId - ID семьи.
-   * @param {string} playerId - ID игрока.
-   * @param {string} [role] - Роль игрока в семье.
-   * @returns {Promise<object|null>}
-   */
-  async addMember(familyId, playerId, role) {
-    const memberData = { player: playerId, role };
-    // Используем оператор $push для добавления в массив
-    return familyRepo.update(familyId, { $push: { members: memberData } });
-  }
-
-  /**
-   * Удаляет участника из семьи.
-   * @param {string} familyId - ID семьи.
-   * @param {string} playerId - ID игрока.
-   * @returns {Promise<object|null>}
-   */
   async removeMember(familyId, playerId) {
-    // Используем оператор $pull для удаления из массива по ID игрока
-    return familyRepo.update(familyId, { $pull: { members: { player: playerId } } });
-  }
-
-  /**
-   * Архивирует семью (мягкое удаление).
-   * @param {string} id - ID семьи.
-   * @returns {Promise<object|null>}
-   */
-  async archiveFamily(id) {
-    // Здесь может быть логика проверки, можно ли архивировать семью
-    // (например, если она участвует в активном турнире).
-    return familyRepo.archive(id);
-  }
-
-  /**
-   * Восстанавливает семью из архива.
-   * @param {string} id - ID семьи.
-   * @returns {Promise<object|null>}
-   */
-  async unarchiveFamily(id) {
-    return familyRepo.unarchive(id);
-  }
-
-  /**
-   * Изменяет владельца семьи.
-   * @param {string} familyId - ID семьи.
-   * @param {string} newOwnerId - ID нового владельца.
-   * @returns {Promise<object>}
-   */
-  async changeOwner(familyId, newOwnerId) {
-    // 1. Проверяем, что семья и новый владелец существуют
     const family = await this.getFamilyById(familyId);
-    const newOwner = await playerRepo.findById(newOwnerId);
-
-    if (!newOwner) {
-      throw new NotFoundError('Новый владелец не найден.');
+    const player = await this.playerRepo.findById(playerId);
+    if (!player) {
+      throw new NotFoundError('Игрок не найден.');
     }
 
-    // 2. Проверяем, что новый владелец является членом этой семьи
+    if (family.owner.toString() === playerId) {
+      throw new ValidationError('Нельзя удалить владельца из семьи. Сначала смените владельца.');
+    }
+
+    await this.playerRepo.update(playerId, { $unset: { familyId: 1 } });
+    return this.repo.update(familyId, { $pull: { members: { player: playerId } } });
+  }
+
+  async archiveFamily(id) {
+    const family = await this.repo.findById(id, { includeArchived: true }); // Находим даже если архивирован
+    if (!family) {
+      throw new NotFoundError('Семья не найдена.');
+    }
+    if (family.archivedAt) {
+      throw new ConflictError('Семья уже в архиве.');
+    }
+    // TODO: Добавить проверку на участие в активных турнирах
+    return this.repo.archive(id);
+  }
+
+  async restoreFamily(id) {
+    const family = await this.repo.findById(id, { includeArchived: true });
+     if (!family) {
+      throw new NotFoundError('Семья не найдена.');
+    }
+    if (!family.archivedAt) {
+      throw new ConflictError('Семья не находится в архиве.');
+    }
+
+    // ПРОВЕРКА: Нельзя восстановить семью, если уже существует активная с таким же именем.
+    await this._validateNameUniqueness(family.name);
+
+    return this.repo.restore(id);
+  }
+
+  async changeOwner(familyId, newOwnerId) {
+    const family = await this.getFamilyById(familyId);
+    const newOwner = await this.playerRepo.findById(newOwnerId);
+
+    if (!newOwner) {
+      throw new NotFoundError('Кандидат в новые владельцы не найден.');
+    }
+
     const isMember = family.members.some(member => member.player.toString() === newOwnerId);
     if (!isMember) {
       throw new ValidationError('Новый владелец должен быть участником семьи.');
     }
-    
-    // 3. Нельзя назначить владельцем текущего владельца
+
     if (family.owner.toString() === newOwnerId) {
-      throw new ValidationError('Этот игрок уже является владельцем семьи.');
+      throw new ConflictError('Этот игрок уже является владельцем семьи.');
     }
 
     const oldOwnerId = family.owner.toString();
-
-    // 4. Атомарно обновляем семью
-    const updatedFamily = await familyRepo.changeOwner(familyId, oldOwnerId, newOwnerId);
-
-    return updatedFamily;
+    return this.repo.changeOwner(familyId, oldOwnerId, newOwnerId);
   }
 }
 
-export const familyService = new FamilyService(); 
+const familyService = new FamilyService(familyRepo, playerRepo);
+export default familyService;

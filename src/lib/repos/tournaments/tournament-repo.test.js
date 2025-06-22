@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 import { tournamentRepo } from './tournament-repo';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 import Tournament from '@/models/tournament/Tournament';
 import Player from '@/models/player/Player';
 import Map from '@/models/map/Map';
@@ -18,17 +17,12 @@ describe('TournamentRepo', () => {
     let map1, map2;
 
     beforeAll(async () => {
-      await connectToDatabase();
       await Tournament.init();
       await Player.init();
       await Map.init();
       await MapTemplate.init();
       await TournamentTemplate.init();
       await PlayerMapParticipation.init();
-    });
-
-    afterAll(async () => {
-      await disconnectFromDatabase();
     });
 
     beforeEach(async () => {

@@ -31,6 +31,16 @@ export class NotFoundError extends AppError {
 }
 
 /**
+ * Ошибка, выбрасываемая при конфликте состояний (например, повторная архивация).
+ * Соответствует HTTP статусу 409 Conflict.
+ */
+export class ConflictError extends AppError {
+  constructor(message = 'A state conflict occurred.') {
+    super(message, 409);
+  }
+}
+
+/**
  * Ошибка, выбрасываемая при невалидных входных данных.
  * Соответствует HTTP статусу 400 Bad Request.
  */

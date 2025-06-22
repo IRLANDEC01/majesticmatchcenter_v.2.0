@@ -1,7 +1,6 @@
 import { PATCH } from './route';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
-import MapTemplate from '@/models/map/MapTemplate';
-import { dbClear } from '@/lib/test-helpers';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
+import MapTemplate from '@/models/map/MapTemplate.js';
 import { revalidatePath } from 'next/cache';
 
 // Мокируем 'next/cache' для всех тестов в этом файле
@@ -9,54 +8,68 @@ jest.mock('next/cache', () => ({
   revalidatePath: jest.fn(),
 }));
 
-describe('API /api/admin/map-templates/[id]/archive', () => {
-  let testTemplate;
-
-  beforeAll(async () => {
-    await connectToDatabase();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
+describe('PATCH /api/admin/map-templates/[id]/archive', () => {
+  beforeAll(dbConnect);
+  afterAll(dbDisconnect);
 
   beforeEach(async () => {
     await dbClear();
-    testTemplate = await MapTemplate.create({
-      name: 'Archivable Template',
-      description: 'A test description',
-      mapImage: '/placeholders/default-map.jpg',
-    });
-    revalidatePath.mockClear();
+    jest.clearAllMocks();
   });
 
   it('должен успешно архивировать шаблон карты и вызывать revalidatePath', async () => {
-    const request = new Request(`http://localhost/api/admin/map-templates/${testTemplate._id}/archive`, {
+    // Arrange
+    const template = await MapTemplate.create({ name: 'Template to Archive' });
+    const request = new Request(`http://localhost/api/admin/map-templates/${template._id}/archive`, {
       method: 'PATCH',
     });
 
-    const response = await PATCH(request, { params: { id: testTemplate._id } });
-    const body = await response.json();
+    // Act
+    const response = await PATCH(request, { params: { id: template._id.toString() } });
+    const updatedTemplate = await MapTemplate.findById(template._id);
 
+    // Assert
     expect(response.status).toBe(200);
+    const body = await response.json();
     expect(body.archivedAt).toBeDefined();
 
-    // Проверяем, что revalidatePath была вызвана
-    expect(revalidatePath).toHaveBeenCalledTimes(1);
-    expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
+    expect(updatedTemplate.archivedAt).not.toBeNull();
 
-    const dbTemplate = await MapTemplate.findById(testTemplate._id).setOptions({ includeArchived: true });
-    expect(dbTemplate.archivedAt).toBeDefined();
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
+    expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
   it('должен возвращать 404, если шаблон для архивации не найден', async () => {
+    // Arrange
     const nonExistentId = '605c72a6b579624e50a9d8e1';
     const request = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}/archive`, {
       method: 'PATCH',
     });
+
+    // Act
     const response = await PATCH(request, { params: { id: nonExistentId } });
 
+    // Assert
     expect(response.status).toBe(404);
     expect(revalidatePath).not.toHaveBeenCalled();
   });
-}); 
+
+  // Дополнительный тест на бизнес-логику
+  it('должен возвращать 409 (Conflict), если шаблон уже заархивирован', async () => {
+    // Arrange
+    const template = await MapTemplate.create({
+      name: 'Already Archived',
+      archivedAt: new Date(),
+    });
+    const request = new Request(`http://localhost/api/admin/map-templates/${template._id}/archive`, {
+      method: 'PATCH',
+    });
+
+    // Act
+    const response = await PATCH(request, { params: { id: template._id.toString() } });
+
+    // Assert
+    expect(response.status).toBe(409);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});

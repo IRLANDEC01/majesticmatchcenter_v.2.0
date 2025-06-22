@@ -1,43 +1,23 @@
 import { NextResponse } from 'next/server';
-import { familyService } from '@/lib/domain/families/family-service';
-import { connectToDatabase } from '@/lib/db';
-import { z } from 'zod';
-
-const patchSchema = z.object({
-  archived: z.boolean(),
-});
+import { revalidatePath } from 'next/cache';
+import familyService from '@/lib/domain/families/family-service.js';
+import { handleApiError } from '@/lib/api/handle-api-error.js';
+import { familyParamsSchema } from '@/lib/api/schemas/families/family-schemas.js';
 
 /**
  * PATCH /api/admin/families/[id]/archive
- * Архивирует или восстанавливает семью.
+ * Архивирует семью.
  */
 export async function PATCH(request, { params }) {
   try {
-    await connectToDatabase();
-    const { id } = params;
-    const json = await request.json();
+    const { id } = familyParamsSchema.parse(params);
+    const result = await familyService.archiveFamily(id);
 
-    const validationResult = patchSchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const { archived } = validationResult.data;
-    let result;
-
-    if (archived) {
-      result = await familyService.archiveFamily(id);
-    } else {
-      result = await familyService.unarchiveFamily(id);
-    }
-
-    if (!result) {
-      return NextResponse.json({ message: `Family with id ${id} not found.` }, { status: 404 });
-    }
+    revalidatePath('/admin/families');
+    revalidatePath(`/admin/families/${id}`);
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Failed to update family archive state:', error);
-    return NextResponse.json({ message: 'Ошибка сервера' }, { status: 500 });
+    return handleApiError(error, `Не удалось архивировать семью ${params.id}`);
   }
 } 

@@ -92,6 +92,11 @@ const familySchema = new mongoose.Schema({
 
 familySchema.index({ name: 'text', description: 'text' }); // Для полнотекстового поиска
 
+// Виртуальное поле, которое показывает, заархивирована ли семья.
+familySchema.virtual('isArchived').get(function() {
+  return this.archivedAt !== null && this.archivedAt !== undefined;
+});
+
 familySchema.pre('validate', function(next) {
   if (this.name && !this.slug) {
     this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');

@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
 import { playerStatsRepository } from './player-stats-repo';
 import PlayerStats from '@/models/player/PlayerStats';
 
@@ -7,12 +6,7 @@ describe('PlayerStatsRepository', () => {
   let playerId;
 
   beforeAll(async () => {
-    await connectToDatabase();
     playerId = new mongoose.Types.ObjectId();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
   });
 
   beforeEach(async () => {

@@ -2,17 +2,23 @@ import { z } from 'zod';
 import { ValidationError, NotFoundError, AppError, DuplicateError } from '@/lib/errors';
 import { STATUSES } from '@/lib/constants';
 import { createMapSchema, updateMapSchema, completeMapSchema } from '@/lib/api/schemas/maps/map-schemas';
-import { AchievementService } from '@/lib/domain/achievements/achievement-service';
+
+// Импортируем все зависимости как синглтоны
+import mapRepo from '@/lib/repos/maps/map-repo.js';
+import tournamentRepo from '@/lib/repos/tournaments/tournament-repo.js';
+import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo.js';
+import familyRepo from '@/lib/repos/families/family-repo.js';
+import playerRepo from '@/lib/repos/players/player-repo.js';
+import ratingService from '@/lib/domain/ratings/rating-service.js';
+import statisticsService from '@/lib/domain/statistics/statistics-service.js';
+import achievementService from '@/lib/domain/achievements/achievement-service.js';
 
 /**
  * Сервис для управления бизнес-логикой, связанной с картами.
  * инкапсулирует логику работы с репозиторием карт.
  */
-export default class MapService {
+class MapService {
   constructor(repos, services) {
-    if (!repos || !services) {
-      throw new Error('MapService requires repositories and services');
-    }
     this.repo = repos.mapRepo;
     this.tournamentRepo = repos.tournamentRepo;
     this.mapTemplateRepo = repos.mapTemplateRepo;
@@ -21,7 +27,7 @@ export default class MapService {
 
     this.ratingService = services.ratingService;
     this.statisticsService = services.statisticsService;
-    this.achievementService = new AchievementService(); // Используем временную заглушку
+    this.achievementService = services.achievementService;
   }
 
   /**
@@ -64,8 +70,10 @@ export default class MapService {
       if (!template) {
         throw new NotFoundError(`Шаблон карты с id ${validatedData.template} не найден.`);
       }
+      if (template.archivedAt) {
+        throw new ValidationError('Нельзя создать карту из архивного шаблона.');
+      }
       
-      // Порядковый номер карты в турнире
       const mapCount = await this.repo.countByTournamentId(validatedData.tournament);
       const slug = `${tournament.slug}-${template.slug}-${mapCount + 1}`;
       
@@ -95,10 +103,8 @@ export default class MapService {
       throw new ValidationError('Ошибка валидации при обновлении карты', validationResult.error.flatten().fieldErrors);
     }
     
-    // Удаляем slug из данных, чтобы его нельзя было изменить.
     const { slug, ...updateData } = validationResult.data;
     if (data.slug) {
-      // Можно логировать попытку изменения слага, если это важно.
       console.warn(`Попытка изменить неизменяемый slug для карты ${id} была проигнорирована.`);
     }
     return this.repo.update(id, updateData);
@@ -108,10 +114,6 @@ export default class MapService {
    * Завершает карту, обновляет статистики и рейтинги.
    * @param {string} mapId - ID карты.
    * @param {object} completionData - Данные для завершения.
-   * @param {string} completionData.winnerFamilyId - ID победившей семьи/команды.
-   * @param {string} completionData.mvpPlayerId - ID самого ценного игрока.
-   * @param {number} completionData.familyRatingChange - Изменение рейтинга для семьи-победителя.
-   * @param {Array<object>} completionData.playerStats - Статистика всех игроков.
    * @returns {Promise<import('@/models/map/Map').Map>}
    */
   async completeMap(mapId, completionData) {
@@ -136,7 +138,6 @@ export default class MapService {
     };
     const completedMap = await this.repo.update(mapId, updatedMapData);
     
-    // Шаг 2 - Вызвать ratingService для обновления рейтинга семьи и записи турнирных очков.
     const winnerInfo = { winnerFamilyId, familyRatingChange };
     await this.ratingService.recordFamiliesMapResults(
       mapId,
@@ -145,7 +146,6 @@ export default class MapService {
       winnerInfo
     );
 
-    // Шаг 3 - Вызвать statisticsService для сохранения статистики игроков
     await this.statisticsService.recordPlayerMapStats(mapId, completedMap.tournament, playerStats);
     
     return completedMap;
@@ -166,20 +166,16 @@ export default class MapService {
       throw new AppError(`Откатить можно только завершенную карту. Текущий статус: '${map.status}'.`, 409);
     }
 
-    // 1. Откатываем все связанные данные
     await this.ratingService.rollbackMapRatings(mapId);
     await this.statisticsService.rollbackMapStats(mapId);
-    // await this.achievementService.rollbackMapCompletion(mapId); // TODO: Раскомментировать, когда сервис достижений будет полностью реализован.
+    // await this.achievementService.rollbackMapCompletion(mapId);
 
-    // 2. Сбрасываем состояние карты
     const rolledBackMapData = {
       status: STATUSES.ACTIVE,
       winner: null,
       mvp: null,
     };
-    const rolledBackMap = await this.repo.update(mapId, rolledBackMapData);
-
-    return rolledBackMap;
+    return this.repo.update(mapId, rolledBackMapData);
   }
 
   /**
@@ -205,4 +201,22 @@ export default class MapService {
     }
     return this.repo.unarchive(mapId);
   }
-} 
+}
+
+// Создаем единственный экземпляр сервиса со всеми зависимостями
+const mapService = new MapService(
+  {
+    mapRepo,
+    tournamentRepo,
+    mapTemplateRepo,
+    familyRepo,
+    playerRepo,
+  },
+  {
+    ratingService,
+    statisticsService,
+    achievementService,
+  }
+);
+
+export default mapService;

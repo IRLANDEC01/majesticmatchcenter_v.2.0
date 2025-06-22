@@ -49,11 +49,11 @@ const playerSchema = new mongoose.Schema({
     trim: true,
     maxlength: [5000, 'Биография не может превышать 5000 символов.'],
   },
-  // Ссылка на текущую семью игрока. Может отсутствовать.
-  currentFamily: {
+  // ID текущей семьи игрока.
+  familyId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Family',
-    default: null,
+    index: true,
   },
   // Дата архивации игрока. Если значение `null` — игрок активен.
   // Если установлена дата — игрок считается удаленным (архивированным).
@@ -111,19 +111,11 @@ playerSchema.virtual('fullName').get(function() {
 // Виртуальное свойство для публичной фамилии
 playerSchema.virtual('publicLastName').get(function() {
   // Для работы этого свойства необходимо, чтобы при запросе игрока
-  // поле 'currentFamily' было заполнено (populated).
-  if (this.currentFamily && this.currentFamily.displayLastName) {
-    return this.currentFamily.displayLastName;
+  // поле 'familyId' было заполнено (populated) и содержало поле `displayLastName`.
+  if (this.familyId && this.familyId.displayLastName) {
+    return this.familyId.displayLastName;
   }
   return this.lastName;
-});
-
-// Хук для автоматического исключения архивированных документов из результатов `find`
-playerSchema.pre(/^find/, function(next) {
-  if (this.getOptions().includeArchived !== true) {
-    this.where({ archivedAt: { $eq: null } });
-  }
-  next();
 });
 
 const Player = mongoose.models.Player || mongoose.model('Player', playerSchema);

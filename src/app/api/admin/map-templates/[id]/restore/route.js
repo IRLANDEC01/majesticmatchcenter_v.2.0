@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { handleApiError } from '@/lib/api/handle-api-error';
-import { mapTemplateService } from '@/lib/domain/map-templates/map-template-service';
+import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
 
 /**
  * PATCH /api/admin/map-templates/[id]/restore

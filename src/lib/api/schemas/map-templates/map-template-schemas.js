@@ -33,6 +33,9 @@ export const updateMapTemplateSchema = z.object({
  * @desc Схема для валидации query-параметров при получении списка шаблонов карт.
  */
 export const getMapTemplatesSchema = z.object({
-  search: z.string().optional().default(''),
+  // Поисковый запрос для фильтрации по имени
+  q: z.string().optional(),
+
+  // Статус для фильтрации (активные или архивные)
   status: z.enum(['active', 'archived']).default('active'),
 });

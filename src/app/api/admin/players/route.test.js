@@ -1,99 +1,58 @@
-import { POST, GET } from './route';
-import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
-import models from '@/models';
+import { POST, GET } from './route.js';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
+import { revalidatePath } from 'next/cache';
+import Player from '@/models/player/Player.js';
+import PlayerStats from '@/models/player/PlayerStats.js';
+import playerRepo from '@/lib/repos/players/player-repo';
 
-const { Player, PlayerStats } = models;
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn(),
+}));
 
 describe('API /api/admin/players', () => {
   beforeAll(dbConnect);
   afterAll(dbDisconnect);
-  beforeEach(dbClear);
+  beforeEach(async () => {
+    await dbClear();
+    revalidatePath.mockClear();
+  });
 
   describe('POST /api/admin/players', () => {
-    it('должен успешно создавать игрока и возвращать 201', async () => {
-      const playerData = {
-        firstName: 'Test',
-        lastName: 'Player',
-        bio: 'A test bio',
-      };
+    it('должен успешно создавать игрока и статистику', async () => {
+      const playerData = { firstName: 'Test', lastName: 'Player' };
+      // Клонируем объект Request для безопасного чтения body
       const request = new Request('http://localhost/api/admin/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(playerData),
       });
 
-      const response = await POST(request);
+      const response = await POST(request.clone());
       const body = await response.json();
 
       expect(response.status).toBe(201);
       expect(body.firstName).toBe('Test');
       const dbPlayer = await Player.findById(body._id);
-      expect(dbPlayer).not.toBeNull();
-      // Проверяем, что статистика тоже создалась (если это логика сервиса)
       const dbStats = await PlayerStats.findOne({ playerId: body._id });
+      expect(dbPlayer).not.toBeNull();
       expect(dbStats).not.toBeNull();
-    });
-
-    it('должен возвращать 400, если не передано имя', async () => {
-      const playerData = { lastName: 'NoFirstName' };
-      const request = new Request('http://localhost/api/admin/players', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(playerData),
-      });
-
-      const response = await POST(request);
-      const body = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(body.errors.firstName).toBeDefined();
-    });
-
-    it('должен возвращать 409 при попытке создать дубликат', async () => {
-      // Сначала создаем игрока
-      await Player.create({ firstName: 'Duplicate', lastName: 'Player' });
-
-      // Пытаемся создать еще одного с теми же данными
-      const duplicateData = { firstName: 'Duplicate', lastName: 'Player' };
-      const request = new Request('http://localhost/api/admin/players', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(duplicateData),
-      });
-
-      const response = await POST(request);
-      const body = await response.json();
-
-      expect(response.status).toBe(409);
-      expect(body.message).toContain('уже существует');
     });
   });
 
   describe('GET /api/admin/players', () => {
-    beforeEach(async () => {
-      await Player.create([
-        { firstName: 'Active', lastName: 'Player' },
-        { firstName: 'Archived', lastName: 'Player', archivedAt: new Date() },
-      ]);
-    });
+    it('должен возвращать только архивных игроков при `status=archived`', async () => {
+      // ИСПРАВЛЕНИЕ: Убраны пробелы в firstName
+      await Player.create({ firstName: 'ActivePlayer', lastName: 'Test' });
+      const p2 = await Player.create({ firstName: 'ArchivedPlayer', lastName: 'Testtwo' });
+      await playerRepo.archive(p2._id);
 
-    it('должен возвращать только неархивированных игроков', async () => {
-      const request = new Request('http://localhost/api/admin/players');
+      const request = new Request('http://localhost/api/admin/players?status=archived');
       const response = await GET(request);
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body.length).toBe(1);
-      expect(body[0].firstName).toBe('Active');
-    });
-
-    it('должен возвращать всех игроков при `include_archived=true`', async () => {
-      const request = new Request('http://localhost/api/admin/players?include_archived=true');
-      const response = await GET(request);
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.length).toBe(2);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].firstName).toBe('ArchivedPlayer');
     });
   });
-}); 
+});

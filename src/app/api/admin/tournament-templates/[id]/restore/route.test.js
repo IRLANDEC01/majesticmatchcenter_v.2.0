@@ -4,13 +4,12 @@ import { revalidatePath } from 'next/cache';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate.js';
 import MapTemplate from '@/models/map/MapTemplate.js';
 import mongoose from 'mongoose';
-import Tournament from '@/models/tournament/Tournament.js';
 
 jest.mock('next/cache', () => ({
   revalidatePath: jest.fn(),
 }));
 
-describe('PATCH /api/admin/tournament-templates/[id]/archive', () => {
+describe('PATCH /api/admin/tournament-templates/[id]/restore', () => {
   beforeAll(dbConnect);
   afterAll(dbDisconnect);
   beforeEach(async () => {
@@ -18,15 +17,16 @@ describe('PATCH /api/admin/tournament-templates/[id]/archive', () => {
     revalidatePath.mockClear();
   });
 
-  it('должен успешно архивировать шаблон и вызывать revalidatePath', async () => {
+  it('должен успешно восстанавливать шаблон и вызывать revalidatePath', async () => {
     // Arrange
     const mapTemplate = await MapTemplate.create({ name: 'Test Map' });
     const template = await TournamentTemplate.create({ 
-      name: 'Template to Archive', 
-      mapTemplates: [mapTemplate._id] 
+      name: 'Template to Restore', 
+      mapTemplates: [mapTemplate._id],
+      archivedAt: new Date(),
     });
     
-    const request = new Request(`http://localhost/api/admin/tournament-templates/${template._id}/archive`, {
+    const request = new Request(`http://localhost/api/admin/tournament-templates/${template._id}/restore`, {
       method: 'PATCH',
     });
 
@@ -37,17 +37,17 @@ describe('PATCH /api/admin/tournament-templates/[id]/archive', () => {
 
     // Assert
     expect(response.status).toBe(200);
-    expect(body.archivedAt).not.toBeNull();
-    expect(updatedTemplate.archivedAt).toBeInstanceOf(Date);
+    expect(body.archivedAt).toBeNull();
+    expect(updatedTemplate.archivedAt).toBeNull();
     
     expect(revalidatePath).toHaveBeenCalledWith('/admin/tournament-templates');
     expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
-  it('должен возвращать 404, если шаблон для архивации не найден', async () => {
+  it('должен возвращать 404, если шаблон для восстановления не найден', async () => {
     // Arrange
     const nonExistentId = new mongoose.Types.ObjectId().toString();
-    const request = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}/archive`, {
+    const request = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}/restore`, {
       method: 'PATCH',
     });
 
@@ -59,29 +59,27 @@ describe('PATCH /api/admin/tournament-templates/[id]/archive', () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
   
-  it('должен возвращать 409, если шаблон используется в активных турнирах', async () => {
+  it('должен успешно восстанавливать даже уже активный шаблон (идемпотентность)', async () => {
     // Arrange
     const mapTemplate = await MapTemplate.create({ name: 'Test Map' });
-    const templateInUse = await TournamentTemplate.create({ 
-      name: 'Template in Use', 
-      mapTemplates: [mapTemplate._id] 
+    const template = await TournamentTemplate.create({ 
+      name: 'Already Active Template', 
+      mapTemplates: [mapTemplate._id],
+      archivedAt: null, // Уже активен
     });
-    await Tournament.create({
-      name: 'Active Tournament',
-      template: templateInUse._id,
-      tournamentType: 'family',
-      startDate: new Date(),
-    });
-
-    const request = new Request(`http://localhost/api/admin/tournament-templates/${templateInUse._id}/archive`, {
+    
+    const request = new Request(`http://localhost/api/admin/tournament-templates/${template._id}/restore`, {
       method: 'PATCH',
     });
 
     // Act
-    const response = await PATCH(request, { params: { id: templateInUse._id.toString() } });
-    
+    const response = await PATCH(request, { params: { id: template._id.toString() } });
+    const body = await response.json();
+
     // Assert
-    expect(response.status).toBe(409);
-    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(body.archivedAt).toBeNull();
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/tournament-templates');
+    expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 });

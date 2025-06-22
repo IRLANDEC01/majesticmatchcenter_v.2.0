@@ -2,15 +2,7 @@ import mongoose from 'mongoose';
 import { cache } from '@/lib/cache';
 import { AppError } from '@/lib/errors';
 
-/**
- * Базовый класс репозитория, реализующий общие операции с данными и кешированием.
- * @abstract
- */
 class BaseRepo {
-  /**
-   * @param {mongoose.Model} model - Модель Mongoose.
-   * @param {string} cachePrefix - Префикс для ключей кеша.
-   */
   constructor(model, cachePrefix) {
     if (this.constructor === BaseRepo) {
       throw new TypeError('Абстрактный класс "BaseRepo" не может быть инстанциирован напрямую.');
@@ -20,68 +12,64 @@ class BaseRepo {
     this.cache = cache;
   }
 
-  /**
-   * Генерирует ключ для кеша.
-   * @param {string} id - Уникальный идентификатор.
-   * @returns {string} Ключ кеша.
-   */
   getCacheKey(id) {
     return `${this.cachePrefix}:${id}`;
   }
 
-  /**
-   * Находит документ по ID.
-   * @param {string} id - ID документа.
-   * @param {object} [options] - Опции запроса.
-   * @param {boolean} [options.includeArchived=false] - Включить в поиск архивированные документы.
-   * @returns {Promise<object|null>} Найденный документ или null.
-   */
-  async findById(id, options = {}) {
-    const { includeArchived = false } = options;
-    const query = { _id: id };
+  async find({ q, status = 'active', page = 1, limit = 10, filter = {}, sort = { createdAt: -1 } } = {}) {
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const skip = (pageNum - 1) * limitNum;
 
-    if (!includeArchived) {
-      query.archivedAt = null;
+    const query = { ...filter };
+
+    if (q) {
+      query.name = { $regex: q, $options: 'i' };
     }
+    
+    if (status === 'active') {
+      query.archivedAt = { $in: [null, undefined] };
+    } else if (status === 'archived') {
+      query.archivedAt = { $ne: null };
+    }
+    // При status === 'all' никаких дополнительных условий по `archivedAt` не нужно.
 
+    const [data, total] = await Promise.all([
+      this.model.find(query).sort(sort).skip(skip).limit(limitNum).lean().exec(),
+      this.model.countDocuments(query),
+    ]);
+
+    return { data, total, page: pageNum, limit: limitNum };
+  }
+
+  async findById(id, { includeArchived = false } = {}) {
+    const query = { _id: id };
+    if (!includeArchived) {
+      query.archivedAt = { $in: [null, undefined] };
+    }
     return this.model.findOne(query).lean().exec();
   }
 
-  /**
-   * Создает новый документ.
-   * @param {object} data - Данные для создания.
-   * @returns {Promise<object>} Созданный документ.
-   */
   async create(data) {
     const newDoc = new this.model(data);
     await newDoc.save();
     return newDoc.toObject();
   }
-
-  /**
-   * Обновляет документ по ID.
-   * @param {string} id - ID документа.
-   * @param {object} updateData - Данные для обновления.
-   * @returns {Promise<object|null>} Обновленный документ или null.
-   */
+  
   async update(id, updateData) {
+    // findByIdAndUpdate по умолчанию ищет по всем документам,
+    // что нам и нужно для обновления.
     const updatedDoc = await this.model
-      .findByIdAndUpdate(id, updateData, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, { $set: updateData }, { new: true, runValidators: true })
       .lean()
       .exec();
       
     if (updatedDoc) {
-      // ИСПРАВЛЕНО: используется правильный метод .delete()
       await this.cache.delete(this.getCacheKey(id)); 
     }
     return updatedDoc;
   }
 
-  /**
-   * Архивирует (мягко удаляет) документ.
-   * @param {string} id - ID документа.
-   * @returns {Promise<object>} Архивированный документ.
-   */
   async archive(id) {
     const result = await this.update(id, { archivedAt: new Date() });
     if (!result) {
@@ -90,25 +78,12 @@ class BaseRepo {
     return result;
   }
 
-  /**
-   * Восстанавливает документ из архива.
-   * @param {string} id - ID документа.
-   * @returns {Promise<object>} Восстановленный документ.
-   */
   async restore(id) {
-    const doc = await this.model.findOneAndUpdate(
-      { _id: id, archivedAt: { $ne: null } },
-      { $set: { archivedAt: null } },
-      { new: true }
-    ).lean().exec();
-
-    if (!doc) {
-      throw new AppError(`Архивированный документ с ID ${id} не найден для восстановления.`, 404);
+    const result = await this.update(id, { archivedAt: null });
+     if (!result) {
+      throw new AppError(`Документ с ID ${id} не найден для восстановления.`, 404);
     }
-    
-    // ИСПРАВЛЕНО: используется правильный метод .delete()
-    await this.cache.delete(this.getCacheKey(id));
-    return doc;
+    return result;
   }
 }
 

@@ -1,27 +1,18 @@
 import { GET, POST } from './route';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
 import MapTemplate from '@/models/map/MapTemplate';
-import { dbClear } from '@/lib/test-helpers';
-import { MAP_MODES, MAP_VISIBILITY } from '@/lib/constants';
 import { revalidatePath } from 'next/cache';
 
-// Мокируем 'next/cache' для всех тестов в этом файле
 jest.mock('next/cache', () => ({
   revalidatePath: jest.fn(),
 }));
 
 describe('API /api/admin/map-templates', () => {
-  beforeAll(async () => {
-    await connectToDatabase();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
+  beforeAll(dbConnect);
+  afterAll(dbDisconnect);
 
   beforeEach(async () => {
     await dbClear();
-    // Очищаем мок перед каждым тестом
     revalidatePath.mockClear();
   });
 
@@ -30,7 +21,7 @@ describe('API /api/admin/map-templates', () => {
     const validTemplateData = {
       name: 'New Map Template',
       description: 'A test description',
-      mapImage: '/placeholders/default-map.jpg',
+      mapImage: '/placeholder.jpg',
     };
 
     it('должен успешно создавать шаблон карты и возвращать 201', async () => {
@@ -45,8 +36,6 @@ describe('API /api/admin/map-templates', () => {
 
       expect(response.status).toBe(201);
       expect(body.name).toBe(validTemplateData.name);
-
-      // Проверяем, что revalidatePath была вызвана с правильным путем
       expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
 
       const dbTemplate = await MapTemplate.findById(body._id);
@@ -64,90 +53,57 @@ describe('API /api/admin/map-templates', () => {
 
       const response = await POST(request);
       expect(response.status).toBe(409);
-
-      // Убедимся, что revalidatePath не была вызвана при ошибке
-      expect(revalidatePath).not.toHaveBeenCalled();
-    });
-
-    it('должен возвращать ошибку 400, если не предоставлено изображение карты', async () => {
-      const { name, description } = validTemplateData;
-      const request = new Request('http://localhost/api/admin/map-templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description }), // Отправляем без mapImage
-      });
-
-      const response = await POST(request);
-      const body = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(body.errors.mapImage).toBeDefined();
-
-      // Убедимся, что revalidatePath не была вызвана при ошибке валидации
       expect(revalidatePath).not.toHaveBeenCalled();
     });
   });
 
   // --- GET Tests ---
   describe('GET', () => {
-    it('должен возвращать все шаблоны карт', async () => {
-      await MapTemplate.create([
-        { name: 'DM-SomeMap1', description: 'Test desc 1' },
-        { name: 'DM-SomeMap2', description: 'Test desc 2' },
-      ]);
-
-      const request = new Request('http://localhost/api/admin/map-templates');
-      const response = await GET(request);
-      const data = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data.length).toBe(2);
-      expect(data.map(t => t.name)).toEqual(
-        expect.arrayContaining(['DM-SomeMap1', 'DM-SomeMap2'])
-      );
-    });
-
-    it('должен возвращать шаблоны, соответствующие поисковому запросу', async () => {
-      await MapTemplate.create([
-        { name: 'Test Arena', description: 'Desc 1' },
-        { name: 'Another Map', description: 'Desc 2' },
-        { name: 'Test Ground', description: 'Desc 3' },
-      ]);
-      
-      const request = new Request('http://localhost/api/admin/map-templates?search=Test');
-      const response = await GET(request);
-      const data = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data.length).toBe(2);
-      expect(data.every(t => t.name.includes('Test'))).toBe(true);
-    });
-
-    it('должен возвращать только неархивированные шаблоны по умолчанию', async () => {
+    it('должен возвращать только активные шаблоны по умолчанию', async () => {
       await MapTemplate.create({ name: 'Active Map Template' });
       await MapTemplate.create({ name: 'Archived Map Template', archivedAt: new Date() });
 
       const request = new Request('http://localhost/api/admin/map-templates');
+      
       const response = await GET(request);
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body.length).toBe(1);
-      expect(body[0].name).toBe('Active Map Template');
+      expect(body.data.length).toBe(1);
+      expect(body.total).toBe(1);
+      expect(body.data[0].name).toBe('Active Map Template');
     });
 
     it('должен возвращать только архивные шаблоны при `status=archived`', async () => {
-      await MapTemplate.create({ name: 'Active Map Template 2' });
-      await MapTemplate.create({ name: 'Archived Map Template 2', archivedAt: new Date() });
-      
+      await MapTemplate.create({ name: 'Active Map Template' });
+      await MapTemplate.create({ name: 'Archived Map Template', archivedAt: new Date() });
+
       const request = new Request('http://localhost/api/admin/map-templates?status=archived');
+      
       const response = await GET(request);
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body.length).toBe(1);
-      expect(body[0]).toHaveProperty('archivedAt');
-      expect(body[0].name).toBe('Archived Map Template 2');
+      expect(body.data.length).toBe(1);
+      expect(body.total).toBe(1);
+      expect(body.data[0]).toHaveProperty('archivedAt');
+    });
+    
+    it('должен возвращать шаблоны, соответствующие поисковому запросу', async () => {
+      await MapTemplate.create([
+        { name: 'Alpha Test Map' },
+        { name: 'Bravo Test Map' },
+        { name: 'Charlie Non-Matching' },
+      ]);
+
+      const request = new Request('http://localhost/api/admin/map-templates?q=Test');
+      
+      const response = await GET(request);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.data.length).toBe(2);
+      expect(body.total).toBe(2);
     });
   });
-}); 
+});

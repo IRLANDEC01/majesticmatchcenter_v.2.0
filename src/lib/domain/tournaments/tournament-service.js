@@ -1,18 +1,18 @@
-import TournamentRepo from '@/lib/repos/tournaments/tournament-repo';
-import FamilyRepo from '@/lib/repos/families/family-repo';
-import PlayerRepo from '@/lib/repos/players/player-repo';
-import TournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo.js';
+import tournamentRepo from '@/lib/repos/tournaments/tournament-repo.js';
+import familyRepo from '@/lib/repos/families/family-repo.js';
+import playerRepo from '@/lib/repos/players/player-repo.js';
+import tournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo.js';
 import { AppError, DuplicateError, NotFoundError, ValidationError } from '@/lib/errors';
-import FamilyTournamentParticipationRepo from '@/lib/repos/families/family-tournament-participation-repo';
-import FamilyEarningRepo from '@/lib/repos/families/family-earning-repo';
-import PlayerEarningRepo from '@/lib/repos/players/player-earning-repo';
-import PlayerTournamentParticipationRepo from '@/lib/repos/players/player-tournament-participation-repo';
+import familyTournamentParticipationRepo from '@/lib/repos/families/family-tournament-participation-repo.js';
+import familyEarningRepo from '@/lib/repos/families/family-earning-repo.js';
+import playerEarningRepo from '@/lib/repos/players/player-earning-repo.js';
+import playerTournamentParticipationRepo from '@/lib/repos/players/player-tournament-participation-repo.js';
 import { STATUSES } from '@/lib/constants';
 
 /**
  * Сервис для управления бизнес-логикой турниров.
  */
-export default class TournamentService {
+class TournamentService {
   /**
    * @param {object} repos - Репозитории.
    * @param {TournamentRepo} repos.tournamentRepo - Репозиторий турниров.
@@ -46,6 +46,12 @@ export default class TournamentService {
     const template = await this.tournamentTemplateRepo.incrementUsageCount(validatedData.template);
     if (!template) {
       throw new NotFoundError(`Шаблон турнира с id ${validatedData.template} не найден.`);
+    }
+
+    if (template.archivedAt) {
+      // Откатываем инкремент, так как операция не будет завершена
+      await this.tournamentTemplateRepo.decrementUsageCount(validatedData.template);
+      throw new ValidationError('Нельзя создать турнир из архивного шаблона.');
     }
 
     const slug = `${template.slug}-${template.usageCount}`;
@@ -223,3 +229,16 @@ export default class TournamentService {
     return updatedTournament;
   }
 }
+
+const tournamentService = new TournamentService({
+  tournamentRepo,
+  tournamentTemplateRepo,
+  familyRepo,
+  playerRepo,
+  familyTournamentParticipationRepo,
+  playerTournamentParticipationRepo,
+  familyEarningRepo,
+  playerEarningRepo,
+});
+
+export default tournamentService;

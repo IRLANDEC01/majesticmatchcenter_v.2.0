@@ -1,7 +1,7 @@
-import { DuplicateError, ValidationError, NotFoundError } from '@/lib/errors.js';
-import { playerRepo } from '@/lib/repos/players/player-repo.js';
-import { familyRepo } from '@/lib/repos/families/family-repo.js';
-import PlayerStats from '@/models/player/PlayerStats.js';
+import { DuplicateError, ValidationError, NotFoundError, ConflictError } from '@/lib/errors.js';
+import playerRepo from '@/lib/repos/players/player-repo.js';
+import playerStatsRepo from '@/lib/repos/statistics/player-stats-repo.js';
+import familyRepo from '@/lib/repos/families/family-repo.js';
 import Family from '@/models/family/Family.js';
 
 /**
@@ -10,31 +10,49 @@ import Family from '@/models/family/Family.js';
  */
 class PlayerService {
   /**
+   * @constructor
+   * @param {object} repos - Репозитории.
+   * @param {object} repos.playerRepo - Репозиторий игроков.
+   * @param {object} repos.playerStatsRepo - Репозиторий статистики игроков.
+   * @param {object} repos.familyRepo - Репозиторий семей.
+   */
+  constructor({ playerRepo, playerStatsRepo, familyRepo }) {
+    this.playerRepo = playerRepo;
+    this.playerStatsRepo = playerStatsRepo;
+    this.familyRepo = familyRepo;
+  }
+
+  /**
    * Создает нового игрока и связанный с ним документ статистики.
    * @param {object} playerData - Данные игрока.
    * @returns {Promise<object>}
    */
   async createPlayer(playerData) {
-    const existingPlayer = await playerRepo.findByName(playerData.firstName, playerData.lastName);
+    const existingPlayer = await this.playerRepo.findByNameWithFamily(
+      playerData.firstName,
+      playerData.lastName
+    );
     if (existingPlayer) {
       throw new DuplicateError('Игрок с таким именем и фамилией уже существует.');
     }
 
-    const newPlayer = await playerRepo.create(playerData);
+    const newPlayer = await this.playerRepo.create(playerData);
     if (newPlayer) {
-      await PlayerStats.create({ playerId: newPlayer._id });
+      await this.playerStatsRepo.create({ playerId: newPlayer._id });
     }
     return newPlayer;
   }
 
   /**
-   * Получает всех игроков.
-   * @param {object} [options] - Опции.
-   * @param {boolean} [options.includeArchived=false] - Включить архивированных игроков.
-   * @returns {Promise<Array<object>>}
+   * Получает игроков с фильтрацией и пагинацией.
+   * Делегирует вызов напрямую в репозиторий, который унаследовал
+   * продвинутый метод `find` от `BaseRepo`.
+   * @param {object} [options] - Опции для `BaseRepo.find`.
+   * @returns {Promise<object>} - { data, total, page, limit }
    */
-  async getAllPlayers(options) {
-    return playerRepo.findAll(options);
+  async getPlayers(options) {
+    // ПРАВИЛЬНЫЙ ВЫЗОВ: playerRepo.find, унаследованный от BaseRepo
+    return this.playerRepo.find(options);
   }
 
   /**
@@ -46,30 +64,17 @@ class PlayerService {
    * @throws {NotFoundError} Если игрок не найден или архивирован.
    */
   async getPlayerById(id, { includeArchived = false } = {}) {
-    // Запрашиваем из репозитория, принудительно включая архивированных,
-    // чтобы затем обработать логику здесь, в сервисе.
-    const player = await playerRepo.findById(id, { includeArchived: true });
+    const player = await this.playerRepo.findById(id, { includeArchived: true });
 
     if (!player) {
       throw new NotFoundError('Игрок не найден.');
     }
 
-    // Если игрок архивирован, а мы не просили включать архивированных,
-    // также считаем, что он "не найден" для данного запроса.
     if (player.archivedAt && !includeArchived) {
-      throw new NotFoundError('Игрок не найден (архивирован).');
+      throw new NotFoundError('Игрока не существует или он в архиве.');
     }
 
     return player;
-  }
-
-  /**
-   * Получает игрока по слагу.
-   * @param {string} slug - Слаг игрока.
-   * @returns {Promise<object|null>}
-   */
-  async getPlayerBySlug(slug) {
-    return playerRepo.findBySlug(slug);
   }
 
   /**
@@ -81,22 +86,14 @@ class PlayerService {
   async updatePlayer(id, playerData) {
     const { firstName, lastName } = playerData;
 
-    // Проверяем на дубликат только если передано имя или фамилия
     if (firstName && lastName) {
-      const existingPlayer = await playerRepo.findAll({
-        filter: {
-          _id: { $ne: id },
-          firstName,
-          lastName,
-        },
-      });
-
-      if (existingPlayer.length > 0) {
+      const existingPlayer = await this.playerRepo.findByNameWithFamily(firstName, lastName);
+      if (existingPlayer && existingPlayer._id.toString() !== id) {
         throw new DuplicateError('Игрок с таким именем и фамилией уже существует.');
       }
     }
 
-    return playerRepo.update(id, playerData);
+    return this.playerRepo.update(id, playerData);
   }
 
   /**
@@ -105,28 +102,47 @@ class PlayerService {
    * @returns {Promise<object|null>}
    */
   async archivePlayer(id) {
-    // Проверяем, не является ли игрок владельцем активной семьи.
-    const ownedFamily = await Family.findOne({ owner: id, archivedAt: null }).lean();
+    const playerToArchive = await this.getPlayerById(id, { includeArchived: true });
 
+    if (playerToArchive.archivedAt) {
+      throw new ConflictError('Игрок уже находится в архиве.');
+    }
+    
+    const ownedFamily = await Family.findOne({ owner: id, archivedAt: null }).lean();
     if (ownedFamily) {
       throw new ValidationError(
         `Нельзя заархивировать игрока, так как он является владельцем активной семьи "${ownedFamily.name}". Сначала смените владельца.`
       );
     }
-    
-    // В будущем здесь может быть логика, например, проверка,
-    // можно ли архивировать этого игрока (например, если он капитан активной семьи).
-    return playerRepo.archive(id);
+
+    return this.playerRepo.archive(id);
   }
 
   /**
    * Восстанавливает игрока из архива.
    * @param {string} id - ID игрока.
    * @returns {Promise<object|null>}
+   * @throws {NotFoundError} Если игрок не найден.
    */
   async unarchivePlayer(id) {
-    return playerRepo.unarchive(id);
+    const playerToRestore = await this.playerRepo.findById(id, { includeArchived: true });
+
+    if (!playerToRestore) {
+      throw new NotFoundError('Игрок для восстановления не найден.');
+    }
+
+    if (!playerToRestore.archivedAt) {
+      return playerToRestore;
+    }
+
+    return this.playerRepo.restore(id);
   }
 }
 
-export const playerService = new PlayerService(); 
+const playerService = new PlayerService({
+  playerRepo,
+  playerStatsRepo,
+  familyRepo,
+});
+
+export default playerService;

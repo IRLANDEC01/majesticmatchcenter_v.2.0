@@ -1,16 +1,12 @@
-import MapTemplateRepo from '@/lib/repos/map-templates/map-template-repo.js';
-import { DuplicateError, NotFoundError } from '@/lib/errors';
+import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo.js';
+import { DuplicateError, NotFoundError, ConflictError } from '@/lib/errors.js';
 
 /**
  * Cервис для управления бизнес-логикой шаблонов карт.
  */
-export default class MapTemplateService {
-  /**
-   * @param {object} repos - Репозитории.
-   * @param {MapTemplateRepo} repos.mapTemplateRepo - Репозиторий шаблонов карт.
-   */
-  constructor(repos) {
-    this.repo = repos.mapTemplateRepo;
+class MapTemplateService {
+  constructor(repo) {
+    this.repo = repo;
   }
 
   /**
@@ -37,23 +33,22 @@ export default class MapTemplateService {
   }
 
   /**
-   * Получает все шаблоны карт.
-   * @param {object} [options] - Опции для получения шаблонов.
-   * @param {string} [options.status='active'] - Статус для фильтрации ('active' или 'archived').
-   * @param {string} [options.search] - Строка для поиска.
-   * @returns {Promise<Array<object>>} - Массив шаблонов карт.
+   * Возвращает все шаблоны карт с возможностью фильтрации и пагинации.
+   * @param {object} options - Опции для фильтрации и пагинации.
+   * @returns {Promise<{data: MapTemplate[], total: number}>}
    */
-  async getAllMapTemplates(options = { status: 'active', search: '' }) {
-    return this.repo.findAll(options);
+  async getAllMapTemplates(options = {}) {
+    return this.repo.find(options);
   }
 
   /**
    * Получает шаблон карты по ID.
    * @param {string} id - ID шаблона.
+   * @param {object} options - Опции для поиска.
    * @returns {Promise<object|null>} - Найденный шаблон или null.
    */
-  async getMapTemplateById(id) {
-    const template = await this.repo.findById(id);
+  async getMapTemplateById(id, { includeArchived = false } = {}) {
+    const template = await this.repo.findById(id, { includeArchived });
     if (!template) {
       throw new NotFoundError(`Шаблон карты с ID ${id} не найден.`);
     }
@@ -67,11 +62,7 @@ export default class MapTemplateService {
    * @returns {Promise<object>} - Обновленный объект шаблона карты.
    */
   async updateMapTemplate(id, templateData) {
-    // Сначала проверим, существует ли документ
-    const existingTemplate = await this.repo.findById(id);
-    if (!existingTemplate) {
-      throw new NotFoundError(`Шаблон карты с ID ${id} для обновления не найден.`);
-    }
+    await this.getMapTemplateById(id); // Проверка на существование (неархивированного)
     
     try {
       if (templateData.name && !templateData.slug) {
@@ -80,51 +71,48 @@ export default class MapTemplateService {
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/(^-|-$)+/g, '');
       }
-
-      // Убираем ручную проверку. База данных сама не позволит
-      // обновить запись, если это приведет к дубликации имени/slug
-      // среди активных документов.
       return await this.repo.update(id, templateData);
     } catch (error) {
-      // "Переводим" ошибку базы данных на язык доменных ошибок
       if (error.code === 11000) {
         throw new DuplicateError('Шаблон с таким названием или slug уже существует.');
       }
-      // Если это другая ошибка, пробрасываем ее дальше
       throw error;
     }
   }
   
   /**
    * Архивирует шаблон карты.
-   * @param {string} templateId - ID шаблона для архивации.
-   * @returns {Promise<object|null>}
+   * @param {string} id - ID шаблона для архивации.
+   * @returns {Promise<MapTemplate>}
    */
-  async archiveMapTemplate(templateId) {
-    const archivedTemplate = await this.repo.archive(templateId);
-    if (!archivedTemplate) {
-      throw new NotFoundError(`Шаблон карты с ID ${templateId} для архивации не найден.`);
+  async archiveMapTemplate(id) {
+    // Сначала ищем, включая архивные, чтобы выдать правильную ошибку
+    const template = await this.getMapTemplateById(id, { includeArchived: true });
+
+    if (template.archivedAt) {
+      throw new ConflictError('Этот шаблон уже находится в архиве.');
     }
-    return archivedTemplate;
+
+    return this.repo.archive(id);
   }
   
   /**
    * Восстанавливает шаблон карты из архива.
-   * @param {string} templateId - ID шаблона для восстановления.
+   * @param {string} id - ID шаблона для восстановления.
    * @returns {Promise<object|null>}
    */
-  async restoreMapTemplate(templateId) {
-    const restoredTemplate = await this.repo.unarchive(templateId);
-    if (!restoredTemplate) {
-      throw new NotFoundError(`Шаблон карты с ID ${templateId} для восстановления не найден.`);
+  async restoreMapTemplate(id) {
+    const template = await this.getMapTemplateById(id, { includeArchived: true });
+
+    if (!template.archivedAt) {
+      throw new ConflictError('Этот шаблон не находится в архиве.');
     }
-    return restoredTemplate;
+
+    // Здесь можно добавить логику проверки на дубликат имени среди активных, если нужно
+
+    return this.repo.restore(id);
   }
 }
 
-// Импортируем репозиторий и создаем синглтон-экземпляр сервиса
-import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo.js';
-
-export const mapTemplateService = new MapTemplateService({
-  mapTemplateRepo,
-}); 
+const mapTemplateService = new MapTemplateService(mapTemplateRepo);
+export default mapTemplateService; 

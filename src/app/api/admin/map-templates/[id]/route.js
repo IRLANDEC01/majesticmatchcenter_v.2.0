@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import { updateMapTemplateSchema } from '@/lib/api/schemas/map-templates/map-template-schemas';
-import { mapTemplateService } from '@/lib/domain/map-templates/map-template-service';
+import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
 
 /**
  * GET /api/admin/map-templates/{id}

@@ -1,15 +1,25 @@
-import PlayerStats from '@/models/player/PlayerStats';
+import PlayerStats from '@/models/player/PlayerStats.js';
+import BaseRepo from '../base-repo.js';
 
-class PlayerStatsRepository {
+/**
+ * @class PlayerStatsRepository
+ * @description Репозиторий для работы со статистикой игроков.
+ * @extends {BaseRepo}
+ */
+class PlayerStatsRepository extends BaseRepo {
+  constructor() {
+    super(PlayerStats, 'playerStats');
+  }
+  
   /**
    * Находит или создает документ со статистикой игрока.
    * @param {string} playerId - ID игрока.
    * @returns {Promise<Document>} Документ статистики игрока.
    */
   async findOrCreateByPlayerId(playerId) {
-    let stats = await PlayerStats.findOne({ playerId });
+    let stats = await this.model.findOne({ playerId });
     if (!stats) {
-      stats = await PlayerStats.create({ playerId });
+      stats = await this.create({ playerId });
     }
     return stats;
   }
@@ -89,9 +99,10 @@ class PlayerStatsRepository {
     }
 
     if (bulkOps.length > 0) {
-      await PlayerStats.bulkWrite(bulkOps);
+      await this.model.bulkWrite(bulkOps);
     }
   }
 }
 
-export default PlayerStatsRepository; 
+const playerStatsRepo = new PlayerStatsRepository();
+export default playerStatsRepo; 

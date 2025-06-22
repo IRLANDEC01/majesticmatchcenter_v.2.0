@@ -5,9 +5,9 @@ import tournamentTemplateService from '@/lib/domain/tournament-templates/tournam
 
 /**
  * @swagger
- * /api/admin/tournament-templates/{id}/archive:
+ * /api/admin/tournament-templates/{id}/restore:
  *   patch:
- *     summary: Архивирует шаблон турнира
+ *     summary: Восстанавливает шаблон турнира из архива
  *     tags: [TournamentTemplates]
  *     parameters:
  *       - in: path
@@ -18,7 +18,7 @@ import tournamentTemplateService from '@/lib/domain/tournament-templates/tournam
  *         description: ID шаблона турнира
  *     responses:
  *       200:
- *         description: Шаблон турнира успешно заархивирован
+ *         description: Шаблон турнира успешно восстановлен
  *         content:
  *           application/json:
  *             schema:
@@ -28,10 +28,12 @@ import tournamentTemplateService from '@/lib/domain/tournament-templates/tournam
  */
 export async function PATCH(request, { params }) {
   try {
-    const archivedTemplate = await tournamentTemplateService.archiveTemplate(params.id);
+    const restoredTemplate = await tournamentTemplateService.restoreTemplate(params.id);
+    
     revalidatePath('/admin/tournament-templates');
-    return NextResponse.json(archivedTemplate);
+    
+    return NextResponse.json(restoredTemplate);
   } catch (error) {
-    return handleApiError(error, 'архивировать шаблон турнира');
+    return handleApiError(error, 'восстановить шаблон турнира');
   }
-}
+} 

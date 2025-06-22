@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { handleApiError } from '@/lib/api/handle-api-error';
+import tournamentTemplateService from '@/lib/domain/tournament-templates/tournament-template-service';
 import {
   createTournamentTemplateSchema,
   getTournamentTemplatesSchema,
 } from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
-import { tournamentTemplateService } from '@/lib/domain/tournament-templates/tournament-template-service';
 
 /**
  * GET handler for fetching tournament templates.

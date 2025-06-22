@@ -5,7 +5,7 @@ import {
   createMapTemplateSchema,
   getMapTemplatesSchema,
 } from '@/lib/api/schemas/map-templates/map-template-schemas';
-import { mapTemplateService } from '@/lib/domain/map-templates/map-template-service';
+import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
 
 /**
  * Обработчик GET-запроса для получения шаблонов карт.

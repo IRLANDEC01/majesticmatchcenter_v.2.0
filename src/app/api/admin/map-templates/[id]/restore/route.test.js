@@ -1,198 +1,57 @@
-import { PATCH } from './route';
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
-import MapTemplate from '@/models/map/MapTemplate';
-import { dbClear } from '@/lib/test-helpers';
+import { PATCH } from './route.js';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
+import MapTemplate from '@/models/map/MapTemplate.js';
 import { revalidatePath } from 'next/cache';
+import mongoose from 'mongoose';
 
-// Мокируем 'next/cache' для всех тестов в этом файле
 jest.mock('next/cache', () => ({
   revalidatePath: jest.fn(),
 }));
 
-describe('API /api/admin/map-templates/[id]/restore', () => {
-  let testTemplate;
-
-  beforeAll(async () => {
-    await connectToDatabase();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
-
+describe('PATCH /api/admin/map-templates/[id]/restore', () => {
+  beforeAll(dbConnect);
+  afterAll(dbDisconnect);
   beforeEach(async () => {
     await dbClear();
-    // Создаем шаблон и сразу его архивируем для теста восстановления
-    testTemplate = await MapTemplate.create({
-      name: 'Restorable Template',
-      description: 'A test description',
-      archivedAt: new Date(),
-    });
     revalidatePath.mockClear();
   });
 
-  it('должен успешно восстановить шаблон карты и вызывать revalidatePath', async () => {
-    const request = new Request(`http://localhost/api/admin/map-templates/${testTemplate._id}/restore`, {
-      method: 'PATCH',
-    });
-
-    const response = await PATCH(request, { params: { id: testTemplate._id } });
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.archivedAt).toBe(null);
-
-    // Проверяем, что revalidatePath была вызвана
-    expect(revalidatePath).toHaveBeenCalledTimes(1);
-    expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
-
-    // Нам не нужно использовать includeArchived, так как восстановленный документ не является архивированным
-    const dbTemplate = await MapTemplate.findById(testTemplate._id);
-    expect(dbTemplate.archivedAt).toBeNull();
-  });
-
-  it('должен возвращать 404, если шаблон для восстановления не найден', async () => {
-    const nonExistentId = '605c72a6b579624e50a9d8e1';
-    const request = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}/restore`, {
-      method: 'PATCH',
-    });
-    // Важно: для этого теста нам нужно, чтобы findById нашел даже архивированный документ.
-    // Но наш сервис должен обрабатывать это. В данном случае, сервис не найдет документ
-    // с таким ID в принципе, поэтому проверка корректна.
-    const response = await PATCH(request, { params: { id: nonExistentId } });
-
-    expect(response.status).toBe(404);
-    expect(revalidatePath).not.toHaveBeenCalled();
-  });
-}); 
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
-import MapTemplate from '@/models/map/MapTemplate';
-import { dbClear } from '@/lib/test-helpers';
-import { revalidatePath } from 'next/cache';
-
-// Мокируем 'next/cache' для всех тестов в этом файле
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
-}));
-
-describe('API /api/admin/map-templates/[id]/restore', () => {
-  let testTemplate;
-
-  beforeAll(async () => {
-    await connectToDatabase();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
-
-  beforeEach(async () => {
-    await dbClear();
-    // Создаем шаблон и сразу его архивируем для теста восстановления
-    testTemplate = await MapTemplate.create({
-      name: 'Restorable Template',
-      description: 'A test description',
+  it('должен успешно восстанавливать шаблон и вызывать revalidatePath', async () => {
+    // Arrange
+    const template = await MapTemplate.create({ 
+      name: 'Archived Template',
       archivedAt: new Date(),
     });
-    revalidatePath.mockClear();
-  });
-
-  it('должен успешно восстановить шаблон карты и вызывать revalidatePath', async () => {
-    const request = new Request(`http://localhost/api/admin/map-templates/${testTemplate._id}/restore`, {
+    
+    const request = new Request(`http://localhost/api/admin/map-templates/${template._id}/restore`, {
       method: 'PATCH',
     });
 
-    const response = await PATCH(request, { params: { id: testTemplate._id } });
+    // Act
+    const response = await PATCH(request, { params: { id: template._id.toString() } });
     const body = await response.json();
+    const updatedTemplate = await MapTemplate.findById(template._id).lean();
 
+    // Assert
     expect(response.status).toBe(200);
-    expect(body.archivedAt).toBe(null);
-
-    // Проверяем, что revalidatePath была вызвана
-    expect(revalidatePath).toHaveBeenCalledTimes(1);
+    expect(body.archivedAt).toBeNull();
+    expect(updatedTemplate.archivedAt).toBeNull();
+    
     expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
-
-    // Нам не нужно использовать includeArchived, так как восстановленный документ не является архивированным
-    const dbTemplate = await MapTemplate.findById(testTemplate._id);
-    expect(dbTemplate.archivedAt).toBeNull();
+    expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
   it('должен возвращать 404, если шаблон для восстановления не найден', async () => {
-    const nonExistentId = '605c72a6b579624e50a9d8e1';
+    // Arrange
+    const nonExistentId = new mongoose.Types.ObjectId().toString();
     const request = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}/restore`, {
       method: 'PATCH',
     });
-    // Важно: для этого теста нам нужно, чтобы findById нашел даже архивированный документ.
-    // Но наш сервис должен обрабатывать это. В данном случае, сервис не найдет документ
-    // с таким ID в принципе, поэтому проверка корректна.
+
+    // Act
     const response = await PATCH(request, { params: { id: nonExistentId } });
 
-    expect(response.status).toBe(404);
-    expect(revalidatePath).not.toHaveBeenCalled();
-  });
-}); 
-import { connectToDatabase, disconnectFromDatabase } from '@/lib/db';
-import MapTemplate from '@/models/map/MapTemplate';
-import { dbClear } from '@/lib/test-helpers';
-import { revalidatePath } from 'next/cache';
-
-// Мокируем 'next/cache' для всех тестов в этом файле
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
-}));
-
-describe('API /api/admin/map-templates/[id]/restore', () => {
-  let testTemplate;
-
-  beforeAll(async () => {
-    await connectToDatabase();
-  });
-
-  afterAll(async () => {
-    await disconnectFromDatabase();
-  });
-
-  beforeEach(async () => {
-    await dbClear();
-    // Создаем шаблон и сразу его архивируем для теста восстановления
-    testTemplate = await MapTemplate.create({
-      name: 'Restorable Template',
-      description: 'A test description',
-      archivedAt: new Date(),
-    });
-    revalidatePath.mockClear();
-  });
-
-  it('должен успешно восстановить шаблон карты и вызывать revalidatePath', async () => {
-    const request = new Request(`http://localhost/api/admin/map-templates/${testTemplate._id}/restore`, {
-      method: 'PATCH',
-    });
-
-    const response = await PATCH(request, { params: { id: testTemplate._id } });
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.archivedAt).toBe(null);
-
-    // Проверяем, что revalidatePath была вызвана
-    expect(revalidatePath).toHaveBeenCalledTimes(1);
-    expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
-
-    // Нам не нужно использовать includeArchived, так как восстановленный документ не является архивированным
-    const dbTemplate = await MapTemplate.findById(testTemplate._id);
-    expect(dbTemplate.archivedAt).toBeNull();
-  });
-
-  it('должен возвращать 404, если шаблон для восстановления не найден', async () => {
-    const nonExistentId = '605c72a6b579624e50a9d8e1';
-    const request = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}/restore`, {
-      method: 'PATCH',
-    });
-    // Важно: для этого теста нам нужно, чтобы findById нашел даже архивированный документ.
-    // Но наш сервис должен обрабатывать это. В данном случае, сервис не найдет документ
-    // с таким ID в принципе, поэтому проверка корректна.
-    const response = await PATCH(request, { params: { id: nonExistentId } });
-
+    // Assert
     expect(response.status).toBe(404);
     expect(revalidatePath).not.toHaveBeenCalled();
   });

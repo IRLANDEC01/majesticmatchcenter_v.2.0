@@ -1,14 +1,13 @@
+// src/lib/api/schemas/players/player-schemas.js
 import { z } from 'zod';
 
 /**
  * Схема для валидации query-параметров при получении списка игроков.
  */
 export const getPlayersSchema = z.object({
-  include_archived: z
-    .enum(['true', 'false'])
-    .transform((val) => val === 'true')
-    .optional()
-    .default('false'),
+  status: z.enum(['active', 'archived', 'all']).optional().default('active'),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(10),
 });
 
 /**
@@ -40,4 +39,4 @@ export const updatePlayerSchema = z.object({
   bio: z.string().trim().max(5000).optional(),
   avatar: z.string().url('Некорректный URL аватара.').optional(),
   currentFamily: z.string().nullable().optional(), // Может быть ID или null
-}); 
+});
