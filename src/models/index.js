@@ -2,30 +2,30 @@
 // Импортируя этот файл (например, в jest.setup.js), мы гарантируем,
 // что Mongoose знает обо всех схемах до того, как начнутся операции с базой данных.
 
-import Family from './family/Family.js';
-import FamilyRatingHistory from './family/FamilyRatingHistory.js';
-import FamilyStats from './family/FamilyStats.js';
-import FamilyMapParticipation from './family/FamilyMapParticipation.js';
-import FamilyTournamentParticipation from './family/FamilyTournamentParticipation.js';
+import Family from './family/Family';
+import FamilyRatingHistory from './family/FamilyRatingHistory';
+import FamilyStats from './family/FamilyStats';
+import FamilyMapParticipation from './family/FamilyMapParticipation';
+import FamilyTournamentParticipation from './family/FamilyTournamentParticipation';
 
-import MapModel from './map/Map.js';
-import MapTemplate from './map/MapTemplate.js';
+import MapModel from './map/Map';
+import MapTemplate from './map/MapTemplate';
 
-import Player from './player/Player.js';
-import PlayerAchievement from './player/PlayerAchievement.js';
-import PlayerFamilyHistory from './player/PlayerFamilyHistory.js';
-import PlayerMapParticipation from './player/PlayerMapParticipation.js';
-import PlayerStats from './player/PlayerStats.js';
-import PlayerTournamentParticipation from './player/PlayerTournamentParticipation.js';
+import Player from './player/Player';
+import PlayerAchievement from './player/PlayerAchievement';
+import PlayerFamilyHistory from './player/PlayerFamilyHistory';
+import PlayerMapParticipation from './player/PlayerMapParticipation';
+import PlayerStats from './player/PlayerStats';
+import PlayerTournamentParticipation from './player/PlayerTournamentParticipation';
 
-import Tournament from './tournament/Tournament.js';
-import TournamentTemplate from './tournament/TournamentTemplate.js';
+import Tournament from './tournament/Tournament';
+import TournamentTemplate from './tournament/TournamentTemplate';
 
 // Импортируем для регистрации, но не экспортируем, т.к. это sub-document схемы
-import './shared/earnings-schema.js';
-import './shared/seo-schema.js';
-import './shared/social-link-schema.js';
-import './shared/weapon-stat-schema.js';
+import './shared/earnings-schema';
+import './shared/seo-schema';
+import './shared/social-link-schema';
+import './shared/weapon-stat-schema';
 
 const models = {
   Family,

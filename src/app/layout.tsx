@@ -1,6 +1,6 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils.ts";
 import GlobalHeader from "@/components/layout/global-header";
 import { SWRProvider } from "@/components/providers/swr-provider";
 

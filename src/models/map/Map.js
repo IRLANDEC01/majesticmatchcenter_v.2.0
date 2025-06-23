@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import seoSchema from '@/models/shared/seo-schema.js';
-import { STATUSES_ENUM, STATUSES } from '@/lib/constants';
+import { LIFECYCLE_STATUSES_ENUM, LIFECYCLE_STATUSES } from '@/lib/constants';
 
 // --- Вложенные схемы для участников карты ---
 
@@ -58,8 +58,8 @@ const mapSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    enum: STATUSES_ENUM,
-    default: STATUSES.PLANNED,
+    enum: LIFECYCLE_STATUSES_ENUM,
+    default: LIFECYCLE_STATUSES.PLANNED,
     index: true,
   },
   archivedAt: {
@@ -96,8 +96,8 @@ mapSchema.pre('save', function(next) {
   // `this` - это сохраняемый документ
   // Не меняем статус, если он уже 'completed' или документ не новый/не изменен
   if (this.isModified('startDateTime') || this.isNew) {
-    if (this.status !== STATUSES.COMPLETED) {
-      this.status = this.startDateTime > new Date() ? STATUSES.PLANNED : STATUSES.ACTIVE;
+    if (this.status !== LIFECYCLE_STATUSES.COMPLETED) {
+      this.status = this.startDateTime > new Date() ? LIFECYCLE_STATUSES.PLANNED : LIFECYCLE_STATUSES.ACTIVE;
     }
   }
   next();

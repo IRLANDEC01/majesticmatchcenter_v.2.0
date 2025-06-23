@@ -71,10 +71,10 @@ export const FAMILY_MEMBER_ROLES = {
 export const FAMILY_MEMBER_ROLE_VALUES = Object.values(FAMILY_MEMBER_ROLES);
 
 /**
- * Статусы для турниров и карт.
+ * Статусы жизненного цикла для сущностей (турниры, карты и т.д.).
  * Используем единый набор для консистентности.
  */
-export const STATUSES = Object.freeze({
+export const LIFECYCLE_STATUSES = Object.freeze({
   PLANNED: 'PLANNED',     // Запланировано, еще не началось
   ACTIVE: 'ACTIVE',       // Идет прямо сейчас
   COMPLETED: 'COMPLETED',   // Завершено
@@ -85,21 +85,7 @@ export const STATUSES = Object.freeze({
 * Массив значений статусов для валидации в Mongoose.
 * @type {string[]}
 */
-export const STATUSES_ENUM = Object.values(STATUSES);
-
-
-
-/**
- * @deprecated
- */
-export const TOURNAMENT_STATUS_ENUM = Object.values(TOURNAMENT_STATUS_VALUES);
-
-/**
- * @deprecated
- */
-export const TOURNAMENT_STATUS = Object.freeze({
-  ...TOURNAMENT_STATUS_VALUES,
-});
+export const LIFECYCLE_STATUSES_ENUM = Object.values(LIFECYCLE_STATUSES);
 
 /**
  * Категории/уровни результатов участия в турнире.
@@ -124,8 +110,6 @@ export const RESULT_TIERS_ENUM = Object.values(RESULT_TIERS_VALUES);
 export const RESULT_TIERS = Object.freeze({
   ...RESULT_TIERS_VALUES,
 });
-
-
 
 /**
  * Задержка в миллисекундах для функции debounce при поиске.

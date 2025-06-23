@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 import seoSchema from '@/models/shared/seo-schema.js';
-import { CURRENCY_VALUES, STATUSES_ENUM, STATUSES, RESULT_TIERS_ENUM } from '@/lib/constants';
+import {
+  CURRENCY_VALUES,
+  LIFECYCLE_STATUSES_ENUM,
+  LIFECYCLE_STATUSES,
+  RESULT_TIERS_ENUM
+} from '@/lib/constants';
 
 // --- Вложенные схемы для участников ---
 
@@ -104,8 +109,8 @@ const tournamentSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    enum: STATUSES_ENUM,
-    default: STATUSES.PLANNED,
+    enum: LIFECYCLE_STATUSES_ENUM,
+    default: LIFECYCLE_STATUSES.PLANNED,
   },
   // Дата архивации для мягкого удаления.
   archivedAt: {

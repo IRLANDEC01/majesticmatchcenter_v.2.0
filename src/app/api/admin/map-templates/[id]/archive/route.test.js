@@ -1,6 +1,6 @@
-import { PATCH } from './route';
+import { PATCH } from './route.js';
 import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
-import MapTemplate from '@/models/map/MapTemplate.js';
+import MapTemplate from '@/models/map/MapTemplate.ts';
 import { revalidatePath } from 'next/cache';
 
 // Мокируем 'next/cache' для всех тестов в этом файле
@@ -19,7 +19,10 @@ describe('PATCH /api/admin/map-templates/[id]/archive', () => {
 
   it('должен успешно архивировать шаблон карты и вызывать revalidatePath', async () => {
     // Arrange
-    const template = await MapTemplate.create({ name: 'Template to Archive' });
+    const template = await MapTemplate.create({
+      name: 'Template to archive',
+      mapTemplateImage: 'path/to/image.jpg',
+    });
     const request = new Request(`http://localhost/api/admin/map-templates/${template._id}/archive`, {
       method: 'PATCH',
     });
@@ -58,7 +61,8 @@ describe('PATCH /api/admin/map-templates/[id]/archive', () => {
   it('должен возвращать 409 (Conflict), если шаблон уже заархивирован', async () => {
     // Arrange
     const template = await MapTemplate.create({
-      name: 'Already Archived',
+      name: 'Already archived',
+      mapTemplateImage: 'path/to/image.jpg',
       archivedAt: new Date(),
     });
     const request = new Request(`http://localhost/api/admin/map-templates/${template._id}/archive`, {

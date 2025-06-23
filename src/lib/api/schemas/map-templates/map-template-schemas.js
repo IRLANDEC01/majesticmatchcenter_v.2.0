@@ -8,15 +8,21 @@ export const createMapTemplateSchema = z.object({
   // Название шаблона. Должно быть строкой, минимум 3 символа.
   name: z.string({
     required_error: 'Название обязательно.',
-  }).min(3, 'Название должно содержать минимум 3 символа.'),
+  }).min(3, 'Название должно содержать минимум 3 символа.')
+    .regex(/^[a-zA-Z0-9\s]+$/, 'Название может содержать только латинские буквы, цифры и пробелы.'),
+
+  // Slug. Необязательное поле, т.к. может генерироваться на сервере.
+  slug: z.string()
+    .regex(/^[a-z0-9-]+$/, 'Slug может содержать только строчные латинские буквы, цифры и дефисы.')
+    .optional(),
 
   // Описание шаблона. Необязательное поле.
-  description: z.string().optional(),
+  description: z.string().max(500, 'Описание не может превышать 500 символов.').optional(),
 
-  // URL изображения карты. Временно принимаем что угодно для прототипа, но поле обязательно.
-  mapImage: z.any().refine((val) => val !== null && val !== '' && val !== undefined, {
-    message: 'Изображение карты обязательно для загрузки.',
-  }),
+  // URL изображения карты. Обязательное непустое строковое поле.
+  mapTemplateImage: z.string({
+    required_error: 'Изображение для шаблона карты обязательно.',
+  }).nonempty('Изображение для шаблона карты обязательно.'),
 });
 
 /**
@@ -24,9 +30,10 @@ export const createMapTemplateSchema = z.object({
  * Все поля опциональны, так как можно обновлять только часть данных.
  */
 export const updateMapTemplateSchema = z.object({
-  name: z.string().min(3, 'Название должно содержать минимум 3 символа.').optional(),
-  description: z.string().optional(),
-  mapImage: z.string().url('Некорректный URL изображения.').optional(),
+  name: z.string().min(3).regex(/^[a-zA-Z0-9\s]+$/, 'Название может содержать только латинские буквы, цифры и пробелы.').optional(),
+  slug: z.string().regex(/^[a-z0-9-]+$/, 'Slug может содержать только строчные латинские буквы, цифры и дефисы.').optional(),
+  description: z.string().max(500).optional(),
+  mapTemplateImage: z.string().nonempty('Изображение не может быть пустым.').optional(),
 });
 
 /**

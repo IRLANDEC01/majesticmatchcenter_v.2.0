@@ -1,19 +1,20 @@
 import BaseRepo from '../base-repo';
-import MapTemplate from '@/models/map/MapTemplate.js';
+import MapTemplate, { IMapTemplate } from '@/models/map/MapTemplate';
 
 /**
  * @class MapTemplateRepository
  * @description Репозиторий для работы с шаблонами карт.
- * @extends {BaseRepo}
+ *              Наследует все базовые CRUD-операции от BaseRepo.
  */
-class MapTemplateRepo extends BaseRepo {
+class MapTemplateRepo extends BaseRepo<IMapTemplate> {
   constructor() {
     // Передаем модель и префикс для кеша в родительский конструктор
     super(MapTemplate, 'map-template');
   }
 
   // Все стандартные методы (find, findById, create, update, archive, restore)
-  // наследуются из BaseRepo и автоматически работают с кешем.
+  // наследуются из BaseRepo и автоматически работают с кешем и теперь
+  // являются полностью типобезопасными благодаря <IMapTemplate>.
 
   // Здесь можно добавлять специфичные для MapTemplate методы, если они понадобятся.
   // Например, поиск по какому-то уникальному полю.
