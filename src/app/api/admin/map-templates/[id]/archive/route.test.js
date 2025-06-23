@@ -1,6 +1,6 @@
-import { PATCH } from './route.js';
-import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
-import MapTemplate from '@/models/map/MapTemplate.ts';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
+import { PATCH } from './route.ts';
+import MapTemplate from '@/models/map/MapTemplate';
 import { revalidatePath } from 'next/cache';
 
 // Мокируем 'next/cache' для всех тестов в этом файле

@@ -44,18 +44,18 @@ import goodRepo from './repo'; // Просто импортируем и исп�
 
 Это наш основной и самый важный вид тестов.
 
-*   **Что это?** Тесты, которые проверяют **всю вертикаль приложения** для конкретного API-маршрута. Они имитируют HTTP-запрос, который проходит через обработчик (`route.js`), импортированный **синглтон сервиса** и **синглтон репозитория**, выполняя реальные операции с изолированной тестовой базой данных.
+*   **Что это?** Тесты, которые проверяют **всю вертикаль приложения** для конкретного API-маршрута. Они имитируют HTTP-запрос, который проходит через обработчик (`route.ts`), импортированный **синглтон сервиса** и **синглтон репозитория**, выполняя реальные операции с изолированной тестовой базой данных.
 *   **Где?** Располагаются рядом с файлом маршрута: `src/app/api/.../route.test.js`.
 
-#### **Канонический пример (стандарт v2.0):**
+#### **Канонический пример (стандарт v2.1 - TypeScript):**
 
-Этот пример иллюстрирует принцип **самодостаточных тестов** и использование синглтонов.
+Этот пример иллюстрирует принцип **самодостаточных тестов** и использование полностью типизированной вертикали.
 
 ```javascript
-// 1. Импорты: обработчик, модели и хелперы
-import { GET, PATCH } from './route.js';
-import { dbClear } from '@/lib/test-helpers.js';
-import MapTemplate from '@/models/map/MapTemplate.js';
+// 1. Импорты: обработчик из route.ts, модели без расширений и хелперы
+import { GET, PATCH } from './route.ts';
+import { dbClear } from '@/lib/test-helpers';
+import MapTemplate from '@/models/map/MapTemplate';
 import { revalidatePath } from 'next/cache';
 
 // 2. Мокируем внешние зависимости. Сервисы и репозитории НЕ мокируем!
@@ -63,7 +63,8 @@ jest.mock('next/cache', () => ({
   revalidatePath: jest.fn(),
 }));
 
-describe('GET /api/admin/map-templates/[id]', () => {
+describe('API /api/admin/map-templates/[id]', () => {
+  // 3. Используем только beforeEach для очистки состояния между тестами
   beforeEach(async () => {
     await dbClear(); // Очищаем БД перед каждым тестом
     revalidatePath.mockClear(); // Очищаем мок перед каждым тестом
@@ -72,38 +73,43 @@ describe('GET /api/admin/map-templates/[id]', () => {
   it('должен возвращать шаблон карты по ID', async () => {
     // Arrange: Создаем необходимые данные ПРЯМО В ТЕСТЕ.
     const template = await MapTemplate.create({
-      name: 'Test Map',
-      description: 'A map for testing',
-      isActive: true,
+      name: 'Test Map GET',
+      description: 'A map for testing GET',
+      mapTemplateImage: 'path/to/image.jpg',
     });
 
     const request = new Request(`http://localhost/api/admin/map-templates/${template._id}`);
 
     // Act: Вызываем обработчик
     const response = await GET(request, { params: { id: template._id.toString() } });
+    const body = await response.json();
 
     // Assert: Проверяем результат
     expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.name).toBe('Test Map');
+    expect(body.name).toBe('Test Map GET');
   });
 
-  it('должен архивировать шаблон и вызывать revalidatePath', async () => {
+  it('должен успешно обновлять шаблон и вызывать revalidatePath', async () => {
     // Arrange
-    const template = await MapTemplate.create({ name: 'Template to Archive' });
-    const request = new Request(`http://localhost/api/admin/map-templates/${template._id}/archive`, {
+    const template = await MapTemplate.create({
+      name: 'Initial Name',
+      mapTemplateImage: 'path/to/image.jpg',
+    });
+    const updateData = { name: 'Updated Name' };
+    const request = new Request(`http://localhost/api/admin/map-templates/${template._id}`, {
       method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updateData),
     });
 
     // Act
     const response = await PATCH(request, { params: { id: template._id.toString() } });
-    const updatedTemplate = await MapTemplate.findById(template._id);
+    const dbTemplate = await MapTemplate.findById(template._id);
 
     // Assert
     expect(response.status).toBe(200);
-    expect(updatedTemplate.archivedAt).not.toBeNull();
-    expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
-    expect(revalidatePath).toHaveBeenCalledTimes(1);
+    expect(dbTemplate.name).toBe('Updated Name');
+    expect(revalidatePath).toHaveBeenCalledTimes(2);
   });
 });
 ```

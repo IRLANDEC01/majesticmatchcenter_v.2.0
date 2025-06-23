@@ -3,15 +3,19 @@ import { revalidatePath } from 'next/cache';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
 
+type RouteContext = {
+  params: {
+    id: string;
+  };
+};
+
 /**
  * PATCH /api/admin/map-templates/[id]/restore
  * Восстанавливает шаблон карты из архива.
- * @param {Request} request
- * @param {object} context - Контекст запроса, включая параметры.
- * @param {object} context.params - Параметры маршрута.
- * @param {string} context.params.id - ID шаблона.
+ * @param {Request} request - Объект запроса (не используется, но обязателен).
+ * @param {RouteContext} context - Контекст запроса с параметрами маршрута.
  */
-export async function PATCH(request, { params }) {
+export async function PATCH(request: Request, { params }: RouteContext) {
   try {
     const { id } = params;
     const restoredTemplate = await mapTemplateService.restoreMapTemplate(id);
@@ -20,6 +24,6 @@ export async function PATCH(request, { params }) {
 
     return NextResponse.json(restoredTemplate, { status: 200 });
   } catch (error) {
-    return handleApiError(error, `Failed to restore map template ${params.id}`);
+    return handleApiError(error instanceof Error ? error : new Error(String(error)), `Failed to restore map template ${params.id}`);
   }
 } 

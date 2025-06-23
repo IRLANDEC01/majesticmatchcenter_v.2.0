@@ -3,12 +3,7 @@ import { IMapTemplate } from '@/models/map/MapTemplate';
 import { DuplicateError, NotFoundError, ConflictError } from '@/lib/errors';
 import { FilterQuery, UpdateQuery } from 'mongoose';
 import { IFindParams } from '@/lib/repos/base-repo';
-
-// Определяем тип для данных, создающих шаблон. Используем Pick для выбора полей.
-type CreateMapTemplateDto = Pick<IMapTemplate, 'name' | 'slug' | 'description' | 'mapTemplateImage'>;
-
-// Определяем тип для данных, обновляющих шаблон. Используем Partial для необязательных полей.
-type UpdateMapTemplateDto = Partial<CreateMapTemplateDto>;
+import { CreateMapTemplateDto, UpdateMapTemplateDto } from '@/lib/api/schemas/map-templates/map-template-schemas';
 
 /**
  * Cервис для управления бизнес-логикой шаблонов карт.

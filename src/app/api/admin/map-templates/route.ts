@@ -12,7 +12,7 @@ import mapTemplateService from '@/lib/domain/map-templates/map-template-service'
  * @param {Request} request - Входящий запрос.
  * @returns {Promise<NextResponse>}
  */
-export async function GET(request) {
+export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const params = Object.fromEntries(searchParams.entries());
@@ -26,7 +26,7 @@ export async function GET(request) {
 
     return NextResponse.json(templates, { status: 200 });
   } catch (error) {
-    return handleApiError(error, 'Failed to get map templates');
+    return handleApiError(error instanceof Error ? error : new Error(String(error)), 'Failed to get map templates');
   }
 }
 
@@ -35,7 +35,7 @@ export async function GET(request) {
  * @param {Request} request - Входящий запрос.
  * @returns {Promise<NextResponse>}
  */
-export async function POST(request) {
+export async function POST(request: Request) {
   try {
     const json = await request.json();
 
@@ -50,6 +50,6 @@ export async function POST(request) {
 
     return NextResponse.json(newTemplate, { status: 201 });
   } catch (error) {
-    return handleApiError(error, 'Failed to create map template');
+    return handleApiError(error instanceof Error ? error : new Error(String(error)), 'Failed to create map template');
   }
-}
+} 
