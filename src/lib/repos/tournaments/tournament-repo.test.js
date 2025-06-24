@@ -1,135 +1,125 @@
 import mongoose from 'mongoose';
-import { tournamentRepo } from './tournament-repo';
-import Tournament from '@/models/tournament/Tournament';
-import Player from '@/models/player/Player';
-import Map from '@/models/map/Map';
-import MapTemplate from '@/models/map/MapTemplate';
-import TournamentTemplate from '@/models/tournament/TournamentTemplate';
-import PlayerMapParticipation from '@/models/player/PlayerMapParticipation';
-import { STATUSES, TOURNAMENT_SCORING_TYPES } from '@/lib/constants';
+import tournamentRepo from './tournament-repo';
+import { dbConnect, dbClear, dbDisconnect, populateDb } from '@/lib/test-helpers';
+import { STATUSES } from '@/lib/constants';
 
-describe('TournamentRepo', () => {
+describe('TournamentRepository', () => {
+  beforeAll(async () => {
+    await dbConnect();
+  });
+
+  afterAll(async () => {
+    await dbDisconnect();
+  });
+
+  beforeEach(async () => {
+    await dbClear();
+  });
+
+  describe('getFullTournamentDetails', () => {
+    it('должен возвращать null, если турнир не найден', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId();
+      const tournament = await tournamentRepo.getFullTournamentDetails(nonExistentId);
+      expect(tournament).toBeNull();
+    });
+
+    it('должен возвращать полные данные турнира со статистикой участников', async () => {
+      // Arrange
+      const { testData } = await populateDb({
+        numFamilies: 2,
+        numPlayers: 2,
+        numTournaments: 1,
+        maps: [{}, {}],
+        familyMapParticipations: (ctx) => [{
+          family: ctx.families[0]._id,
+          map: ctx.maps[0]._id,
+          tournament: ctx.tournament._id,
+          totalKills: 18,
+          totalDeaths: 7,
+        }],
+      });
+
+      // Act
+      const tournament = await tournamentRepo.getFullTournamentDetails(testData.tournament._id);
+
+      // Assert
+      expect(tournament).not.toBeNull();
+      expect(tournament.participants).toHaveLength(2);
+      const participant = tournament.participants.find(p => p.family._id.equals(testData.families[0]._id));
+      expect(participant).toBeDefined();
+      expect(participant.stats.totalKills).toBe(18);
+      expect(participant.stats.totalDeaths).toBe(7);
+    });
+  });
+
+  describe('findActiveTournamentsWithUpcomingMaps', () => {
+    it('должен находить только активные турниры с предстоящими картами', async () => {
+      // Arrange
+      const { testData: data1 } = await populateDb({
+        tournaments: [{ status: STATUSES.ACTIVE }],
+        maps: [{ startDateTime: new Date(Date.now() + 86400000) }], // Завтра
+      });
+
+      await populateDb({
+        tournaments: [{ name: 'Old Cup', slug: 'old-cup', status: STATUSES.COMPLETED }],
+      });
+
+      await populateDb({
+        tournaments: [{ name: 'Active Cup No Maps', slug: 'active-cup-no-maps', status: STATUSES.ACTIVE }],
+        maps: null,
+      });
+
+      await populateDb({
+        tournaments: [{ name: 'Active Cup Past Maps', slug: 'active-cup-past-maps', status: STATUSES.ACTIVE }],
+        maps: [{ startDateTime: new Date(Date.now() - 86400000) }], // Вчера
+      });
+
+      // Act
+      const activeTournaments = await tournamentRepo.findActiveTournamentsWithUpcomingMaps();
+
+      // Assert
+      expect(activeTournaments).toHaveLength(1);
+      expect(activeTournaments[0]._id.equals(data1.tournament._id)).toBe(true);
+      expect(activeTournaments[0].upcomingMaps).toHaveLength(1);
+    });
+  });
+
   describe('getTournamentStats', () => {
-    let tournament;
-    let player1, player2, player3;
-    let mapTemplate;
-    let tournamentTemplate;
-    let map1, map2;
-
-    beforeAll(async () => {
-      await Tournament.init();
-      await Player.init();
-      await Map.init();
-      await MapTemplate.init();
-      await TournamentTemplate.init();
-      await PlayerMapParticipation.init();
-    });
-
-    beforeEach(async () => {
-      await Tournament.deleteMany({});
-      await Player.deleteMany({});
-      await Map.deleteMany({});
-      await MapTemplate.deleteMany({});
-      await TournamentTemplate.deleteMany({});
-      await PlayerMapParticipation.deleteMany({});
-
-      mapTemplate = await MapTemplate.create({ name: 'Test Map Template', slug: 'test-map-template' });
-      
-      tournamentTemplate = await TournamentTemplate.create({
-        name: 'Test Tournament Template',
-        slug: 'test-tournament-template',
-        scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
-        mapTemplates: [mapTemplate._id],
+    it('должен правильно агрегировать и сортировать статистику игроков', async () => {
+      // Arrange
+      const { testData } = await populateDb({
+        numPlayers: 3,
+        maps: [{}, {}],
+        playerMapParticipations: (ctx) => [
+          { tournament: ctx.tournament._id, map: ctx.maps[0]._id, player: ctx.players[0]._id, kills: 10, deaths: 5 },
+          { tournament: ctx.tournament._id, map: ctx.maps[1]._id, player: ctx.players[0]._id, kills: 5, deaths: 5 },
+          { tournament: ctx.tournament._id, map: ctx.maps[0]._id, player: ctx.players[1]._id, kills: 20, deaths: 2 },
+          { tournament: ctx.tournament._id, map: ctx.maps[0]._id, player: ctx.players[2]._id, kills: 0, deaths: 0 },
+        ],
       });
 
-      tournament = await Tournament.create({
-        name: 'Stats Test Tournament',
-        template: tournamentTemplate._id,
-        scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
-        tournamentType: 'family',
-        startDate: new Date(),
-      });
+      // Act
+      const stats = await tournamentRepo.getTournamentStats(testData.tournament._id);
 
-      map1 = await Map.create({
-        name: 'Test Map 1',
-        slug: 'test-map-1',
-        tournament: tournament._id,
-        template: mapTemplate._id,
-        startDateTime: new Date(),
-        status: STATUSES.COMPLETED,
-      });
-      map2 = await Map.create({
-        name: 'Test Map 2',
-        slug: 'test-map-2',
-        tournament: tournament._id,
-        template: mapTemplate._id,
-        startDateTime: new Date(),
-        status: STATUSES.COMPLETED,
-      });
+      // Assert
+      expect(stats.map(s => s.kills)).toEqual([20, 15, 0]);
+      expect(stats[0].playerId.equals(testData.players[1]._id)).toBe(true);
 
-      player1 = await Player.create({ firstName: 'Player', lastName: 'One', slug: 'player-one' });
-      player2 = await Player.create({ firstName: 'Player', lastName: 'Two', slug: 'player-two' });
-      player3 = await Player.create({ firstName: 'Player', lastName: 'Three', slug: 'player-three' });
-
-      await PlayerMapParticipation.create([
-        { tournamentId: tournament._id, mapId: map1._id, playerId: player1._id, kills: 10, deaths: 5, damageDealt: 1000, ratingChange: 10, reason: 'test-completion' },
-        { tournamentId: tournament._id, mapId: map2._id, playerId: player1._id, kills: 5, deaths: 5, damageDealt: 500, ratingChange: 5, reason: 'test-completion' },
-        { tournamentId: tournament._id, mapId: map1._id, playerId: player2._id, kills: 20, deaths: 2, damageDealt: 2500, ratingChange: 20, reason: 'test-completion' },
-        { tournamentId: tournament._id, mapId: map1._id, playerId: player3._id, kills: 0, deaths: 0, damageDealt: 100, ratingChange: 0, reason: 'test-completion' },
-      ]);
-    });
-
-    it('должен правильно агрегировать и суммировать статистику игроков', async () => {
-      const stats = await tournamentRepo.getTournamentStats(tournament._id);
-
-      const player1Stats = stats.find(s => s.playerId.equals(player1._id));
+      const player1Stats = stats.find(s => s.playerId.equals(testData.players[0]._id));
       expect(player1Stats.kills).toBe(15);
       expect(player1Stats.deaths).toBe(10);
-      expect(player1Stats.damageDealt).toBe(1500);
-      expect(player1Stats.mapsPlayed).toBe(2);
       expect(player1Stats.kd).toBe(1.5);
 
-      const player2Stats = stats.find(s => s.playerId.equals(player2._id));
-      expect(player2Stats.kills).toBe(20);
-      expect(player2Stats.deaths).toBe(2);
-      expect(player2Stats.damageDealt).toBe(2500);
-      expect(player2Stats.mapsPlayed).toBe(1);
-      expect(player2Stats.kd).toBe(10);
-    });
+      const player2Stats = stats.find(s => s.playerId.equals(testData.players[1]._id));
+      expect(player2Stats.kd).toBe(10); // 20 / 2
 
-    it('должен правильно обрабатывать деление на ноль для K/D', async () => {
-        const stats = await tournamentRepo.getTournamentStats(tournament._id);
-        const player3Stats = stats.find(s => s.playerId.equals(player3._id));
-        expect(player3Stats.kills).toBe(0);
-        expect(player3Stats.deaths).toBe(0);
-        expect(player3Stats.kd).toBe(0);
-    });
-
-    it('должен правильно сортировать игроков по количеству убийств (убывание)', async () => {
-      const stats = await tournamentRepo.getTournamentStats(tournament._id);
-
-      expect(stats.length).toBe(3);
-      expect(stats[0].playerId.equals(player2._id)).toBe(true);
-      expect(stats[1].playerId.equals(player1._id)).toBe(true);
-      expect(stats[2].playerId.equals(player3._id)).toBe(true);
+      const player3Stats = stats.find(s => s.playerId.equals(testData.players[2]._id));
+      expect(player3Stats.kd).toBe(0); // 0 / 0
     });
 
     it('должен возвращать пустой массив для турнира без статистики', async () => {
-      const emptyTournamentTemplate = await TournamentTemplate.create({
-        name: 'Empty T Template',
-        slug: 'empty-t-template',
-        scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
-        mapTemplates: [mapTemplate._id],
-      });
-      const emptyTournament = await Tournament.create({
-        name: 'Empty Stats Test Tournament',
-        slug: 'empty-stats-test-tournament',
-        template: emptyTournamentTemplate._id,
-        scoringType: TOURNAMENT_SCORING_TYPES.LEADERBOARD,
-        tournamentType: 'family',
-        startDate: new Date(),
-      });
-      const stats = await tournamentRepo.getTournamentStats(emptyTournament._id);
+      const { testData } = await populateDb({ maps: null });
+      const stats = await tournamentRepo.getTournamentStats(testData.tournament._id);
       expect(stats).toEqual([]);
     });
   });

@@ -1,4 +1,5 @@
 import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
+import tournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo';
 import { IMapTemplate } from '@/models/map/MapTemplate';
 import { DuplicateError, NotFoundError, ConflictError } from '@/lib/errors';
 import { FilterQuery, UpdateQuery } from 'mongoose';
@@ -84,7 +85,12 @@ class MapTemplateService {
       throw new ConflictError('Этот шаблон уже находится в архиве.');
     }
 
-    return this.repo.archive(id);
+    const archivedTemplate = await this.repo.archive(id);
+
+    // После успешной архивации удаляем этот шаблон из всех шаблонов турниров.
+    await tournamentTemplateRepo.removeMapTemplateFromAll(id);
+
+    return archivedTemplate;
   }
   
   /**

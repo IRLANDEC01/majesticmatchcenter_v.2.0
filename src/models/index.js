@@ -3,12 +3,13 @@
 // что Mongoose знает обо всех схемах до того, как начнутся операции с базой данных.
 
 import Family from './family/Family';
+import FamilyEarning from './family/FamilyEarning';
 import FamilyRatingHistory from './family/FamilyRatingHistory';
 import FamilyStats from './family/FamilyStats';
 import FamilyMapParticipation from './family/FamilyMapParticipation';
 import FamilyTournamentParticipation from './family/FamilyTournamentParticipation';
 
-import MapModel from './map/Map';
+import Map from './map/Map';
 import MapTemplate from './map/MapTemplate';
 
 import Player from './player/Player';
@@ -29,11 +30,12 @@ import './shared/weapon-stat-schema';
 
 const models = {
   Family,
+  FamilyEarning,
   FamilyRatingHistory,
   FamilyStats,
   FamilyMapParticipation,
   FamilyTournamentParticipation,
-  Map: MapModel,
+  Map,
   MapTemplate,
   Player,
   PlayerAchievement,

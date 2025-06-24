@@ -8,9 +8,9 @@
  * @enum {string}
  */
 export const CURRENCY_TYPES = {
-  MAJESTIC_COINS: 'MajesticCoins',
-  GTA_DOLLARS: 'GTADollars',
-  REAL_VALUE: 'RealValue',
+  MM_COINS: 'mm_coins',
+  GTA_DOLLARS: 'gta_dollars',
+  RUB: 'rub',
 };
 
 /**
@@ -40,21 +40,6 @@ export const TOURNAMENT_TYPES = {
 };
 
 /**
- * Типы турниров в зависимости от логики определения победителя.
- * @enum {string}
- */
-export const TOURNAMENT_SCORING_TYPES = {
-  MANUAL_SELECTION: 'MANUAL_SELECTION', // Победитель определяется администратором вручную
-  LEADERBOARD: 'LEADERBOARD', // Победитель определяется по очкам в таблице лидеров
-};
-
-/**
- * Массив значений типов подсчета очков в турнирах для использования в валидаторах Mongoose (enum).
- * @type {string[]}
- */
-export const TOURNAMENT_SCORING_VALUES = Object.values(TOURNAMENT_SCORING_TYPES);
-
-/**
  * Роли участников внутри семьи.
  * @enum {string}
  */
@@ -74,17 +59,17 @@ export const FAMILY_MEMBER_ROLE_VALUES = Object.values(FAMILY_MEMBER_ROLES);
  * Статусы жизненного цикла для сущностей (турниры, карты и т.д.).
  * Используем единый набор для консистентности.
  */
-export const LIFECYCLE_STATUSES = Object.freeze({
-  PLANNED: 'PLANNED',     // Запланировано, еще не началось
-  ACTIVE: 'ACTIVE',       // Идет прямо сейчас
-  COMPLETED: 'COMPLETED',   // Завершено
-  // Статус ARCHIVED обрабатывается через поле archivedAt, а не здесь.
-});
+export const LIFECYCLE_STATUSES = {
+  PLANNED: 'planned',
+  ACTIVE: 'active',
+  COMPLETED: 'completed',
+  ARCHIVED: 'archived',
+};
 
 /**
-* Массив значений статусов для валидации в Mongoose.
-* @type {string[]}
-*/
+ * Массив значений статусов для валидации в Mongoose.
+ * @type {string[]}
+ */
 export const LIFECYCLE_STATUSES_ENUM = Object.values(LIFECYCLE_STATUSES);
 
 /**
@@ -121,4 +106,16 @@ export const SEARCH_DEBOUNCE_DELAY_MS = 200;
  * Ограничение на количество результатов, возвращаемых при поиске в админ-панели.
  * Используется для предотвращения перегрузки и повышения производительности.
  */
-export const ADMIN_SEARCH_RESULTS_LIMIT = 15; 
+export const ADMIN_SEARCH_RESULTS_LIMIT = 15;
+
+export const ROLES = {
+  OWNER: 'owner',
+  MEMBER: 'member',
+};
+export const ROLES_ENUM = Object.values(ROLES);
+
+export const MAP_TEMPLATE_STATUSES = {
+  ACTIVE: 'active',
+  INACTIVE: 'inactive',
+};
+export const MAP_TEMPLATE_STATUSES_ENUM = Object.values(MAP_TEMPLATE_STATUSES); 

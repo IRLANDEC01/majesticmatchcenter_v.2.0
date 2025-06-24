@@ -1,20 +1,21 @@
 import mongoose from 'mongoose';
 import { connectToDatabase, disconnectFromDatabase } from './db.js';
 import models from '../models/index.js';
-import { STATUSES, TOURNAMENT_SCORING_TYPES, CURRENCY_TYPES, RESULT_TIERS } from './constants.js';
+import { STATUSES, CURRENCY_TYPES, RESULT_TIERS, MAP_TEMPLATE_STATUSES } from './constants.js';
+import MapTemplate from '@/models/map/MapTemplate';
+import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 
 const {
   Family,
   Player,
   Map,
   Tournament,
-  MapTemplate,
-  TournamentTemplate,
   FamilyTournamentParticipation,
   FamilyMapParticipation,
   PlayerTournamentParticipation,
   PlayerEarning,
   FamilyEarning,
+  PlayerMapParticipation,
 } = models;
 
 /**
@@ -46,6 +47,89 @@ export const dbClear = async () => {
 };
 
 /**
+ * Фабрика для создания тестового шаблона карты с валидными данными по умолчанию.
+ * @param {object} [overrides] - Объект для переопределения полей по умолчанию.
+ * @returns {Promise<import('@/models/map/MapTemplate').IMapTemplate>}
+ */
+export const createTestMapTemplate = async (overrides = {}) => {
+  const defaults = {
+    name: `Test Map Template ${new mongoose.Types.ObjectId().toString()}`,
+    description: 'A default description for a test map template.',
+    mapTemplateImage: 'default/image.png',
+    status: MAP_TEMPLATE_STATUSES.ACTIVE,
+    mapTemplates: [],
+    ...overrides,
+  };
+  const finalData = { ...defaults };
+
+  // Обрабатываем флаг архивации для тестов
+  if (finalData.isArchived) {
+    finalData.archivedAt = new Date();
+    delete finalData.isArchived;
+  }
+
+  return MapTemplate.create(finalData);
+};
+
+/**
+ * Фабрика для создания тестового шаблона турнира с валидными данными по умолчанию.
+ * @param {object} [overrides] - Объект для переопределения полей по умолчанию.
+ * @returns {Promise<import('@/models/tournament/TournamentTemplate').ITournamentTemplate>}
+ */
+export const createTestTournamentTemplate = async (overrides = {}) => {
+  const defaults = {
+    name: `Test Tournament Template ${new mongoose.Types.ObjectId().toString()}`,
+    description: 'A default description for a test tournament template.',
+    tournamentTemplateImage: 'default/tournament-image.png',
+    prizePool: [],
+  };
+
+  const finalData = { ...defaults, ...overrides };
+
+  // Обрабатываем флаг архивации для тестов
+  if (finalData.isArchived) {
+    finalData.archivedAt = new Date();
+    delete finalData.isArchived;
+  }
+
+  // Если шаблоны карт не переданы, создаем один по умолчанию, чтобы пройти валидацию модели
+  if (!finalData.mapTemplates || finalData.mapTemplates.length === 0) {
+    const defaultMap = await createTestMapTemplate();
+    finalData.mapTemplates = [defaultMap._id];
+  }
+  
+  return TournamentTemplate.create(finalData);
+};
+
+/**
+ * Создает тестовый турнир для использования в интеграционных тестах.
+ * @param {object} [overrides] - Объект для перезаписи полей по умолчанию.
+ * @returns {Promise<import('@/models/tournament/Tournament').ITournament>}
+ */
+export const createTestTournament = async (overrides = {}) => {
+  const defaults = {
+    name: 'Default Tournament Template',
+    slug: 'default-tournament-template',
+    template: new mongoose.Types.ObjectId(),
+    tournamentType: 'family',
+    status: STATUSES.ACTIVE,
+    startDate: new Date(),
+    participants: [],
+    ...overrides,
+  };
+
+  const finalData = { ...defaults };
+
+  // Обрабатываем флаг архивации для тестов
+  if (finalData.isArchived) {
+    finalData.archivedAt = new Date();
+    delete finalData.isArchived;
+  }
+
+  return Tournament.create(finalData);
+};
+
+/**
  * Наполняет базу данных ВАЛИДНЫМ и консистентным набором данных для тестов.
  * @param {object} [config] - Конфигурация для кастомизации создаваемых данных.
  * @returns {Promise<{testData: object}>} Объект с ключом testData, содержащий созданные Mongoose-документы.
@@ -72,13 +156,13 @@ export const populateDb = async (config = {}) => {
   const familyNames = ['Gucci', 'Uzi', 'Faze', 'Navi', 'Vitality'];
 
   // --- Шаблоны ---
-  context.mapTemplateDust2 = await MapTemplate.create({ name: 'Dust 2', slug: 'de_dust2' });
-  context.mapTemplateMirage = await MapTemplate.create({ name: 'Mirage', slug: 'de_mirage' });
+  context.mapTemplateDust2 = await createTestMapTemplate({ name: 'Dust 2', slug: 'de_dust2' });
+  context.mapTemplateMirage = await createTestMapTemplate({ name: 'Mirage', slug: 'de_mirage' });
   
   context.tournamentTemplates = [];
   if (numTournamentTemplates > 0) {
     for (let i = 0; i < numTournamentTemplates; i++) {
-      const template = await TournamentTemplate.create({
+      const template = await createTestTournamentTemplate({
         name: `Majestic Cup: Season ${i + 1}`,
         slug: `majestic-cup-season-${i + 1}`,
         mapTemplates: [context.mapTemplateDust2._id, context.mapTemplateMirage._id],
@@ -184,6 +268,26 @@ export const populateDb = async (config = {}) => {
     }
   }
   
+  // --- Участие игроков на картах (статистика) ---
+  if (config.playerMapParticipations) {
+    const pmpData = typeof config.playerMapParticipations === 'function'
+      ? config.playerMapParticipations(context)
+      : config.playerMapParticipations;
+    if (pmpData && pmpData.length > 0) {
+      await PlayerMapParticipation.insertMany(pmpData);
+    }
+  }
+
+  // --- Участие семей на картах (статистика) ---
+  if (config.familyMapParticipations) {
+    const fmpData = typeof config.familyMapParticipations === 'function'
+      ? config.familyMapParticipations(context)
+      : config.familyMapParticipations;
+    if (fmpData && fmpData.length > 0) {
+      await FamilyMapParticipation.insertMany(fmpData);
+    }
+  }
+
   // Перечитываем документы из базы, чтобы получить "чистые" данные без методов Mongoose
   const finalContext = {};
   for(const key in context) {

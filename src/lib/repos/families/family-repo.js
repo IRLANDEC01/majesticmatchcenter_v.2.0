@@ -1,5 +1,5 @@
-import Family from '@/models/family/Family.js';
-import BaseRepo from '../base-repo.js';
+import Family from '@/models/family/Family';
+import BaseRepo from '@/lib/repos/base-repo';
 import { FAMILY_MEMBER_ROLES } from '@/lib/constants.js';
 
 /**

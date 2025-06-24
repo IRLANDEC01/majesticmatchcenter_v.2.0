@@ -1,4 +1,4 @@
-import mongoose, { Document, Model, Schema, model, HookNextFunction } from 'mongoose';
+import mongoose, { Document, Model, Schema, model } from 'mongoose';
 import { IMapTemplate } from '@/models/map/MapTemplate';
 import { CURRENCY_VALUES, RESULT_TIERS_ENUM } from '@/lib/constants';
 
@@ -7,12 +7,21 @@ import { CURRENCY_VALUES, RESULT_TIERS_ENUM } from '@/lib/constants';
  * @description Интерфейс для правила распределения призов. Может быть использован и в шаблонах, и в турнирах.
  */
 export interface IPrizeRule {
-  target?: {
-    tier?: string; // Категория результата (например, "winner")
-    rank?: number; // Конкретное место (например, 1)
+  target: {
+    tier?: string; // e.g., 'winner'
+    rank?: {
+      from?: number; // e.g., 1
+      to?: number;   // e.g., 3
+    };
   };
-  currency: string; // Валюта приза
-  amount: number; // Сумма приза
+  reward?: {
+    amount: number;
+    currency: string;
+  };
+  pot?: {
+    amount: number;
+    currency: string;
+  };
 }
 
 /**
@@ -27,10 +36,8 @@ export interface ITournamentTemplate extends Document {
   slug: string;
   /** Краткое описание шаблона */
   description?: string;
-  /** URL на стандартное изображение для турниров, созданных по этому шаблону */
-  defaultImage?: string;
-  /** Правила турнира в текстовом формате */
-  rules?: string;
+  /** URL на изображение для турниров, созданных по этому шаблону */
+  tournamentTemplateImage: string;
   /** Структура призового фонда */
   prizePool?: IPrizeRule[];
   /** Сценарий турнира: массив ID или документов шаблонов карт */
@@ -50,7 +57,7 @@ export interface ITournamentTemplate extends Document {
  * @extends Model<ITournamentTemplate>
  * @description Интерфейс для модели Mongoose, позволяет добавлять статические методы.
  */
-export interface ITournamentTemplateModel extends Model<ITournamentTemplate> {}
+export interface ITournamentTemplateModel extends Model<ITournamentTemplate> { }
 
 /**
  * @const prizeRuleSchema
@@ -58,27 +65,34 @@ export interface ITournamentTemplateModel extends Model<ITournamentTemplate> {}
  */
 export const prizeRuleSchema = new Schema<IPrizeRule>({
   target: {
-    tier: { type: String, enum: RESULT_TIERS_ENUM },
-    rank: { type: Number, min: 1 },
-  },
-  currency: {
-    type: String,
+    type: {
+      tier: { type: String, enum: RESULT_TIERS_ENUM },
+      rank: {
+        from: { type: Number, min: 1 },
+        to: { type: Number, min: 1 },
+      },
+    },
     required: true,
-    enum: CURRENCY_VALUES,
   },
-  amount: {
-    type: Number,
-    required: true,
-    min: [0, 'Сумма приза не может быть отрицательной.'],
+  reward: {
+    type: {
+      amount: { type: Number, required: true, min: 0 },
+      currency: { type: String, required: true, enum: CURRENCY_VALUES },
+    },
+  },
+  pot: {
+    type: {
+      amount: { type: Number, required: true, min: 0 },
+      currency: { type: String, required: true, enum: CURRENCY_VALUES },
+    },
   },
 }, { _id: false });
 
 const tournamentTemplateSchema = new Schema<ITournamentTemplate, ITournamentTemplateModel>({
-  name: { type: String, required: [true, 'Название шаблона турнира является обязательным полем.'], trim: true, comment: 'Название шаблона, например, "Majestic Cup: Summer"' },
+  name: { type: String, required: [true, 'Название шаблона турнира является обязательным полем.'], trim: true, minlength: [3, 'Название должно содержать минимум 3 символа.'], comment: 'Название шаблона, например, "Majestic Cup: Summer"' },
   slug: { type: String, required: [true, 'Slug является обязательным полем.'], trim: true, lowercase: true, comment: 'Уникальный идентификатор для URL, например, "majestic-cup-summer"' },
-  description: { type: String, trim: true, comment: 'Краткое описание шаблона' },
-  defaultImage: { type: String, trim: true, comment: 'URL на стандартное изображение для турниров' },
-  rules: { type: String, trim: true, comment: 'Правила турнира в текстовом формате' },
+  description: { type: String, trim: true, maxlength: [1000, 'Описание не может превышать 1000 символов.'], comment: 'Краткое описание шаблона' },
+  tournamentTemplateImage: { type: String, trim: true, required: [true, 'Изображение для шаблона турнира обязательно.'], comment: 'URL на изображение для турниров, созданных по этому шаблону' },
   prizePool: { type: [prizeRuleSchema], comment: 'Структура призового фонда' },
   mapTemplates: {
     type: [{ type: Schema.Types.ObjectId, ref: 'MapTemplate' }],
@@ -96,7 +110,7 @@ const tournamentTemplateSchema = new Schema<ITournamentTemplate, ITournamentTemp
 });
 
 // Виртуальное поле
-tournamentTemplateSchema.virtual('isArchived').get(function(this: ITournamentTemplate) {
+tournamentTemplateSchema.virtual('isArchived').get(function (this: ITournamentTemplate) {
   return this.archivedAt != null;
 });
 
@@ -105,7 +119,7 @@ tournamentTemplateSchema.index({ name: 1 }, { unique: true, partialFilterExpress
 tournamentTemplateSchema.index({ slug: 1 }, { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } });
 
 // Хук для генерации slug
-tournamentTemplateSchema.pre('validate', function(this: ITournamentTemplate, next: HookNextFunction) {
+tournamentTemplateSchema.pre('validate', function (this: ITournamentTemplate, next) {
   if (this.name && !this.slug) {
     this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
   }

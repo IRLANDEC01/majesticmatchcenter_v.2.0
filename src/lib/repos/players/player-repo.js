@@ -1,5 +1,5 @@
-import Player from '@/models/player/Player.js';
-import BaseRepo from '../base-repo.js';
+import Player from '@/models/player/Player';
+import BaseRepo from '@/lib/repos/base-repo';
 
 /**
  * @class PlayerRepository

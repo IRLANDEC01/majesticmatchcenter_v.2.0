@@ -44,7 +44,7 @@ const mapTemplateSchema = new Schema<IMapTemplate>({
   description: {
     type: String,
     trim: true,
-    maxlength: [500, 'Описание шаблона карты не может превышать 500 символов.'],
+    maxlength: [1000, 'Описание шаблона карты не может превышать 500 символов.'],
   },
   // URL на изображение шаблона карты (превью)
   mapTemplateImage: {

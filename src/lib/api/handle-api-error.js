@@ -19,16 +19,26 @@ const errorHandlers = new Map([
  * @returns {NextResponse} - Стандартизированный ответ с ошибкой.
  */
 export function handleApiError(error, context = 'An unexpected error occurred') {
+  let processedError = error;
+
+  // Распознаем специфичную ошибку MongoDB для дубликата ключа
+  if (processedError.name === 'MongoServerError' && processedError.code === 11000) {
+    const field = Object.keys(processedError.keyPattern)[0];
+    const value = processedError.keyValue[field];
+    const message = `Запись с полем '${field}' и значением '${value}' уже существует.`;
+    processedError = new DuplicateError(message);
+  }
+
   // Логируем ошибку для отладки. В тестовой среде выводим полный объект ошибки.
   if (process.env.NODE_ENV === 'test') {
-    console.error('TEST_ERROR_DETAIL:', error);
+    console.error('TEST_ERROR_DETAIL:', processedError);
   } else {
-    console.error(`${context}:`, error);
+    console.error(`${context}:`, processedError);
   }
 
   for (const [ErrorClass, handler] of errorHandlers.entries()) {
-    if (error instanceof ErrorClass) {
-      return handler(error);
+    if (processedError instanceof ErrorClass) {
+      return handler(processedError);
     }
   }
 

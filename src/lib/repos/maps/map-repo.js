@@ -1,6 +1,6 @@
 import { getCacheAdapter } from '@/lib/cache';
 import Map from '@/models/map/Map';
-import BaseRepo from '../base-repo.js';
+import BaseRepo from '@/lib/repos/base-repo';
 import { AppError } from '@/lib/errors';
 
 /**
