@@ -1,4 +1,4 @@
-import mongoose, { Document, Model, Schema, model } from 'mongoose';
+import mongoose, { Model, Schema, model } from 'mongoose';
 import { IMapTemplate } from '@/models/map/MapTemplate';
 import { CURRENCY_VALUES, RESULT_TIERS_ENUM } from '@/lib/constants';
 
@@ -26,10 +26,9 @@ export interface IPrizeRule {
 
 /**
  * @interface ITournamentTemplate
- * @extends Document
  * @description Интерфейс, описывающий документ шаблона турнира в базе данных.
  */
-export interface ITournamentTemplate extends Document {
+export interface ITournamentTemplate {
   /** Название шаблона, например, "Majestic Cup: Summer" */
   name: string;
   /** Уникальный идентификатор для URL, например, "majestic-cup-summer" */
@@ -41,7 +40,7 @@ export interface ITournamentTemplate extends Document {
   /** Структура призового фонда */
   prizePool?: IPrizeRule[];
   /** Сценарий турнира: массив ID или документов шаблонов карт */
-  mapTemplates: (Schema.Types.ObjectId | IMapTemplate)[];
+  mapTemplates: (mongoose.Types.ObjectId | IMapTemplate)[];
   /** Счетчик, сколько раз этот шаблон был использован */
   usageCount: number;
   /** Виртуальное поле для проверки, архивирован ли шаблон */
@@ -51,13 +50,6 @@ export interface ITournamentTemplate extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
-
-/**
- * @interface ITournamentTemplateModel
- * @extends Model<ITournamentTemplate>
- * @description Интерфейс для модели Mongoose, позволяет добавлять статические методы.
- */
-export interface ITournamentTemplateModel extends Model<ITournamentTemplate> { }
 
 /**
  * @const prizeRuleSchema
@@ -88,7 +80,7 @@ export const prizeRuleSchema = new Schema<IPrizeRule>({
   },
 }, { _id: false });
 
-const tournamentTemplateSchema = new Schema<ITournamentTemplate, ITournamentTemplateModel>({
+const tournamentTemplateSchema = new Schema<ITournamentTemplate>({
   name: { type: String, required: [true, 'Название шаблона турнира является обязательным полем.'], trim: true, minlength: [3, 'Название должно содержать минимум 3 символа.'], comment: 'Название шаблона, например, "Majestic Cup: Summer"' },
   slug: { type: String, required: [true, 'Slug является обязательным полем.'], trim: true, lowercase: true, comment: 'Уникальный идентификатор для URL, например, "majestic-cup-summer"' },
   description: { type: String, trim: true, maxlength: [1000, 'Описание не может превышать 1000 символов.'], comment: 'Краткое описание шаблона' },
@@ -126,6 +118,6 @@ tournamentTemplateSchema.pre('validate', function (this: ITournamentTemplate, ne
   next();
 });
 
-const TournamentTemplate = (mongoose.models.TournamentTemplate as ITournamentTemplateModel) || model<ITournamentTemplate, ITournamentTemplateModel>('TournamentTemplate', tournamentTemplateSchema);
+const TournamentTemplate = (mongoose.models.TournamentTemplate as Model<ITournamentTemplate>) || model<ITournamentTemplate>('TournamentTemplate', tournamentTemplateSchema);
 
 export default TournamentTemplate; 

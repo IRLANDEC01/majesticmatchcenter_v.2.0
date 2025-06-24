@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { HydratedDocument } from 'mongoose';
 import { GET, PATCH } from './route';
 import { createTestTournamentTemplate, dbClear } from '@/lib/test-helpers';
 import TournamentTemplate, { ITournamentTemplate } from '@/models/tournament/TournamentTemplate';
@@ -9,7 +10,7 @@ vi.mock('next/cache', () => ({
 }));
 
 describe('/api/admin/tournament-templates/[id]', () => {
-  let testTemplate: ITournamentTemplate;
+  let testTemplate: HydratedDocument<ITournamentTemplate>;
 
   beforeEach(async () => {
     await dbClear();
@@ -77,6 +78,43 @@ describe('/api/admin/tournament-templates/[id]', () => {
       const response = await PATCH(request, { params: { id: testTemplate._id.toString() } });
 
       expect(response.status).toBe(409);
+    });
+
+    describe('Validation', () => {
+      it('должен возвращать 400, если название слишком короткое', async () => {
+        // Arrange
+        const request = new Request(`http://localhost/api/admin/tournament-templates/${testTemplate._id.toString()}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: 'a' }),
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        // Act
+        const response = await PATCH(request, { params: { id: testTemplate._id.toString() } });
+        const body = await response.json();
+
+        // Assert
+        expect(response.status).toBe(400);
+        expect(body.errors.name).toBeDefined();
+        expect(body.errors.name[0]).toContain('минимум 3 символа');
+      });
+
+      it('должен возвращать 400, если массив шаблонов карт пустой', async () => {
+        // Arrange
+        const request = new Request(`http://localhost/api/admin/tournament-templates/${testTemplate._id.toString()}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ mapTemplates: [] }),
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        // Act
+        const response = await PATCH(request, { params: { id: testTemplate._id.toString() } });
+        const body = await response.json();
+
+        // Assert
+        expect(response.status).toBe(400);
+        expect(body.errors.mapTemplates).toBeDefined();
+      });
     });
   });
 }); 

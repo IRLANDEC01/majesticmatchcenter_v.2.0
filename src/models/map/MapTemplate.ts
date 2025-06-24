@@ -1,10 +1,11 @@
-import mongoose, { Document, Model, Schema } from 'mongoose';
+import mongoose, { HydratedDocument, Model, Schema, Types } from 'mongoose';
 
 // =================================
 // Интерфейс для документа MapTemplate
 // Описывает поля, которые есть у каждой записи в БД
 // =================================
-export interface IMapTemplate extends Document {
+export interface IMapTemplate {
+  _id: Types.ObjectId;
   /** Название шаблона, например, "Захват флага на 'Стройке'" */
   name: string;
   /** Уникальный идентификатор для URL, например, "ctf-construction" */
@@ -19,6 +20,8 @@ export interface IMapTemplate extends Document {
   archivedAt: Date | null;
   /** Виртуальное поле для проверки статуса архивации */
   isArchived: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // =================================
@@ -98,7 +101,7 @@ mapTemplateSchema.index({ archivedAt: 1 });
 // =================================
 
 // Pre-save хук для генерации slug из name, если он не предоставлен
-mapTemplateSchema.pre('validate', function(this: IMapTemplate, next) {
+mapTemplateSchema.pre('validate', function(this: HydratedDocument<IMapTemplate>, next) {
   if (this.isModified('name') && !this.isModified('slug')) {
     this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
   }
@@ -108,6 +111,6 @@ mapTemplateSchema.pre('validate', function(this: IMapTemplate, next) {
 // =================================
 // Создание и экспорт модели
 // =================================
-const MapTemplate: Model<IMapTemplate> = mongoose.models.MapTemplate || mongoose.model<IMapTemplate>('MapTemplate', mapTemplateSchema);
+const MapTemplate = (mongoose.models.MapTemplate as Model<IMapTemplate>) || mongoose.model<IMapTemplate>('MapTemplate', mapTemplateSchema);
 
 export default MapTemplate; 

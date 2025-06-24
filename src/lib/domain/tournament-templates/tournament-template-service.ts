@@ -1,12 +1,11 @@
-import mongoose from 'mongoose';
+import mongoose, { HydratedDocument } from 'mongoose';
 import tournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo';
 import { ConflictError, NotFoundError } from '@/lib/errors';
 import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
 import { ITournamentTemplate } from '@/models/tournament/TournamentTemplate';
 import { IMapTemplate } from '@/models/map/MapTemplate';
 import { CreateTournamentTemplateDto, UpdateTournamentTemplateDto } from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
-import { IFindParams } from '@/lib/repos/base-repo';
-import { IFindResult } from '@/lib/repos/base-repo';
+import { IFindParams, IFindResult } from '@/lib/repos/base-repo';
 
 /**
  * @class TournamentTemplateService
@@ -22,7 +21,7 @@ class TournamentTemplateService {
    * @returns {Promise<ITournamentTemplate>} Найденный шаблон.
    * @throws {NotFoundError} Если шаблон с таким ID не найден.
    */
-  async getTournamentTemplateById(id: string): Promise<ITournamentTemplate> {
+  async getTournamentTemplateById(id: string): Promise<HydratedDocument<ITournamentTemplate>> {
     const template = await this.repo.findById(id);
     if (!template) {
       throw new NotFoundError(`Шаблон турнира с ID ${id} не найден.`);
@@ -48,20 +47,14 @@ class TournamentTemplateService {
    * @param {CreateTournamentTemplateDto} data - DTO с данными для создания.
    * @returns {Promise<ITournamentTemplate>} Созданный шаблон турнира.
    */
-  async createTournamentTemplate(data: CreateTournamentTemplateDto): Promise<ITournamentTemplate> {
-    const { name, mapTemplates, ...remaningData } = data;
+  async createTournamentTemplate(data: CreateTournamentTemplateDto): Promise<HydratedDocument<ITournamentTemplate>> {
+    const { name } = data;
     const existingTemplate = await this.repo.find({ filter: { name }, limit: 1 });
     if (existingTemplate.total > 0) {
       throw new ConflictError(`Шаблон турнира с именем "${name}" уже существует.`);
     }
 
-    const finalData = {
-      ...remaningData,
-      name,
-      mapTemplates: mapTemplates.map(id => new mongoose.Types.ObjectId(id)),
-    };
-
-    return this.repo.create(finalData as any);
+    return this.repo.create(data as any);
   }
 
   /**
@@ -70,18 +63,20 @@ class TournamentTemplateService {
    * @param {UpdateTournamentTemplateDto} data - DTO с данными для обновления.
    * @returns {Promise<ITournamentTemplate>} Обновленный шаблон турнира.
    */
-  async updateTournamentTemplate(id: string, data: UpdateTournamentTemplateDto): Promise<ITournamentTemplate> {
+  async updateTournamentTemplate(id: string, data: UpdateTournamentTemplateDto): Promise<HydratedDocument<ITournamentTemplate>> {
     const template = await this.getTournamentTemplateById(id);
 
-    if (data.mapTemplates) {
-      await this.validateMapTemplates(data.mapTemplates);
+    if (data.name && data.name !== template.name) {
+      const existingByNameResult = await this.repo.find({ filter: { name: data.name }, limit: 1 });
+      if (existingByNameResult.total > 0 && existingByNameResult.data[0]._id.toString() !== id) {
+        throw new ConflictError(`Шаблон турнира с именем "${data.name}" уже существует.`);
+      }
     }
-    
-    const updatedTemplate = await this.repo.update(id, data);
-    if (!updatedTemplate) {
-      throw new NotFoundError(`Шаблон турнира с ID ${id} не найден для обновления.`);
-    }
-    return updatedTemplate;
+
+    Object.assign(template, data);
+    await template.save();
+
+    return template;
   }
 
   /**
@@ -90,7 +85,7 @@ class TournamentTemplateService {
    * @returns {Promise<ITournamentTemplate>} Архивированный шаблон.
    * @throws {ConflictError} Если шаблон уже заархивирован.
    */
-  async archiveTournamentTemplate(id: string): Promise<ITournamentTemplate> {
+  async archiveTournamentTemplate(id: string): Promise<HydratedDocument<ITournamentTemplate>> {
     const template = await this.repo.findById(id, { includeArchived: true });
     if (!template) {
       throw new NotFoundError(`Шаблон турнира с ID ${id} не найден.`);
@@ -98,11 +93,9 @@ class TournamentTemplateService {
     if (template.archivedAt) {
       throw new ConflictError('Этот шаблон турнира уже находится в архиве.');
     }
-    const archivedTemplate = await this.repo.archive(id);
-    if (!archivedTemplate) {
-      throw new NotFoundError(`Шаблон турнира с ID ${id} не найден для архивации.`);
-    }
-    return archivedTemplate;
+    template.archivedAt = new Date();
+    await template.save();
+    return template;
   }
 
   /**
@@ -111,7 +104,7 @@ class TournamentTemplateService {
    * @returns {Promise<ITournamentTemplate>} Восстановленный шаблон.
    * @throws {ConflictError} Если шаблон не находится в архиве.
    */
-  async restoreTournamentTemplate(id: string): Promise<ITournamentTemplate> {
+  async restoreTournamentTemplate(id: string): Promise<HydratedDocument<ITournamentTemplate>> {
     const template = await this.repo.findById(id, { includeArchived: true });
     if (!template) {
       throw new NotFoundError(`Шаблон турнира с ID ${id} не найден.`);
@@ -119,11 +112,9 @@ class TournamentTemplateService {
     if (!template.archivedAt) {
       throw new ConflictError('Этот шаблон турнира не находится в архиве.');
     }
-    const restoredTemplate = await this.repo.restore(id);
-    if (!restoredTemplate) {
-      throw new NotFoundError(`Шаблон турнира с ID ${id} не найден для восстановления.`);
-    }
-    return restoredTemplate;
+    template.archivedAt = undefined;
+    await template.save();
+    return template;
   }
 
   /**
@@ -152,7 +143,7 @@ class TournamentTemplateService {
 
     const archivedTemplate = existingMapTemplates.find((mt: IMapTemplate) => mt.isArchived);
     if (archivedTemplate) {
-      throw new ConflictError(`Нельзя добавить в шаблон архивированную карту: ${archivedTemplate.name} (ID: ${(archivedTemplate._id as mongoose.Types.ObjectId).toString()}).`);
+      throw new ConflictError(`Нельзя добавить в шаблон архивированную карту: ${archivedTemplate.name} (ID: ${archivedTemplate._id.toString()}).`);
     }
   }
 }

@@ -1,77 +1,66 @@
-import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
-import { PATCH } from './route.ts';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { PATCH } from './route';
 import MapTemplate from '@/models/map/MapTemplate';
 import { revalidatePath } from 'next/cache';
-import mongoose from 'mongoose';
+import { dbClear } from '@/lib/test-helpers';
+import { HydratedDocument } from 'mongoose';
+import { IMapTemplate } from '@/models/map/MapTemplate';
 
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
 describe('PATCH /api/admin/map-templates/[id]/restore', () => {
-  beforeAll(dbConnect);
-  afterAll(dbDisconnect);
+  let template: HydratedDocument<IMapTemplate>;
+
   beforeEach(async () => {
     await dbClear();
-    revalidatePath.mockClear();
-  });
-
-  it('должен успешно восстанавливать шаблон и вызывать revalidatePath', async () => {
-    // Arrange
-    const template = await MapTemplate.create({
+    vi.mocked(revalidatePath).mockClear();
+    template = await MapTemplate.create({
       name: 'Template to restore',
       mapTemplateImage: 'path/to/image.jpg',
       archivedAt: new Date(),
     });
-    
+  });
+
+  it('должен успешно восстанавливать шаблон и вызывать revalidatePath', async () => {
     const request = new Request(`http://localhost/api/admin/map-templates/${template._id}/restore`, {
       method: 'PATCH',
     });
 
-    // Act
     const response = await PATCH(request, { params: { id: template._id.toString() } });
     const body = await response.json();
-    const updatedTemplate = await MapTemplate.findById(template._id).lean();
+    const updatedTemplate = await MapTemplate.findById(template._id);
 
-    // Assert
     expect(response.status).toBe(200);
     expect(body.archivedAt).toBeNull();
-    expect(updatedTemplate.archivedAt).toBeNull();
-    
+    expect(updatedTemplate!.archivedAt).toBeNull();
+
     expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
     expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
   it('должен возвращать 404, если шаблон для восстановления не найден', async () => {
-    // Arrange
-    const nonExistentId = new mongoose.Types.ObjectId().toString();
+    const nonExistentId = '605c72a6b579624e50a9d8e1';
     const request = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}/restore`, {
       method: 'PATCH',
     });
 
-    // Act
     const response = await PATCH(request, { params: { id: nonExistentId } });
 
-    // Assert
     expect(response.status).toBe(404);
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('должен возвращать 409 (Conflict), если шаблон не находится в архиве', async () => {
-    // Arrange
-    const template = await MapTemplate.create({
-      name: 'Not archived template',
-      mapTemplateImage: 'path/to/image.jpg',
-      archivedAt: null,
-    });
+    await template.updateOne({ archivedAt: null });
+
     const request = new Request(`http://localhost/api/admin/map-templates/${template._id}/restore`, {
       method: 'PATCH',
     });
 
-    // Act
     const response = await PATCH(request, { params: { id: template._id.toString() } });
 
-    // Assert
     expect(response.status).toBe(409);
     expect(revalidatePath).not.toHaveBeenCalled();
   });

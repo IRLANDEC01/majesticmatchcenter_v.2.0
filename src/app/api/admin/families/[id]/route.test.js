@@ -1,36 +1,30 @@
-import { GET, PUT } from './route.js';
-import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
+import { describe, it, expect, beforeEach, vi, afterAll, beforeAll } from 'vitest';
+import { GET, PUT, DELETE } from './route';
+import { dbClear, populateDb } from '@/lib/test-helpers';
 import Family from '@/models/family/Family';
 import Player from '@/models/player/Player';
 import { revalidatePath } from 'next/cache';
 import mongoose from 'mongoose';
 
 // Мокируем внешние зависимости
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
-describe('/api/admin/families/[id]', () => {
-  let owner;
+describe('API /api/admin/families/[id]', () => {
+  let testData;
 
-  beforeAll(async () => {
-    await dbConnect();
-  });
-
-  afterAll(async () => {
-    await dbDisconnect();
-  });
-  
   beforeEach(async () => {
     await dbClear();
-    revalidatePath.mockClear();
-    owner = await Player.create({ firstName: 'Test', lastName: 'Owner' });
+    vi.mocked(revalidatePath).mockClear();
+    const { family, player } = await populateDb({ numFamilies: 1, numPlayers: 1 });
+    testData = { family, player };
   });
 
   describe('GET', () => {
     it('должен возвращать семью по ID и статус 200', async () => {
       // Arrange
-      const family = await Family.create({ name: 'Test Family', displayLastName: 'Test', owner: owner._id });
+      const family = await Family.create({ name: 'Test Family', displayLastName: 'Test', owner: testData.player._id });
       const request = new Request(`http://localhost/api/admin/families/${family._id}`);
 
       // Act
@@ -56,7 +50,7 @@ describe('/api/admin/families/[id]', () => {
 
     it('должен возвращать 404, если семья архивирована', async () => {
       // Arrange
-      const family = await Family.create({ name: 'Archived Family', displayLastName: 'Archived', owner: owner._id, archivedAt: new Date() });
+      const family = await Family.create({ name: 'Archived Family', displayLastName: 'Archived', owner: testData.player._id, archivedAt: new Date() });
       const request = new Request(`http://localhost/api/admin/families/${family._id}`);
       
       // Act
@@ -79,7 +73,7 @@ describe('/api/admin/families/[id]', () => {
   describe('PUT', () => {
     it('должен успешно обновлять семью и вызывать revalidatePath', async () => {
       // Arrange
-      const family = await Family.create({ name: 'Original Name', displayLastName: 'Original', owner: owner._id });
+      const family = await Family.create({ name: 'Original Name', displayLastName: 'Original', owner: testData.player._id });
       const updateData = { description: 'A new description' };
       const request = new Request(`http://localhost/api/admin/families/${family._id}`, {
         method: 'PUT',
@@ -102,8 +96,8 @@ describe('/api/admin/families/[id]', () => {
 
     it('должен возвращать 409 при попытке обновить имя на уже существующее', async () => {
       // Arrange
-      await Family.create({ name: 'Existing Name', displayLastName: 'Existing', owner: owner._id });
-      const familyToUpdate = await Family.create({ name: 'Original Name', displayLastName: 'Original', owner: owner._id });
+      await Family.create({ name: 'Existing Name', displayLastName: 'Existing', owner: testData.player._id });
+      const familyToUpdate = await Family.create({ name: 'Original Name', displayLastName: 'Original', owner: testData.player._id });
 
       const request = new Request(`http://localhost/api/admin/families/${familyToUpdate._id}`, {
         method: 'PUT',

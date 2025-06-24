@@ -1,21 +1,19 @@
+import { describe, it, expect, beforeEach, vi, afterAll, beforeAll } from 'vitest';
 import { POST, GET } from './route';
-import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
+import { dbClear } from '@/lib/test-helpers';
 import Family from '@/models/family/Family';
 import Player from '@/models/player/Player';
 import { revalidatePath } from 'next/cache';
 
 // Мокируем внешние зависимости
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
 describe('API /api/admin/families', () => {
-  beforeAll(dbConnect);
-  afterAll(dbDisconnect);
-  
   beforeEach(async () => {
     await dbClear();
-    revalidatePath.mockClear();
+    vi.mocked(revalidatePath).mockClear();
   });
 
   describe('POST /api/admin/families', () => {

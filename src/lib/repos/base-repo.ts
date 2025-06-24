@@ -20,7 +20,7 @@ export interface IFindParams<T> {
 
 // Определяем интерфейс для результата метода find
 export interface IFindResult<T> {
-  data: T[];
+  data: HydratedDocument<T>[];
   total: number;
   page: number;
   limit: number;
@@ -30,7 +30,7 @@ export interface IFindResult<T> {
  * Абстрактный базовый репозиторий с поддержкой Generics и кеширования.
  * @template T - Тип документа Mongoose, расширяющий Document и IArchivable.
  */
-abstract class BaseRepo<T extends Document & IArchivable> {
+abstract class BaseRepo<T extends IArchivable> {
   protected model: Model<T>;
   protected cachePrefix: string;
   protected cache: CacheAdapter;
@@ -68,65 +68,67 @@ abstract class BaseRepo<T extends Document & IArchivable> {
     }
 
     if (status === 'active') {
+      // @ts-ignore
       query.archivedAt = null;
     } else if (status === 'archived') {
+      // @ts-ignore
       query.archivedAt = { $ne: null };
     }
 
     const [data, total] = await Promise.all([
-      this.model.find(query).sort(sort).skip(skip).limit(limitNum).lean().exec() as Promise<T[]>,
+      this.model.find(query).sort(sort).skip(skip).limit(limitNum).exec(),
       this.model.countDocuments(query),
     ]);
 
     return { data, total, page: pageNum, limit: limitNum };
   }
 
-  async findById(id: string, { includeArchived = false } = {}): Promise<T | null> {
+  async findById(id: string, { includeArchived = false } = {}): Promise<HydratedDocument<T> | null> {
     const query: FilterQuery<T> = { _id: id as any };
     if (!includeArchived) {
+      // @ts-ignore
       query.archivedAt = null;
     }
-    return this.model.findOne(query).exec() as Promise<T | null>;
+    return this.model.findOne(query).exec();
   }
 
-  async create(data: Partial<T>): Promise<T> {
+  async create(data: Partial<T>): Promise<HydratedDocument<T>> {
     const newDoc = new this.model(data);
     await newDoc.save();
-    return newDoc.toObject() as T;
+    return newDoc;
   }
 
-  async update(id: string, updateData: UpdateQuery<T>): Promise<T | null> {
-    const updatedDoc = (await this.model
+  async update(id: string, updateData: UpdateQuery<T>): Promise<HydratedDocument<T> | null> {
+    const updatedDoc = await this.model
       .findByIdAndUpdate(id, updateData, { new: true, runValidators: true })
-      .lean()
-      .exec()) as T | null;
-      
+      .exec();
+
     if (updatedDoc) {
       await this.cache.delete(this.getCacheKey(id));
     }
     return updatedDoc;
   }
 
-  async archive(id: string): Promise<T> {
-    const doc = await this.model.findById(id);
+  async archive(id: string): Promise<HydratedDocument<T>> {
+    const doc = await this.findById(id, { includeArchived: true });
     if (!doc) {
       throw new AppError(`Документ с ID ${id} не найден для архивации.`, 404);
     }
     doc.set('archivedAt', new Date());
     await doc.save();
     await this.cache.delete(this.getCacheKey(id));
-    return doc.toObject() as T;
+    return doc;
   }
 
-  async restore(id: string): Promise<T> {
-    const doc = await this.model.findById(id);
+  async restore(id: string): Promise<HydratedDocument<T>> {
+    const doc = await this.findById(id, { includeArchived: true });
     if (!doc) {
       throw new AppError(`Документ с ID ${id} не найден для восстановления.`, 404);
     }
     doc.set('archivedAt', null);
     await doc.save();
     await this.cache.delete(this.getCacheKey(id));
-    return doc.toObject() as T;
+    return doc;
   }
 }
 

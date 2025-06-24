@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { HydratedDocument } from 'mongoose';
 import { PATCH } from './route';
 import { createTestTournamentTemplate, dbClear } from '@/lib/test-helpers';
 import TournamentTemplate, { ITournamentTemplate } from '@/models/tournament/TournamentTemplate';
@@ -11,14 +12,14 @@ vi.mock('next/cache', () => ({
 }));
 
 describe('PATCH /api/admin/tournament-templates/[id]/archive', () => {
-  let template: ITournamentTemplate;
+  let template: HydratedDocument<ITournamentTemplate>;
 
   beforeEach(async () => {
     await dbClear();
     vi.mocked(revalidatePath).mockClear();
 
     // Создаем шаблон и явно утверждаем его тип
-    template = (await createTestTournamentTemplate({ name: 'Template to Archive' })) as ITournamentTemplate;
+    template = await createTestTournamentTemplate({ name: 'Template to Archive' });
   });
 
   it('должен успешно архивировать шаблон и вызывать revalidatePath', async () => {

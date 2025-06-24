@@ -1,25 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { HydratedDocument } from 'mongoose';
 import { PATCH } from './route';
 import { createTestTournamentTemplate, dbClear } from '@/lib/test-helpers';
 import TournamentTemplate, { ITournamentTemplate } from '@/models/tournament/TournamentTemplate';
 import { revalidatePath } from 'next/cache';
-import mongoose from 'mongoose';
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
 describe('PATCH /api/admin/tournament-templates/[id]/restore', () => {
-  let archivedTemplate: ITournamentTemplate;
+  let archivedTemplate: HydratedDocument<ITournamentTemplate>;
 
   beforeEach(async () => {
     await dbClear();
     vi.mocked(revalidatePath).mockClear();
 
-    archivedTemplate = (await createTestTournamentTemplate({
+    archivedTemplate = await createTestTournamentTemplate({
       name: 'Archived for Restore Test',
       archivedAt: new Date(),
-    })) as ITournamentTemplate;
+    });
   });
 
   it('должен успешно восстанавливать шаблон из архива', async () => {
@@ -44,7 +44,7 @@ describe('PATCH /api/admin/tournament-templates/[id]/restore', () => {
 
   it('должен возвращать 404 для несуществующего ID', async () => {
     // Arrange
-    const nonExistentId = new mongoose.Types.ObjectId().toString();
+    const nonExistentId = '605c72ef9f1b2c001f7b8b17';
     const request = new Request(
       `http://localhost/api/admin/tournament-templates/${nonExistentId}/restore`,
       {
@@ -63,9 +63,9 @@ describe('PATCH /api/admin/tournament-templates/[id]/restore', () => {
 
   it('должен возвращать 409, если шаблон не находится в архиве', async () => {
     // Arrange
-    const activeTemplate = (await createTestTournamentTemplate({
+    const activeTemplate = await createTestTournamentTemplate({
       name: 'Active Template',
-    })) as ITournamentTemplate;
+    });
     const request = new Request(
       `http://localhost/api/admin/tournament-templates/${activeTemplate._id.toString()}/restore`,
       {

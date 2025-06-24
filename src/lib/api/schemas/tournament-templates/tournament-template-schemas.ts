@@ -41,30 +41,47 @@ const prizeRuleSchema = z.object({
 
 // --- Основные схемы для DTO ---
 
+const commonNameValidation = z
+  .string({ required_error: 'Название обязательно для заполнения.' })
+  .min(3, 'Название должно содержать минимум 3 символа.')
+  .max(100, 'Название не должно превышать 100 символов.')
+  .regex(/^[a-zA-Z0-9 .,!?'"()-]+$/, 'Название может содержать только латинские буквы, цифры и знаки препинания.');
+
 /**
  * Схема для создания нового шаблона турнира.
  * Все поля, необходимые для создания, здесь обязательны.
  */
 export const createTournamentTemplateSchema = z.object({
-  name: z.string().min(3, 'Название должно содержать минимум 3 символа.'),
+  name: commonNameValidation,
   slug: z.string().regex(/^[a-z0-9-]+$/, { message: 'Slug может содержать только строчные буквы, цифры и дефисы.' }).optional(),
   description: z.string().max(1000, 'Описание не может превышать 1000 символов.').optional(),
-  tournamentTemplateImage: z.string().url('URL изображения должен быть корректным.'),
+  tournamentTemplateImage: z.string().nonempty('URL изображения не может быть пустым.'),
   prizePool: z.array(prizeRuleSchema).optional(),
   mapTemplates: z.array(objectIdSchema).min(1, 'Должен быть выбран хотя бы один шаблон карты.'),
 });
 
 /**
  * Схема для обновления существующего шаблона турнира.
- * Все поля здесь опциональны, так как можно обновлять только часть данных.
+ * Все поля опциональны.
  */
-export const updateTournamentTemplateSchema = createTournamentTemplateSchema.partial().extend({
-  // Уточняем правило для mapTemplates при обновлении:
-  // Поле можно не передавать, но если оно есть, оно не может быть пустым.
-  mapTemplates: z.array(objectIdSchema).min(1, 'Должен быть выбран хотя бы один шаблон карты.').optional(),
+export const tournamentTemplateUpdateSchema = z.object({
+  name: commonNameValidation.optional(),
+  description: z.string().max(500, 'Описание не должно превышать 500 символов.').optional(),
+  rules: z.string().max(2000, 'Правила не должны превышать 2000 символов.').optional(),
+  slug: z.string()
+    .regex(/^[a-z0-9-]+$/, { message: 'Slug может содержать только строчные буквы, цифры и дефисы.' })
+    .optional(),
+  tournamentTemplateImage: z.string()
+    .nonempty('URL изображения не может быть пустым.')
+    .optional(),
+  prizePool: z.array(prizeRuleSchema)
+    .optional(),
+  mapTemplates: z.array(objectIdSchema)
+    .min(1, 'Должен быть выбран хотя бы один шаблон карты.')
+    .optional(),
 });
 
 // --- Вывод типов для использования в коде ---
 
 export type CreateTournamentTemplateDto = z.infer<typeof createTournamentTemplateSchema>;
-export type UpdateTournamentTemplateDto = z.infer<typeof updateTournamentTemplateSchema>; 
+export type UpdateTournamentTemplateDto = z.infer<typeof tournamentTemplateUpdateSchema>; 

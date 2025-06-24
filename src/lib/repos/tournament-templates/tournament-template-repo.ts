@@ -5,6 +5,10 @@ class TournamentTemplateRepo extends BaseRepo<ITournamentTemplate> {
   constructor() {
     super(TournamentTemplate, 'tournament-template');
   }
+
+  async findByName(name: string) {
+    return this.model.findOne({ name, archivedAt: null }).exec();
+  }
 }
 
 const tournamentTemplateRepo = new TournamentTemplateRepo();

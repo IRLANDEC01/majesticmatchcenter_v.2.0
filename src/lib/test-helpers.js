@@ -49,7 +49,7 @@ export const dbClear = async () => {
 /**
  * Фабрика для создания тестового шаблона карты с валидными данными по умолчанию.
  * @param {object} [overrides] - Объект для переопределения полей по умолчанию.
- * @returns {Promise<import('@/models/map/MapTemplate').IMapTemplate>}
+ * @returns {Promise<import('mongoose').HydratedDocument<import('@/models/map/MapTemplate').IMapTemplate>>}
  */
 export const createTestMapTemplate = async (overrides = {}) => {
   const defaults = {
@@ -74,7 +74,7 @@ export const createTestMapTemplate = async (overrides = {}) => {
 /**
  * Фабрика для создания тестового шаблона турнира с валидными данными по умолчанию.
  * @param {object} [overrides] - Объект для переопределения полей по умолчанию.
- * @returns {Promise<import('@/models/tournament/TournamentTemplate').ITournamentTemplate>}
+ * @returns {Promise<import('mongoose').HydratedDocument<import('@/models/tournament/TournamentTemplate').ITournamentTemplate>>}
  */
 export const createTestTournamentTemplate = async (overrides = {}) => {
   const defaults = {

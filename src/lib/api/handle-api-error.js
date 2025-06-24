@@ -1,10 +1,20 @@
+import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { DuplicateError, ValidationError, NotFoundError, AppError } from '@/lib/errors';
 
+const { ValidationError: MongooseValidationError } = mongoose.Error;
+
 // Карта обработчиков ошибок, где ключ - конструктор ошибки, а значение - функция-обработчик.
 const errorHandlers = new Map([
   [ZodError, (error) => NextResponse.json({ errors: error.flatten().fieldErrors }, { status: 400 })],
+  [MongooseValidationError, (error) => {
+    const errors = Object.entries(error.errors).reduce((acc, [key, value]) => {
+      acc[key] = value.message;
+      return acc;
+    }, {});
+    return NextResponse.json({ message: 'Ошибка валидации Mongoose', errors }, { status: 400 });
+  }],
   [ValidationError, (error) => NextResponse.json({ message: error.message, errors: error.details }, { status: 400 })],
   [NotFoundError, (error) => NextResponse.json({ message: error.message }, { status: 404 })],
   [DuplicateError, (error) => NextResponse.json({ message: error.message }, { status: 409 })],

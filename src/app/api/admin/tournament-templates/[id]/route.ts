@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { handleApiError } from '@/lib/api/handle-api-error';
-import { updateTournamentTemplateSchema } from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
+import { tournamentTemplateUpdateSchema } from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
 import tournamentTemplateService from '@/lib/domain/tournament-templates/tournament-template-service';
+import { handleApiError } from '@/lib/api/handle-api-error';
 
 type RouteContext = {
   params: { id: string; };
@@ -17,10 +17,7 @@ export async function GET(request: Request, { params }: RouteContext) {
     const template = await tournamentTemplateService.getTournamentTemplateById(id);
     return NextResponse.json(template);
   } catch (error) {
-    return handleApiError(
-      error instanceof Error ? error : new Error(String(error)),
-      `Не удалось получить шаблон турнира ${params.id}`
-    );
+    return handleApiError(error instanceof Error ? error : new Error(String(error)));
   }
 }
 
@@ -31,22 +28,22 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   try {
     const { id } = params;
     const body = await request.json();
+    const validation = tournamentTemplateUpdateSchema.safeParse(body);
 
-    const validationResult = updateTournamentTemplateSchema.safeParse(body);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
+    if (!validation.success) {
+      return new Response(JSON.stringify({ errors: validation.error.flatten().fieldErrors }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    const updatedTemplate = await tournamentTemplateService.updateTournamentTemplate(id, validationResult.data);
+    const updatedTemplate = await tournamentTemplateService.updateTournamentTemplate(id, validation.data);
 
     revalidatePath('/admin/tournament-templates');
-    revalidatePath(`/admin/tournament-templates/edit/${updatedTemplate.slug}`);
+    revalidatePath(`/admin/tournament-templates/${id}`);
 
     return NextResponse.json(updatedTemplate);
   } catch (error) {
-    return handleApiError(
-      error instanceof Error ? error : new Error(String(error)),
-      'Не удалось обновить шаблон турнира'
-    );
+    return handleApiError(error instanceof Error ? error : new Error(String(error)));
   }
 }
