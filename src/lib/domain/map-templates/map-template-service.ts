@@ -1,35 +1,58 @@
 import { HydratedDocument, UpdateQuery } from 'mongoose';
-import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
+import mapTemplateRepo, { IMapTemplateRepo } from '@/lib/repos/map-templates/map-template-repo';
 import tournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo';
 import { IMapTemplate } from '@/models/map/MapTemplate';
 import { NotFoundError, ConflictError } from '@/lib/errors';
 import { IFindParams, IFindResult } from '@/lib/repos/base-repo';
-import { CreateMapTemplateDto, UpdateMapTemplateDto } from '@/lib/api/schemas/map-templates/map-template-schemas';
+import { GetMapTemplatesDto, CreateMapTemplateDto, UpdateMapTemplateDto } from '@/lib/api/schemas/map-templates/map-template-schemas';
+
+export interface IMapTemplateService {
+  createMapTemplate(data: CreateMapTemplateDto): Promise<HydratedDocument<IMapTemplate>>;
+  getMapTemplates(options: GetMapTemplatesDto): Promise<IFindResult<IMapTemplate>>;
+  getMapTemplateById(id: string): Promise<HydratedDocument<IMapTemplate>>;
+  updateMapTemplate(id: string, data: UpdateMapTemplateDto): Promise<HydratedDocument<IMapTemplate>>;
+  archiveMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>>;
+  restoreMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>>;
+}
 
 /**
  * Cервис для управления бизнес-логикой шаблонов карт.
  */
-class MapTemplateService {
-  constructor(private repo: typeof mapTemplateRepo) {}
+class MapTemplateService implements IMapTemplateService {
+  constructor(private repo: IMapTemplateRepo) {}
 
   /**
    * Создает новый шаблон карты.
-   * @param {CreateMapTemplateDto} templateData - Данные для создания шаблона.
+   * @param {CreateMapTemplateDto} data - Данные для создания шаблона.
    * @returns {Promise<HydratedDocument<IMapTemplate>>} - Созданный объект шаблона карты.
    */
-  async createMapTemplate(templateData: CreateMapTemplateDto): Promise<HydratedDocument<IMapTemplate>> {
-    // Логика обработки дубликатов (error.code === 11000) будет в API-слое.
-    // slug генерируется хуком в модели.
-    return this.repo.create(templateData);
+  async createMapTemplate(data: CreateMapTemplateDto): Promise<HydratedDocument<IMapTemplate>> {
+    const existingTemplate = await this.repo.findOne({ name: data.name });
+    if (existingTemplate) {
+      throw new ConflictError(`Шаблон карты с именем "${data.name}" уже существует.`);
+    }
+    return this.repo.create(data);
   }
 
   /**
    * Возвращает все шаблоны карт с возможностью фильтрации и пагинации.
-   * @param {IFindParams<IMapTemplate>} options - Опции для фильтрации и пагинации.
+   * @param {GetMapTemplatesDto} options - Опции для фильтрации и пагинации.
    * @returns {Promise<IFindResult<IMapTemplate>>}
    */
-  async getAllMapTemplates(options: IFindParams<IMapTemplate> = {}): Promise<IFindResult<IMapTemplate>> {
-    return this.repo.find(options);
+  async getMapTemplates(options: GetMapTemplatesDto): Promise<IFindResult<IMapTemplate>> {
+    const { page, limit, q, status } = options;
+    const query: UpdateQuery<IMapTemplate> = {};
+
+    if (q) {
+      query.name = { $regex: q, $options: 'i' };
+    }
+
+    return this.repo.find({
+      query,
+      page,
+      limit,
+      status,
+    });
   }
 
   /**
@@ -49,15 +72,22 @@ class MapTemplateService {
   /**
    * Обновляет шаблон карты.
    * @param {string} id - ID шаблона.
-   * @param {UpdateMapTemplateDto} templateData - Данные для обновления.
+   * @param {UpdateMapTemplateDto} data - Данные для обновления.
    * @returns {Promise<HydratedDocument<IMapTemplate>>} - Обновленный объект шаблона карты.
    */
-  async updateMapTemplate(id: string, templateData: UpdateMapTemplateDto): Promise<HydratedDocument<IMapTemplate>> {
-    const updatedTemplate = await this.repo.update(id, templateData as UpdateQuery<IMapTemplate>);
-    if (!updatedTemplate) {
-      throw new NotFoundError(`Шаблон карты с ID ${id} для обновления не найден.`);
+  async updateMapTemplate(id: string, data: UpdateMapTemplateDto): Promise<HydratedDocument<IMapTemplate>> {
+    const templateToUpdate = await this.getMapTemplateById(id);
+
+    if (data.name && data.name !== templateToUpdate.name) {
+      const existingTemplate = await this.repo.findOne({ name: data.name });
+      if (existingTemplate && existingTemplate.id !== id) {
+        throw new ConflictError(`Шаблон карты с именем "${data.name}" уже существует.`);
+      }
     }
-    return updatedTemplate;
+    
+    Object.assign(templateToUpdate, data);
+
+    return this.repo.save(templateToUpdate);
   }
 
   /**
@@ -66,22 +96,13 @@ class MapTemplateService {
    * @returns {Promise<HydratedDocument<IMapTemplate>>} - Архивированный шаблон.
    */
   async archiveMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>> {
-    const template = await this.repo.findById(id, { includeArchived: true });
+    const template = await this.getMapTemplateById(id);
 
-    if (!template) {
-      throw new NotFoundError(`Шаблон карты с ID ${id} для архивации не найден.`);
-    }
-    if (template.isArchived) {
+    if (template.archivedAt) {
       throw new ConflictError('Этот шаблон уже находится в архиве.');
     }
-
-    const archivedTemplate = (await this.repo.archive(id))!;
-
-    // TODO: После успешной архивации, нужно ли удалять этот шаблон из всех шаблонов турниров?
-    // Пока решено не делать этого автоматически, чтобы не было неожиданных побочных эффектов.
-    // await tournamentTemplateRepo.removeMapTemplateFromAll(id);
-
-    return archivedTemplate;
+    
+    return this.repo.archive(id);
   }
 
   /**
@@ -95,12 +116,11 @@ class MapTemplateService {
     if (!template) {
       throw new NotFoundError(`Шаблон карты с ID ${id} для восстановления не найден.`);
     }
-    if (!template.isArchived) {
+    if (!template.archivedAt) {
       throw new ConflictError('Этот шаблон не находится в архиве.');
     }
 
-    // `restore` вернет документ, поэтому `!` уместен, т.к. мы проверили его существование
-    return (await this.repo.restore(id))!;
+    return this.repo.restore(id);
   }
 }
 

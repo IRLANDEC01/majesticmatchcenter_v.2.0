@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ValidationError, NotFoundError, AppError, DuplicateError } from '@/lib/errors';
-import { STATUSES } from '@/lib/constants';
+import { LIFECYCLE_STATUSES as STATUSES } from '@/lib/constants';
 import { createMapSchema, updateMapSchema, completeMapSchema } from '@/lib/api/schemas/maps/map-schemas';
 
 // Импортируем все зависимости как синглтоны

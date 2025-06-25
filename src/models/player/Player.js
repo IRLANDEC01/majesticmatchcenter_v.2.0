@@ -27,7 +27,6 @@ const playerSchema = new mongoose.Schema({
   // Уникальный идентификатор для URL, генерируется из имени и фамилии
   slug: {
     type: String,
-    unique: true,
     trim: true,
     lowercase: true,
   },
@@ -77,7 +76,9 @@ const playerSchema = new mongoose.Schema({
 
 // Индексы для ускорения поиска.
 // Уникальный составной индекс по имени и фамилии.
-playerSchema.index({ firstName: 1, lastName: 1 }, { unique: true });
+playerSchema.index({ firstName: 1, lastName: 1 }, { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } });
+// Уникальный индекс для slug, чтобы обеспечить уникальные URL для профилей.
+playerSchema.index({ slug: 1 }, { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } });
 
 // Вспомогательная функция для капитализации
 const capitalize = (s) => {

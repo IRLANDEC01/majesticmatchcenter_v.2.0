@@ -4,8 +4,12 @@ import { ConflictError, NotFoundError } from '@/lib/errors';
 import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
 import { ITournamentTemplate } from '@/models/tournament/TournamentTemplate';
 import { IMapTemplate } from '@/models/map/MapTemplate';
-import { CreateTournamentTemplateDto, UpdateTournamentTemplateDto } from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
-import { IFindParams, IFindResult } from '@/lib/repos/base-repo';
+import {
+  CreateTournamentTemplateDto,
+  GetTournamentTemplatesDto,
+  UpdateTournamentTemplateDto,
+} from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
+import { IFindResult } from '@/lib/repos/base-repo';
 
 /**
  * @class TournamentTemplateService
@@ -30,16 +34,24 @@ class TournamentTemplateService {
   }
 
   /**
-   * @description Возвращает список всех шаблонов турниров.
-   * @param {boolean} [includeArchived=false] - Флаг, указывающий, включать ли архивные шаблоны в выборку.
+   * @description Возвращает список всех шаблонов турниров с поддержкой пагинации, фильтрации и поиска.
+   * @param {GetTournamentTemplatesDto} params - Параметры для поиска и фильтрации.
    * @returns {Promise<IFindResult<ITournamentTemplate>>} Результат поиска с пагинацией.
    */
-  async getTournamentTemplates(includeArchived: boolean = false): Promise<IFindResult<ITournamentTemplate>> {
-    const params: IFindParams<ITournamentTemplate> = {};
-    if (includeArchived) {
-      params.status = 'all';
+  async getTournamentTemplates(params: GetTournamentTemplatesDto): Promise<IFindResult<ITournamentTemplate>> {
+    const { page, limit, q, status } = params;
+    const query: mongoose.FilterQuery<ITournamentTemplate> = {};
+
+    if (q) {
+      query.name = { $regex: q, $options: 'i' };
     }
-    return this.repo.find(params);
+
+    return this.repo.find({
+      query,
+      page,
+      limit,
+      status,
+    });
   }
 
   /**
@@ -49,7 +61,7 @@ class TournamentTemplateService {
    */
   async createTournamentTemplate(data: CreateTournamentTemplateDto): Promise<HydratedDocument<ITournamentTemplate>> {
     const { name } = data;
-    const existingTemplate = await this.repo.find({ filter: { name }, limit: 1 });
+    const existingTemplate = await this.repo.find({ query: { name }, limit: 1 });
     if (existingTemplate.total > 0) {
       throw new ConflictError(`Шаблон турнира с именем "${name}" уже существует.`);
     }
@@ -64,19 +76,28 @@ class TournamentTemplateService {
    * @returns {Promise<ITournamentTemplate>} Обновленный шаблон турнира.
    */
   async updateTournamentTemplate(id: string, data: UpdateTournamentTemplateDto): Promise<HydratedDocument<ITournamentTemplate>> {
-    const template = await this.getTournamentTemplateById(id);
+    // Шаг 1: Убеждаемся, что шаблон вообще существует, прежде чем что-либо делать.
+    await this.getTournamentTemplateById(id);
 
-    if (data.name && data.name !== template.name) {
-      const existingByNameResult = await this.repo.find({ filter: { name: data.name }, limit: 1 });
-      if (existingByNameResult.total > 0 && existingByNameResult.data[0]._id.toString() !== id) {
+    // Шаг 2: Выполняем бизнес-логику, специфичную для сервиса.
+    // Проверка на уникальность имени, если оно было предоставлено в данных для обновления.
+    if (data.name) {
+      const existingByName = await this.repo.findOne({ name: data.name });
+      if (existingByName && existingByName.id !== id) {
         throw new ConflictError(`Шаблон турнира с именем "${data.name}" уже существует.`);
       }
     }
 
-    Object.assign(template, data);
-    await template.save();
+    // Проверка существования и статуса шаблонов карт, если они были переданы.
+    if (data.mapTemplates) {
+      await this.validateMapTemplates(data.mapTemplates as string[]);
+    }
 
-    return template;
+    // Шаг 3: Делегируем операцию обновления репозиторию.
+    // BaseRepo обработает find-and-save и создаст запись в логе аудита.
+    // Используем "as any" для обхода строгой типизации TS, т.к. Mongoose
+    // самостоятельно кастует string[] в ObjectId[] при сохранении.
+    return this.repo.update(id, data as any);
   }
 
   /**
@@ -93,9 +114,9 @@ class TournamentTemplateService {
     if (template.archivedAt) {
       throw new ConflictError('Этот шаблон турнира уже находится в архиве.');
     }
-    template.archivedAt = new Date();
-    await template.save();
-    return template;
+
+    // Делегируем операцию репозиторию, который содержит логику аудита
+    return this.repo.archive(id);
   }
 
   /**
@@ -112,9 +133,9 @@ class TournamentTemplateService {
     if (!template.archivedAt) {
       throw new ConflictError('Этот шаблон турнира не находится в архиве.');
     }
-    template.archivedAt = undefined;
-    await template.save();
-    return template;
+
+    // Делегируем операцию репозиторию, который содержит логику аудита
+    return this.repo.restore(id);
   }
 
   /**
@@ -130,7 +151,7 @@ class TournamentTemplateService {
     }
     
     const queryResult = await this.mapTemplateRepo.find({
-      filter: { _id: { $in: mapTemplateIds } },
+      query: { _id: { $in: mapTemplateIds } },
       limit: mapTemplateIds.length,
     });
     const existingMapTemplates = queryResult.data;
@@ -141,9 +162,9 @@ class TournamentTemplateService {
       throw new NotFoundError(`Шаблон карты с ID ${notFoundId} не найден.`);
     }
 
-    const archivedTemplate = existingMapTemplates.find((mt: IMapTemplate) => mt.isArchived);
+    const archivedTemplate = existingMapTemplates.find((mt) => mt.archivedAt);
     if (archivedTemplate) {
-      throw new ConflictError(`Нельзя добавить в шаблон архивированную карту: ${archivedTemplate.name} (ID: ${archivedTemplate._id.toString()}).`);
+      throw new ConflictError(`Нельзя добавить в шаблон архивированную карту: ${archivedTemplate.name} (ID: ${archivedTemplate.id}).`);
     }
   }
 }

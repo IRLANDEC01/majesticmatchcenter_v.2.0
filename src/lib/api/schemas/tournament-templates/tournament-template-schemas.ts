@@ -66,8 +66,7 @@ export const createTournamentTemplateSchema = z.object({
  */
 export const tournamentTemplateUpdateSchema = z.object({
   name: commonNameValidation.optional(),
-  description: z.string().max(500, 'Описание не должно превышать 500 символов.').optional(),
-  rules: z.string().max(2000, 'Правила не должны превышать 2000 символов.').optional(),
+  description: z.string().max(1000, 'Описание не может превышать 1000 символов.').optional(),
   slug: z.string()
     .regex(/^[a-z0-9-]+$/, { message: 'Slug может содержать только строчные буквы, цифры и дефисы.' })
     .optional(),
@@ -81,7 +80,19 @@ export const tournamentTemplateUpdateSchema = z.object({
     .optional(),
 });
 
+/**
+ * Схема для валидации query-параметров при получении списка шаблонов турниров.
+ * Обеспечивает безопасную обработку GET-запросов.
+ */
+export const getTournamentTemplatesSchema = z.object({
+  q: z.string().optional(),
+  status: z.enum(['active', 'archived', 'all']).default('active'),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+});
+
 // --- Вывод типов для использования в коде ---
 
 export type CreateTournamentTemplateDto = z.infer<typeof createTournamentTemplateSchema>;
-export type UpdateTournamentTemplateDto = z.infer<typeof tournamentTemplateUpdateSchema>; 
+export type UpdateTournamentTemplateDto = z.infer<typeof tournamentTemplateUpdateSchema>;
+export type GetTournamentTemplatesDto = z.infer<typeof getTournamentTemplatesSchema>; 

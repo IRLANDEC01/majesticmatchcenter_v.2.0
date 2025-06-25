@@ -1,33 +1,28 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import tournamentTemplateService from '@/lib/domain/tournament-templates/tournament-template-service';
-import { createTournamentTemplateSchema } from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
-
-// Схема для валидации query-параметров GET-запроса.
-// Находится здесь, а не в общем файле, т.к. специфична для этого маршрута.
-const getParamsSchema = z.object({
-  includeArchived: z.preprocess((val) => String(val).toLowerCase() === 'true', z.boolean()).optional().default(false),
-});
+import {
+  createTournamentTemplateSchema,
+  getTournamentTemplatesSchema,
+} from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
 
 /**
- * Получает список шаблонов турниров.
+ * Получает список шаблонов турниров с пагинацией, фильтрацией и поиском.
  */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const params = Object.fromEntries(searchParams.entries());
+    const queryParams = Object.fromEntries(searchParams.entries());
 
-    const validationResult = getParamsSchema.safeParse(params);
+    const validationResult = getTournamentTemplatesSchema.safeParse(queryParams);
     if (!validationResult.success) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const { includeArchived } = validationResult.data;
-    const templates = await tournamentTemplateService.getTournamentTemplates(includeArchived);
+    const result = await tournamentTemplateService.getTournamentTemplates(validationResult.data);
 
-    return NextResponse.json(templates);
+    return NextResponse.json(result);
   } catch (error) {
     return handleApiError(
       error instanceof Error ? error : new Error(String(error)),

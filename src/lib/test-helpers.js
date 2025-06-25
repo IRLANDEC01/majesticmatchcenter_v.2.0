@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { connectToDatabase, disconnectFromDatabase } from './db.js';
 import models from '../models/index.js';
-import { STATUSES, CURRENCY_TYPES, RESULT_TIERS, MAP_TEMPLATE_STATUSES } from './constants.js';
+import { LIFECYCLE_STATUSES as STATUSES, CURRENCY_TYPES, RESULT_TIERS, MAP_TEMPLATE_STATUSES } from './constants.js';
 import MapTemplate from '@/models/map/MapTemplate';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 
@@ -39,10 +39,12 @@ export const dbDisconnect = async () => {
  * Предназначен для вызова в `afterEach()` или `beforeEach()` для изоляции тестов.
  */
 export const dbClear = async () => {
-  const collections = Object.values(mongoose.connection.collections);
-  for (const collection of collections) {
-    // Использование { w: 1 } может немного ускорить тесты, не дожидаясь полной записи на диск
-    await collection.deleteMany({}, { w: 1 });
+  // ИСПОЛЬЗУЕМ МАКСИМАЛЬНО НАДЕЖНЫЙ СПОСОБ ОЧИСТКИ.
+  // Эта команда полностью удаляет всю базу данных, а затем пересоздает ее.
+  // Это гарантирует, что между тестами не остается абсолютно ничего,
+  // включая "висячие" индексы, которые были причиной наших проблем.
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.connection.db.dropDatabase();
   }
 };
 

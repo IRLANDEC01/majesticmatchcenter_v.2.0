@@ -1,116 +1,98 @@
-import mongoose, { HydratedDocument, Model, Schema, Types } from 'mongoose';
+import { Schema, model, models, Document, CallbackWithoutResultAndOptionalError, Model } from 'mongoose';
+import slugify from 'slugify';
 
-// =================================
-// Интерфейс для документа MapTemplate
-// Описывает поля, которые есть у каждой записи в БД
-// =================================
-export interface IMapTemplate {
-  _id: Types.ObjectId;
-  /** Название шаблона, например, "Захват флага на 'Стройке'" */
+/**
+ * @description Интерфейс, описывающий документ шаблона карты в базе данных.
+ */
+export interface IMapTemplate extends Document {
+  /** Название шаблона, например, "de_dust2" */
   name: string;
-  /** Уникальный идентификатор для URL, например, "ctf-construction" */
   slug: string;
-  /** Краткое описание шаблона карты */
   description?: string;
-  /** URL на изображение шаблона карты (превью) */
-  mapTemplateImage: string;
-  /** Счетчик, сколько раз этот шаблон был использован */
-  usageCount: number;
-  /** Дата архивации. null, если активен */
-  archivedAt: Date | null;
-  /** Виртуальное поле для проверки статуса архивации */
-  isArchived: boolean;
+  image?: string;
+  archivedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  schemaVersion: number;
 }
 
 // =================================
-// Схема Mongoose
-// Определяет структуру, валидаторы и индексы
+// Schema
 // =================================
-const mapTemplateSchema = new Schema<IMapTemplate>({
-  // Название шаблона, например, "Захват флага на 'Стройке'"
-  name: {
-    type: String,
-    required: [true, 'Название шаблона карты обязательно.'],
-    trim: true,
-    maxlength: [100, 'Название шаблона карты не может превышать 100 символов.'],
-  },
-  // Уникальный идентификатор для URL, например, "ctf-construction"
-  slug: {
-    type: String,
-    required: [true, 'Slug шаблона карты обязателен.'],
-    trim: true,
-    maxlength: [100, 'Slug шаблона карты не может превышать 100 символов.'],
-  },
-  // Краткое описание шаблона карты
-  description: {
-    type: String,
-    trim: true,
-    maxlength: [1000, 'Описание шаблона карты не может превышать 500 символов.'],
-  },
-  // URL на изображение шаблона карты (превью)
-  mapTemplateImage: {
-    type: String,
-    required: [true, 'Изображение для шаблона карты обязательно.'],
-    trim: true,
-  },
-  // Счетчик, сколько раз этот шаблон был использован
-  usageCount: {
-    type: Number,
-    default: 0,
-    min: [0, 'Счетчик использований не может быть отрицательным.'],
-  },
-  archivedAt: {
-    type: Date,
-    default: null,
-  },
-}, {
-  // Добавляет поля createdAt и updatedAt
-  timestamps: true,
-  // Включаем optimistic concurrency control
-  versionKey: '__v',
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true },
-});
 
-// Виртуальное поле для удобной проверки, архивирован ли шаблон
+const mapTemplateSchema = new Schema<IMapTemplate>(
+  {
+    name: {
+      type: String,
+      required: [true, 'Название шаблона карты является обязательным полем.'],
+      minlength: [3, 'Название должно содержать минимум 3 символа'],
+      maxlength: [50, 'Название не должно превышать 50 символов'],
+      trim: true,
+      comment: 'Название шаблона, например, "de_dust2"',
+    },
+    slug: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      comment: 'Уникальный идентификатор для URL, например, "de-dust2"',
+    },
+    description: {
+      type: String,
+      maxlength: [500, 'Описание не должно превышать 500 символов'],
+      trim: true,
+      comment: 'Версия схемы для поддержки будущих миграций данных.',
+    },
+    image: {
+      type: String, // URL or path to image
+    },
+    archivedAt: {
+      type: Date,
+    },
+    schemaVersion: {
+      type: Number,
+      default: 1,
+      required: true,
+    },
+  },
+  {
+    timestamps: true,
+    versionKey: false,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
+
+// =================================
+// Hooks
+// =================================
+
+// Виртуальное поле
 mapTemplateSchema.virtual('isArchived').get(function (this: IMapTemplate) {
-  return this.archivedAt !== null;
+  return this.archivedAt != null;
 });
 
-// Частичный уникальный индекс для `name`.
-// Гарантирует уникальность только среди активных (неархивированных) документов.
-mapTemplateSchema.index(
-  { name: 1 },
-  { unique: true, partialFilterExpression: { archivedAt: null } }
-);
+// Индексы
+mapTemplateSchema.index({ name: 1 }, { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } });
+mapTemplateSchema.index({ slug: 1 }, { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } });
 
-// Частичный уникальный индекс для `slug`.
-mapTemplateSchema.index(
-  { slug: 1 },
-  { unique: true, partialFilterExpression: { archivedAt: null } }
-);
-
-// Индекс для быстрого поиска по статусу архивации
-mapTemplateSchema.index({ archivedAt: 1 });
-
-// =================================
-// Хуки Mongoose
-// Логика, которая выполняется до или после определенных операций
-// =================================
-
-// Pre-save хук для генерации slug из name, если он не предоставлен
-mapTemplateSchema.pre('validate', function(this: HydratedDocument<IMapTemplate>, next) {
-  if (this.isModified('name') && !this.isModified('slug')) {
-    this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+// Хук для генерации slug
+mapTemplateSchema.pre('save', function (this: IMapTemplate, next: CallbackWithoutResultAndOptionalError) {
+  if (this.isNew) {
+    this.slug = slugify(this.name, {
+      lower: true,
+      strict: true,
+      remove: /[*+~.()'"!:@]/g,
+    });
   }
   next();
 });
 
 // =================================
-// Создание и экспорт модели
+// Model
 // =================================
-const MapTemplate = (mongoose.models.MapTemplate as Model<IMapTemplate>) || mongoose.model<IMapTemplate>('MapTemplate', mapTemplateSchema);
+
+const MapTemplate =
+  (models.MapTemplate as Model<IMapTemplate>) ||
+  model<IMapTemplate>('MapTemplate', mapTemplateSchema);
 
 export default MapTemplate; 

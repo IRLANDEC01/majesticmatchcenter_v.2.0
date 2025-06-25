@@ -3,6 +3,7 @@ import socialLinkSchema from '@/models/shared/social-link-schema.js';
 import seoSchema from '@/models/shared/seo-schema.js';
 import earningsSchema from '@/models/shared/earnings-schema.js';
 import { FAMILY_MEMBER_ROLE_VALUES } from '@/lib/constants.js';
+import slugify from 'slugify';
 
 // Схема для текущих участников семьи.
 // История членства будет в отдельной коллекции.
@@ -32,10 +33,9 @@ const familySchema = new mongoose.Schema({
   name: {
     type: String,
     required: [true, 'Название семьи является обязательным полем.'],
-    unique: true,
     trim: true,
     validate: {
-      validator: (v) => /^[a-zA-Z\s]+$/.test(v),
+      validator: (v) => /^[a-zA-Z\\s]+$/.test(v),
       message: 'Название семьи должно содержать только латинские буквы и пробелы.',
     },
   },
@@ -57,7 +57,6 @@ const familySchema = new mongoose.Schema({
   },
   slug: {
     type: String,
-    unique: true,
     trim: true,
     lowercase: true,
   },
@@ -90,6 +89,9 @@ const familySchema = new mongoose.Schema({
   versionKey: '__v',
 });
 
+// Индексы
+familySchema.index({ name: 1 }, { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } });
+familySchema.index({ slug: 1 }, { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } });
 familySchema.index({ name: 'text', description: 'text' }); // Для полнотекстового поиска
 
 // Виртуальное поле, которое показывает, заархивирована ли семья.
@@ -97,9 +99,13 @@ familySchema.virtual('isArchived').get(function() {
   return this.archivedAt !== null && this.archivedAt !== undefined;
 });
 
-familySchema.pre('validate', function(next) {
+familySchema.pre('save', function (next) {
   if (this.name && !this.slug) {
-    this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    this.slug = slugify(this.name, {
+      lower: true,
+      strict: true,
+      remove: /[*+~.()'"!:@]/g,
+    });
   }
   next();
 });

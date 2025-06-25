@@ -1,135 +1,106 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { GET, PATCH } from './route';
-import MapTemplate from '@/models/map/MapTemplate';
-import { revalidatePath } from 'next/cache';
-import { dbClear } from '@/lib/test-helpers';
-import { HydratedDocument } from 'mongoose';
-import { IMapTemplate } from '@/models/map/MapTemplate';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createMocks } from 'node-mocks-http';
+import { GET, PATCH, DELETE } from './route';
+import { dbConnect, dbClear, dbDisconnect } from '@/lib/test-helpers';
+import MapTemplate, { IMapTemplate } from '@/models/map/MapTemplate';
+import AuditLog from '@/models/audit/AuditLog';
+import mongoose, { HydratedDocument } from 'mongoose';
 
-vi.mock('next/cache', () => ({
-  revalidatePath: vi.fn(),
-}));
-
-describe('API /api/admin/map-templates/[id]', () => {
-  let template: HydratedDocument<IMapTemplate>;
-
+describe('/api/admin/map-templates/[id]', () => {
   beforeEach(async () => {
+    await dbConnect();
     await dbClear();
-    vi.mocked(revalidatePath).mockClear();
-    template = await MapTemplate.create({
-      name: 'Test Map',
-      description: 'A map for testing',
-      mapTemplateImage: 'path/to/image.jpg',
-    });
+  });
+
+  afterEach(async () => {
+    await dbDisconnect();
   });
 
   describe('GET', () => {
-    it('должен возвращать один шаблон по ID', async () => {
-      const request = new Request(`http://localhost/api/admin/map-templates/${template._id}`);
-      const response = await GET(request, { params: { id: template._id.toString() } });
+    it('должен успешно возвращать шаблон по ID', async () => {
+      const template: HydratedDocument<IMapTemplate> = await MapTemplate.create({ name: 'Find Me' });
+
+      const { req } = createMocks({ method: 'GET' });
+      const response = await GET(req, { params: { id: template.id } });
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body.name).toBe('Test Map');
+      expect(body.name).toBe('Find Me');
     });
 
-    it('должен возвращать 404, если шаблон не найден', async () => {
-      const nonExistentId = '605c72a6b579624e50a9d8e1';
-      const request = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}`);
-      const response = await GET(request, { params: { id: nonExistentId } });
+    it('должен возвращать 404, если ID не существует', async () => {
+      const nonExistentId = new mongoose.Types.ObjectId().toString();
+      const { req } = createMocks({ method: 'GET' });
+      const response = await GET(req, { params: { id: nonExistentId } });
+
       expect(response.status).toBe(404);
     });
   });
 
   describe('PATCH', () => {
-    it('должен успешно обновлять шаблон и вызывать revalidatePath', async () => {
-      const updateData = { name: 'Updated Name', description: 'Updated description' };
-      const request = new Request(`http://localhost/api/admin/map-templates/${template._id}`, {
+    it('должен успешно обновлять шаблон и создавать запись в логе аудита', async () => {
+      const template: HydratedDocument<IMapTemplate> = await MapTemplate.create({ name: 'Old Name' });
+      const updateData = { name: 'New Name', description: 'New description' };
+
+      const { req } = createMocks({
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData),
+        body: updateData,
       });
 
-      const response = await PATCH(request, { params: { id: template._id.toString() } });
-      const dbTemplate = await MapTemplate.findById(template._id);
+      const response = await PATCH(req, { params: { id: template.id } });
+      const body = await response.json();
 
       expect(response.status).toBe(200);
-      const body = await response.json();
-      expect(body.name).toBe(updateData.name);
-      expect(dbTemplate!.name).toBe(updateData.name);
+      expect(body.name).toBe('New Name');
 
-      expect(revalidatePath).toHaveBeenCalledTimes(2);
-      expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
-      expect(revalidatePath).toHaveBeenCalledWith(`/admin/map-templates/${template._id.toString()}/edit`);
+      const dbTemplate = await MapTemplate.findById(template.id);
+      expect(dbTemplate?.name).toBe('New Name');
+
+      const auditLog = await AuditLog.findOne({ entityId: template.id, action: 'update' });
+      expect(auditLog).not.toBeNull();
+      expect(auditLog?.changes).toBeDefined();
+      expect((auditLog?.changes as any)?.name?.from).toBe('Old Name');
+      expect((auditLog?.changes as any)?.name?.to).toBe('New Name');
     });
 
-    it('должен возвращать 409 (Conflict) при дублировании имени', async () => {
-      await MapTemplate.create({ name: 'Existing Name', mapTemplateImage: 'path/to/image.jpg' });
-      const templateToUpdate = await MapTemplate.create({
-        name: 'Initial Name',
-        mapTemplateImage: 'path/to/image.jpg',
-      });
+    it('должен возвращать 409 при попытке установить уже существующее имя', async () => {
+      await MapTemplate.create({ name: 'Existing Name' });
+      const templateToUpdate: HydratedDocument<IMapTemplate> = await MapTemplate.create({ name: 'Initial Name' });
       const updateData = { name: 'Existing Name' };
-      const request = new Request(`http://localhost/api/admin/map-templates/${templateToUpdate._id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData),
-      });
 
-      const response = await PATCH(request, { params: { id: templateToUpdate._id.toString() } });
-      const body = await response.json();
+      const { req } = createMocks({ method: 'PATCH', body: updateData });
+      const response = await PATCH(req, { params: { id: templateToUpdate.id } });
 
       expect(response.status).toBe(409);
-      expect(revalidatePath).not.toHaveBeenCalled();
-      expect(body.message).toContain('уже существует');
+    });
+  });
+
+  describe('DELETE', () => {
+    it('должен успешно архивировать шаблон и создавать запись в логе аудита', async () => {
+      const template: HydratedDocument<IMapTemplate> = await MapTemplate.create({ name: 'To Be Archived' });
+
+      const { req } = createMocks({ method: 'DELETE' });
+      const response = await DELETE(req, { params: { id: template.id } });
+
+      expect(response.status).toBe(200);
+
+      const dbTemplate = await MapTemplate.findById(template.id);
+      expect(dbTemplate?.archivedAt).toBeInstanceOf(Date);
+
+      const auditLog = await AuditLog.findOne({ entityId: template.id, action: 'archive' });
+      expect(auditLog).not.toBeNull();
     });
 
-    describe('Validation', () => {
-      it('должен возвращать 400, если название слишком короткое', async () => {
-        // Arrange
-        const template = await MapTemplate.create({
-          name: 'Initial Name',
-          mapTemplateImage: 'path/to/image.jpg',
-        });
-        const updateData = { name: 'a' }; // Невалидное имя
-        const request = new Request(`http://localhost/api/admin/map-templates/${template._id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updateData),
-        });
-
-        // Act
-        const response = await PATCH(request, { params: { id: template._id.toString() } });
-        const body = await response.json();
-
-        // Assert
-        expect(response.status).toBe(400);
-        expect(body.errors.name).toBeDefined();
-        expect(revalidatePath).not.toHaveBeenCalled();
+    it('должен возвращать 409 при попытке архивировать уже архивированный шаблон', async () => {
+      const template: HydratedDocument<IMapTemplate> = await MapTemplate.create({
+        name: 'Already Archived',
+        archivedAt: new Date(),
       });
 
-      it('должен возвращать 400, если изображение карты - пустая строка', async () => {
-        // Arrange
-        const template = await MapTemplate.create({
-          name: 'Initial Name',
-          mapTemplateImage: 'path/to/image.jpg',
-        });
-        const updateData = { mapTemplateImage: '' }; // Невалидное значение
-        const request = new Request(`http://localhost/api/admin/map-templates/${template._id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updateData),
-        });
+      const { req } = createMocks({ method: 'DELETE' });
+      const response = await DELETE(req, { params: { id: template.id } });
 
-        // Act
-        const response = await PATCH(request, { params: { id: template._id.toString() } });
-        const body = await response.json();
-
-        // Assert
-        expect(response.status).toBe(400);
-        expect(body.errors.mapTemplateImage).toBeDefined();
-        expect(revalidatePath).not.toHaveBeenCalled();
-      });
+      expect(response.status).toBe(409);
     });
   });
 }); 

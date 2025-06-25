@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
+import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
+import { LIFECYCLE_STATUSES as STATUSES } from '@/lib/constants';
 import tournamentRepo from './tournament-repo';
-import { dbConnect, dbClear, dbDisconnect, populateDb } from '@/lib/test-helpers';
-import { STATUSES } from '@/lib/constants';
+import { Tournament, Player, Family, Map, MapTemplate } from '@/models';
 
 describe('TournamentRepository', () => {
   beforeAll(async () => {

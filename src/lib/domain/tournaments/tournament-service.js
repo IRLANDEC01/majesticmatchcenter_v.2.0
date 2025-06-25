@@ -7,7 +7,7 @@ import familyTournamentParticipationRepo from '@/lib/repos/families/family-tourn
 import familyEarningRepo from '@/lib/repos/families/family-earning-repo.js';
 import playerEarningRepo from '@/lib/repos/players/player-earning-repo.js';
 import playerTournamentParticipationRepo from '@/lib/repos/players/player-tournament-participation-repo.js';
-import { STATUSES } from '@/lib/constants';
+import { LIFECYCLE_STATUSES as STATUSES } from '@/lib/constants';
 
 /**
  * Сервис для управления бизнес-логикой турниров.

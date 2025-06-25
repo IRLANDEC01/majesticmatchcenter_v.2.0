@@ -84,10 +84,8 @@ const tournamentSchema = new mongoose.Schema({
   // Уникальный идентификатор для URL. Генерируется автоматически.
   slug: {
     type: String,
-    unique: true,
     trim: true,
     lowercase: true,
-    index: true,
   },
   description: {
     type: String,
@@ -164,7 +162,8 @@ tournamentSchema.pre(/^find/, function(next) {
   next();
 });
 
-// Индекс для ускорения запросов по статусу
+// Индексы
+tournamentSchema.index({ slug: 1 }, { name: 'slug_unique_active', unique: true, partialFilterExpression: { archivedAt: { $eq: null } } });
 tournamentSchema.index({ status: 1 });
 
 const Tournament = mongoose.models.Tournament || mongoose.model('Tournament', tournamentSchema);

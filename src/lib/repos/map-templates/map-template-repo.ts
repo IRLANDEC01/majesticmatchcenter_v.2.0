@@ -1,12 +1,17 @@
-import BaseRepo from '../base-repo';
-import MapTemplate, { IMapTemplate } from '@/models/map/MapTemplate';
+import { IMapTemplate } from '@/models/map/MapTemplate';
+import BaseRepo, { IBaseRepo } from '../base-repo';
+import MapTemplate from '@/models/map/MapTemplate';
 
 /**
  * @class MapTemplateRepository
  * @description Репозиторий для работы с шаблонами карт.
  *              Наследует все базовые CRUD-операции от BaseRepo.
  */
-class MapTemplateRepo extends BaseRepo<IMapTemplate> {
+export interface IMapTemplateRepo extends IBaseRepo<IMapTemplate> {
+  // Тут можно будет добавлять специфичные для этого репозитория методы
+}
+
+class MapTemplateRepo extends BaseRepo<IMapTemplate> implements IMapTemplateRepo {
   constructor() {
     // Передаем модель и префикс для кеша в родительский конструктор
     super(MapTemplate, 'map-template');

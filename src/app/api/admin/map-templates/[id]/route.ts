@@ -51,4 +51,21 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   } catch (error) {
     return handleApiError(error instanceof Error ? error : new Error(String(error)), `Failed to update map template ${params.id}`);
   }
+}
+
+/**
+ * DELETE /api/admin/map-templates/[id]
+ * Архивирует шаблон карты (мягкое удаление).
+ */
+export async function DELETE(request: Request, { params }: RouteContext) {
+  try {
+    const { id } = params;
+    const archivedTemplate = await mapTemplateService.archiveMapTemplate(id);
+
+    revalidatePath('/admin/map-templates');
+
+    return NextResponse.json(archivedTemplate, { status: 200 });
+  } catch (error) {
+    return handleApiError(error as Error, `Failed to archive map template ${params.id}`);
+  }
 } 

@@ -22,7 +22,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    const templates = await mapTemplateService.getAllMapTemplates(validationResult.data);
+    const templates = await mapTemplateService.getMapTemplates(validationResult.data);
 
     return NextResponse.json(templates, { status: 200 });
   } catch (error) {
