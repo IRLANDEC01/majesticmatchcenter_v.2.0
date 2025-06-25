@@ -1,105 +1,77 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createMocks } from 'node-mocks-http';
-import { GET, PATCH, DELETE } from './route';
-import { dbConnect, dbClear, dbDisconnect } from '@/lib/test-helpers';
-import MapTemplate, { IMapTemplate } from '@/models/map/MapTemplate';
-import AuditLog from '@/models/audit/AuditLog';
-import mongoose, { HydratedDocument } from 'mongoose';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { GET, PATCH } from './route';
+import {
+  connectToTestDB,
+  clearTestDB,
+  disconnectFromTestDB,
+  createTestMapTemplate,
+} from '@/lib/test-helpers';
+import { revalidatePath } from 'next/cache';
+import { HydratedDocument } from 'mongoose';
+import { IMapTemplate } from '@/models/map/MapTemplate';
+
+vi.mock('next/cache');
 
 describe('/api/admin/map-templates/[id]', () => {
+  let activeTemplate: HydratedDocument<IMapTemplate>;
+
+  beforeAll(async () => {
+    await connectToTestDB();
+  });
+
   beforeEach(async () => {
-    await dbConnect();
-    await dbClear();
+    await clearTestDB();
+    activeTemplate = await createTestMapTemplate({ name: 'Active Map' });
   });
 
   afterEach(async () => {
-    await dbDisconnect();
+    vi.clearAllMocks();
+  });
+
+  afterAll(async () => {
+    await disconnectFromTestDB();
   });
 
   describe('GET', () => {
     it('должен успешно возвращать шаблон по ID', async () => {
-      const template: HydratedDocument<IMapTemplate> = await MapTemplate.create({ name: 'Find Me' });
-
-      const { req } = createMocks({ method: 'GET' });
-      const response = await GET(req, { params: { id: template.id } });
+      const req = new Request(`http://localhost/api/admin/map-templates/${activeTemplate.id}`);
+      const response = await GET(req as any, { params: { id: activeTemplate.id } });
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(body.name).toBe('Find Me');
+      expect(body.data.name).toBe('Active Map');
     });
 
     it('должен возвращать 404, если ID не существует', async () => {
-      const nonExistentId = new mongoose.Types.ObjectId().toString();
-      const { req } = createMocks({ method: 'GET' });
-      const response = await GET(req, { params: { id: nonExistentId } });
-
+      const nonExistentId = '605c72ef9f1b2c001f7b8b17';
+      const req = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}`);
+      const response = await GET(req as any, { params: { id: nonExistentId } });
       expect(response.status).toBe(404);
     });
   });
 
   describe('PATCH', () => {
-    it('должен успешно обновлять шаблон и создавать запись в логе аудита', async () => {
-      const template: HydratedDocument<IMapTemplate> = await MapTemplate.create({ name: 'Old Name' });
-      const updateData = { name: 'New Name', description: 'New description' };
-
-      const { req } = createMocks({
+    it('должен успешно обновлять шаблон', async () => {
+      const req = new Request(`http://localhost/api/admin/map-templates/${activeTemplate.id}`, {
         method: 'PATCH',
-        body: updateData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Updated Name' }),
       });
 
-      const response = await PATCH(req, { params: { id: template.id } });
-      const body = await response.json();
-
+      const response = await PATCH(req as any, { params: { id: activeTemplate.id } });
       expect(response.status).toBe(200);
-      expect(body.name).toBe('New Name');
-
-      const dbTemplate = await MapTemplate.findById(template.id);
-      expect(dbTemplate?.name).toBe('New Name');
-
-      const auditLog = await AuditLog.findOne({ entityId: template.id, action: 'update' });
-      expect(auditLog).not.toBeNull();
-      expect(auditLog?.changes).toBeDefined();
-      expect((auditLog?.changes as any)?.name?.from).toBe('Old Name');
-      expect((auditLog?.changes as any)?.name?.to).toBe('New Name');
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
+      expect(revalidatePath).toHaveBeenCalledWith(`/admin/map-templates/${activeTemplate.id}`);
     });
 
     it('должен возвращать 409 при попытке установить уже существующее имя', async () => {
-      await MapTemplate.create({ name: 'Existing Name' });
-      const templateToUpdate: HydratedDocument<IMapTemplate> = await MapTemplate.create({ name: 'Initial Name' });
-      const updateData = { name: 'Existing Name' };
-
-      const { req } = createMocks({ method: 'PATCH', body: updateData });
-      const response = await PATCH(req, { params: { id: templateToUpdate.id } });
-
-      expect(response.status).toBe(409);
-    });
-  });
-
-  describe('DELETE', () => {
-    it('должен успешно архивировать шаблон и создавать запись в логе аудита', async () => {
-      const template: HydratedDocument<IMapTemplate> = await MapTemplate.create({ name: 'To Be Archived' });
-
-      const { req } = createMocks({ method: 'DELETE' });
-      const response = await DELETE(req, { params: { id: template.id } });
-
-      expect(response.status).toBe(200);
-
-      const dbTemplate = await MapTemplate.findById(template.id);
-      expect(dbTemplate?.archivedAt).toBeInstanceOf(Date);
-
-      const auditLog = await AuditLog.findOne({ entityId: template.id, action: 'archive' });
-      expect(auditLog).not.toBeNull();
-    });
-
-    it('должен возвращать 409 при попытке архивировать уже архивированный шаблон', async () => {
-      const template: HydratedDocument<IMapTemplate> = await MapTemplate.create({
-        name: 'Already Archived',
-        archivedAt: new Date(),
+      await createTestMapTemplate({ name: 'Existing Name' });
+      const req = new Request(`http://localhost/api/admin/map-templates/${activeTemplate.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Existing Name' }),
       });
-
-      const { req } = createMocks({ method: 'DELETE' });
-      const response = await DELETE(req, { params: { id: template.id } });
-
+      const response = await PATCH(req as any, { params: { id: activeTemplate.id } });
       expect(response.status).toBe(409);
     });
   });

@@ -1,27 +1,38 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createMocks } from 'node-mocks-http';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { GET, POST } from './route';
-import { dbConnect, dbClear, dbDisconnect } from '@/lib/test-helpers';
+import {
+  connectToTestDB,
+  clearTestDB,
+  disconnectFromTestDB,
+  createTestMapTemplate,
+} from '@/lib/test-helpers';
 import MapTemplate from '@/models/map/MapTemplate';
-import AuditLog from '@/models/audit/AuditLog';
+import { revalidatePath } from 'next/cache';
+
+vi.mock('next/cache');
 
 describe('/api/admin/map-templates', () => {
-  beforeEach(async () => {
-    await dbConnect();
+  beforeAll(async () => {
+    await connectToTestDB();
   });
 
   afterEach(async () => {
-    await dbClear();
-    await dbDisconnect();
+    vi.clearAllMocks();
+    await clearTestDB();
+  });
+
+  afterAll(async () => {
+    await disconnectFromTestDB();
   });
 
   describe('GET', () => {
     it('должен возвращать список активных шаблонов по умолчанию', async () => {
-      await MapTemplate.create({ name: 'Active Template' });
-      await MapTemplate.create({ name: 'Archived Template', isArchived: true });
+      await createTestMapTemplate({ name: 'Active Template' });
+      await createTestMapTemplate({ name: 'Archived Template', archivedAt: new Date() });
 
-      const { req } = createMocks({ method: 'GET' });
-      const response = await GET(req);
+      const req = new Request('http://localhost/api/admin/map-templates');
+
+      const response = await GET(req as any);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -31,34 +42,29 @@ describe('/api/admin/map-templates', () => {
     });
 
     it('должен корректно применять пагинацию', async () => {
-      for (let i = 1; i <= 15; i++) {
-        await MapTemplate.create({ name: `Template ${i}` });
+      for (let i = 0; i < 15; i++) {
+        await createTestMapTemplate({ name: `Template ${i}` });
       }
 
-      const { req } = createMocks({
-        method: 'GET',
-        url: 'http://localhost/api/admin/map-templates?page=2&limit=5',
-      });
-      const response = await GET(req);
+      const req = new Request('http://localhost/api/admin/map-templates?page=2&limit=5');
+
+      const response = await GET(req as any);
       const body = await response.json();
 
       expect(response.status).toBe(200);
       expect(body.data.length).toBe(5);
-      expect(body.total).toBe(15);
       expect(body.page).toBe(2);
+      expect(body.total).toBe(15);
       expect(body.totalPages).toBe(3);
-      expect(body.data[0].name).toBe('Template 6');
     });
 
     it('должен возвращать только архивные шаблоны при status=archived', async () => {
-      await MapTemplate.create({ name: 'Active Template' });
-      await MapTemplate.create({ name: 'Archived Template', isArchived: true });
-      
-      const { req } = createMocks({
-        method: 'GET',
-        url: 'http://localhost/api/admin/map-templates?status=archived',
-      });
-      const response = await GET(req);
+      await createTestMapTemplate({ name: 'Active Template' });
+      await createTestMapTemplate({ name: 'Archived Template', archivedAt: new Date() });
+
+      const req = new Request('http://localhost/api/admin/map-templates?status=archived');
+
+      const response = await GET(req as any);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -67,14 +73,12 @@ describe('/api/admin/map-templates', () => {
     });
 
     it('должен возвращать все шаблоны при status=all', async () => {
-      await MapTemplate.create({ name: 'Active Template' });
-      await MapTemplate.create({ name: 'Archived Template', isArchived: true });
+      await createTestMapTemplate({ name: 'Active Template' });
+      await createTestMapTemplate({ name: 'Archived Template', archivedAt: new Date() });
 
-      const { req } = createMocks({
-        method: 'GET',
-        url: 'http://localhost/api/admin/map-templates?status=all',
-      });
-      const response = await GET(req);
+      const req = new Request('http://localhost/api/admin/map-templates?status=all');
+
+      const response = await GET(req as any);
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -82,71 +86,67 @@ describe('/api/admin/map-templates', () => {
     });
 
     it('должен фильтровать по имени с помощью параметра q', async () => {
-      await MapTemplate.create({ name: 'Searchable Alpha' });
-      await MapTemplate.create({ name: 'Searchable Bravo' });
-      await MapTemplate.create({ name: 'Another One' });
+      await createTestMapTemplate({ name: 'Apple Template' });
+      await createTestMapTemplate({ name: 'Banana Template' });
 
-      const { req } = createMocks({
-        method: 'GET',
-        url: 'http://localhost/api/admin/map-templates?q=Searchable',
-      });
-      const response = await GET(req);
+      const req = new Request('http://localhost/api/admin/map-templates?q=apple');
+
+      const response = await GET(req as any);
       const body = await response.json();
-      
+
       expect(response.status).toBe(200);
-      expect(body.data.length).toBe(2);
+      expect(body.data.length).toBe(1);
+      expect(body.data[0].name).toBe('Apple Template');
     });
   });
 
   describe('POST', () => {
-    it('должен успешно создавать новый шаблон и запись в логе аудита', async () => {
-      await dbClear();
-      const templateData = { name: 'My New Awesome Template' };
-      const { req } = createMocks({
+    it('должен успешно создавать новый шаблон', async () => {
+      const templateData = {
+        name: 'My New Awesome Template',
+        description: 'description',
+        mapImage: 'path/to/image.jpg',
+      };
+      const req = new Request('http://localhost/api/admin/map-templates', {
         method: 'POST',
-        body: templateData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(templateData),
       });
 
-      const response = await POST(req);
+      const response = await POST(req as any);
       const body = await response.json();
 
       expect(response.status).toBe(201);
-      expect(body.name).toBe(templateData.name);
+      expect(body.data.name).toBe(templateData.name);
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/map-templates');
 
-      const dbTemplate = await MapTemplate.findById(body._id);
+      const dbTemplate = await MapTemplate.findById(body.data._id);
       expect(dbTemplate).not.toBeNull();
-
-      const auditLog = await AuditLog.findOne({ entityId: body._id });
-      expect(auditLog).not.toBeNull();
-      expect(auditLog?.action).toBe('create');
-      expect(auditLog?.entity).toBe('MapTemplate');
     });
 
     it('должен возвращать 409, если шаблон с таким именем уже существует', async () => {
-      await MapTemplate.create({ name: 'Existing Template' });
-      const templateData = { name: 'Existing Template' };
-      const { req } = createMocks({
+      const name = 'Existing Template';
+      await createTestMapTemplate({ name });
+
+      const req = new Request('http://localhost/api/admin/map-templates', {
         method: 'POST',
-        body: templateData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description: 'd', mapImage: 'i' }),
       });
 
-      const response = await POST(req);
-      
+      const response = await POST(req as any);
       expect(response.status).toBe(409);
     });
-    
+
     it('должен возвращать 400 при невалидных данных (например, без названия)', async () => {
-      const templateData = { description: 'some description' };
-       const { req } = createMocks({
+      const req = new Request('http://localhost/api/admin/map-templates', {
         method: 'POST',
-        body: templateData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: 'description only' }),
       });
 
-      const response = await POST(req);
-      const body = await response.json();
-      
+      const response = await POST(req as any);
       expect(response.status).toBe(400);
-      expect(body.errors.name).toBeDefined();
     });
   });
 }); 

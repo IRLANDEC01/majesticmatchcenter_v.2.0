@@ -1,9 +1,12 @@
 import mongoose from 'mongoose';
-import { connectToDatabase, disconnectFromDatabase } from './db.js';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import { connectToDatabase, clearDatabase, disconnectFromDatabase } from './db.js';
 import models from '../models/index.js';
 import { LIFECYCLE_STATUSES as STATUSES, CURRENCY_TYPES, RESULT_TIERS, MAP_TEMPLATE_STATUSES } from './constants.js';
 import MapTemplate from '@/models/map/MapTemplate';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
+
+let mongoServer;
 
 const {
   Family,
@@ -23,7 +26,12 @@ const {
  * Предназначен для вызова в `beforeAll()`.
  */
 export const dbConnect = async () => {
+  mongoServer = await MongoMemoryServer.create();
+  process.env.MONGODB_URI = mongoServer.getUri();
   await connectToDatabase();
+  // Дожидаемся, пока все модели построят свои индексы.
+  // Это критически важно для тестов, проверяющих уникальные ограничения.
+  await Promise.all(Object.values(mongoose.models).map(model => model.syncIndexes()));
 };
 
 /**
@@ -32,6 +40,9 @@ export const dbConnect = async () => {
  */
 export const dbDisconnect = async () => {
   await disconnectFromDatabase();
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
 };
 
 /**
@@ -39,12 +50,37 @@ export const dbDisconnect = async () => {
  * Предназначен для вызова в `afterEach()` или `beforeEach()` для изоляции тестов.
  */
 export const dbClear = async () => {
-  // ИСПОЛЬЗУЕМ МАКСИМАЛЬНО НАДЕЖНЫЙ СПОСОБ ОЧИСТКИ.
-  // Эта команда полностью удаляет всю базу данных, а затем пересоздает ее.
-  // Это гарантирует, что между тестами не остается абсолютно ничего,
-  // включая "висячие" индексы, которые были причиной наших проблем.
-  if (mongoose.connection.readyState !== 0) {
-    await mongoose.connection.db.dropDatabase();
+  const collections = mongoose.connection.collections;
+  for (const key in collections) {
+    const collection = collections[key];
+    await collection.deleteMany({});
+  }
+};
+
+// =================================================================
+// НОВЫЕ ХЕЛПЕРЫ ДЛЯ УПРАВЛЕНИЯ ЖИЗНЕННЫМ ЦИКЛОМ БД В ТЕСТАХ
+// =================================================================
+let testMongoServer;
+
+export const connectToTestDB = async () => {
+  testMongoServer = await MongoMemoryServer.create();
+  process.env.MONGODB_URI = testMongoServer.getUri();
+  await connectToDatabase();
+  await Promise.all(Object.values(mongoose.models).map(model => model.syncIndexes()));
+};
+
+export const clearTestDB = async () => {
+  const collections = mongoose.connection.collections;
+  for (const key in collections) {
+    const collection = collections[key];
+    await collection.deleteMany({});
+  }
+};
+
+export const disconnectFromTestDB = async () => {
+  await disconnectFromDatabase();
+  if (testMongoServer) {
+    await testMongoServer.stop();
   }
 };
 

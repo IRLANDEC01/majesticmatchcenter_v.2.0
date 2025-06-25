@@ -1,14 +1,11 @@
-import { NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
-import { handleApiError } from '@/lib/api/handle-api-error';
-import { updateMapTemplateSchema } from '@/lib/api/schemas/map-templates/map-template-schemas';
+import { NextRequest, NextResponse } from 'next/server';
 import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
-
-type RouteContext = {
-  params: {
-    id: string;
-  };
-};
+import { handleApiError } from '@/lib/api/handle-api-error';
+import {
+  UpdateMapTemplateDto,
+  updateMapTemplateSchema,
+} from '@/lib/api/schemas/map-templates/map-template-schemas';
+import { revalidatePath } from 'next/cache';
 
 /**
  * GET /api/admin/map-templates/{id}
@@ -16,13 +13,12 @@ type RouteContext = {
  * @param {Request} request - Объект запроса (не используется).
  * @param {RouteContext} context - Контекст с параметрами маршрута.
  */
-export async function GET(request: Request, { params }: RouteContext) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { id } = params;
-    const template = await mapTemplateService.getMapTemplateById(id);
-    return NextResponse.json(template);
+    const template = await mapTemplateService.getMapTemplateById(params.id);
+    return NextResponse.json({ data: template });
   } catch (error) {
-    return handleApiError(error instanceof Error ? error : new Error(String(error)), `Failed to get map template ${params.id}`);
+    return handleApiError(error instanceof Error ? error : new Error(String(error)));
   }
 }
 
@@ -32,40 +28,17 @@ export async function GET(request: Request, { params }: RouteContext) {
  * @param {Request} request - Объект запроса.
  * @param {RouteContext} context - Контекст с параметрами маршрута.
  */
-export async function PATCH(request: Request, { params }: RouteContext) {
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { id } = params;
-    const json = await request.json();
-
-    const validationResult = updateMapTemplateSchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const updatedTemplate = await mapTemplateService.updateMapTemplate(id, validationResult.data);
+    const body = await request.json();
+    const data: UpdateMapTemplateDto = updateMapTemplateSchema.parse(body);
+    const updatedTemplate = await mapTemplateService.updateMapTemplate(params.id, data);
 
     revalidatePath('/admin/map-templates');
-    revalidatePath(`/admin/map-templates/${id}/edit`);
+    revalidatePath(`/admin/map-templates/${params.id}`);
 
-    return NextResponse.json(updatedTemplate, { status: 200 });
+    return NextResponse.json({ data: updatedTemplate });
   } catch (error) {
-    return handleApiError(error instanceof Error ? error : new Error(String(error)), `Failed to update map template ${params.id}`);
-  }
-}
-
-/**
- * DELETE /api/admin/map-templates/[id]
- * Архивирует шаблон карты (мягкое удаление).
- */
-export async function DELETE(request: Request, { params }: RouteContext) {
-  try {
-    const { id } = params;
-    const archivedTemplate = await mapTemplateService.archiveMapTemplate(id);
-
-    revalidatePath('/admin/map-templates');
-
-    return NextResponse.json(archivedTemplate, { status: 200 });
-  } catch (error) {
-    return handleApiError(error as Error, `Failed to archive map template ${params.id}`);
+    return handleApiError(error instanceof Error ? error : new Error(String(error)));
   }
 } 

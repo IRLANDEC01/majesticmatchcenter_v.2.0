@@ -123,6 +123,13 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
   }
 
   async findById(id: string, { includeArchived = false } = {}): Promise<HydratedDocument<T> | null> {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      // Возвращаем null, чтобы соответствовать стандартному поведению findById,
+      // который возвращает null для ненайденных или невалидных ID.
+      // Выбрасывание ошибки здесь может быть неожиданным для вызывающего кода.
+      return null;
+    }
+
     const query: FilterQuery<T> = { _id: id as any };
     if (!includeArchived) {
       (query as IArchivable).archivedAt = null;
@@ -138,6 +145,9 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
   }
 
   async update(id: string, updateData: Partial<T>): Promise<HydratedDocument<T>> {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new NotFoundError(`Документ с невалидным ID ${id} не может быть обновлен.`);
+    }
     const doc = await this.findById(id);
     if (!doc) {
       throw new NotFoundError(`Документ с ID ${id} не найден для обновления.`);
@@ -153,11 +163,14 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
       await this._logAction('update', doc.id, changes);
     }
 
-    await this.cache.delete(this.getCacheKey(id));
+      await this.cache.delete(this.getCacheKey(id));
     return doc;
   }
 
   async archive(id: string): Promise<HydratedDocument<T>> {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new NotFoundError(`Документ с невалидным ID ${id} не может быть архивирован.`);
+    }
     const doc = await this.findById(id, { includeArchived: true });
     if (!doc) {
       throw new NotFoundError(`Документ с ID ${id} не найден для архивации.`);
@@ -176,6 +189,9 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
   }
 
   async restore(id: string): Promise<HydratedDocument<T>> {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new NotFoundError(`Документ с невалидным ID ${id} не может быть восстановлен.`);
+    }
     const doc = await this.findById(id, { includeArchived: true });
     if (!doc) {
       throw new NotFoundError(`Документ с ID ${id} не найден для восстановления.`);

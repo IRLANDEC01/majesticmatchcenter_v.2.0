@@ -96,7 +96,11 @@ class MapTemplateService implements IMapTemplateService {
    * @returns {Promise<HydratedDocument<IMapTemplate>>} - Архивированный шаблон.
    */
   async archiveMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>> {
-    const template = await this.getMapTemplateById(id);
+    const template = await this.repo.findById(id, { includeArchived: true });
+
+    if (!template) {
+      throw new NotFoundError(`Шаблон карты с ID ${id} для архивации не найден.`);
+    }
 
     if (template.archivedAt) {
       throw new ConflictError('Этот шаблон уже находится в архиве.');

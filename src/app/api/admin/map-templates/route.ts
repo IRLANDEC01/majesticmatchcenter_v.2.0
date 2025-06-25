@@ -1,32 +1,30 @@
-import { NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
+import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import {
+  CreateMapTemplateDto,
   createMapTemplateSchema,
+  GetMapTemplatesDto,
   getMapTemplatesSchema,
 } from '@/lib/api/schemas/map-templates/map-template-schemas';
 import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
+import { revalidatePath } from 'next/cache';
 
 /**
  * Обработчик GET-запроса для получения шаблонов карт.
  * @param {Request} request - Входящий запрос.
  * @returns {Promise<NextResponse>}
  */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const params = Object.fromEntries(searchParams.entries());
+    const params: GetMapTemplatesDto = getMapTemplatesSchema.parse(
+      Object.fromEntries(searchParams.entries())
+    );
 
-    const validationResult = getMapTemplatesSchema.safeParse(params);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const templates = await mapTemplateService.getMapTemplates(validationResult.data);
-
-    return NextResponse.json(templates, { status: 200 });
+    const result = await mapTemplateService.getMapTemplates(params);
+    return NextResponse.json(result);
   } catch (error) {
-    return handleApiError(error instanceof Error ? error : new Error(String(error)), 'Failed to get map templates');
+    return handleApiError(error instanceof Error ? error : new Error(String(error)));
   }
 }
 
@@ -35,21 +33,16 @@ export async function GET(request: Request) {
  * @param {Request} request - Входящий запрос.
  * @returns {Promise<NextResponse>}
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const json = await request.json();
-
-    const validationResult = createMapTemplateSchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const newTemplate = await mapTemplateService.createMapTemplate(validationResult.data);
+    const body: CreateMapTemplateDto = await request.json();
+    const data = createMapTemplateSchema.parse(body);
+    const newTemplate = await mapTemplateService.createMapTemplate(data);
 
     revalidatePath('/admin/map-templates');
 
-    return NextResponse.json(newTemplate, { status: 201 });
+    return NextResponse.json({ data: newTemplate }, { status: 201 });
   } catch (error) {
-    return handleApiError(error instanceof Error ? error : new Error(String(error)), 'Failed to create map template');
+    return handleApiError(error instanceof Error ? error : new Error(String(error)));
   }
 } 
