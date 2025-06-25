@@ -1,9 +1,7 @@
 import useSWR from 'swr';
 
 /**
- * Кастомный хук для получения данных о шаблонах карт.
- * Инкапсулирует логику SWR, включая обработку поискового запроса.
- * Делает запрос только при наличии поискового термина.
+ * Кастомный хук для получения данных о шаблонах карт через новый API поиска.
  *
  * @param {object} params - Объект с параметрами для запроса.
  * @param {string} [params.search=''] - Поисковый запрос.
@@ -15,13 +13,13 @@ import useSWR from 'swr';
  * }}
  */
 export function useMapTemplates({ search = '' } = {}) {
-  // Ключ SWR. Если search пустой или его длина меньше 2, ключ будет null, и SWR не будет делать запрос.
+  // Ключ SWR. Если search пустой, ключ будет null, и SWR не будет делать запрос.
   const key =
-    search && search.length >= 2
-      ? `/api/admin/map-templates?search=${search}`
+    search
+      ? `/api/admin/search?q=${encodeURIComponent(search)}&entities=mapTemplates`
       : null;
 
-  const { data, error, isLoading, mutate } = useSWR(
+  const { data: rawData, error, isLoading, mutate } = useSWR(
     key,
     {
       // Эта опция делает UX лучше: при новом поиске старые данные остаются видимыми,
@@ -29,6 +27,9 @@ export function useMapTemplates({ search = '' } = {}) {
       keepPreviousData: true,
     }
   );
+
+  // Извлекаем данные из вложенной структуры
+  const data = rawData?.data?.results?.mapTemplates;
 
   return {
     data,

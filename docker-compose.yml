@@ -8,41 +8,75 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-      - /app/.next
     env_file:
       - .env.local
-    environment:
-      - MONGODB_URI=mongodb://mongodb:27017/majesticMatchCenter
-      - REDIS_URL=redis://redis:6379
     depends_on:
-      - mongodb
-      - redis
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
     restart: unless-stopped
     networks:
-      - app-network
+      - majestic-network
 
-  mongodb:
-    image: mongo:7
+  mongo:
+    image: mongo:latest
+    container_name: mongo
     ports:
       - "27017:27017"
     volumes:
-      - mongodb-data:/data/db
-    restart: unless-stopped
+      - mongo-data:/data/db
     networks:
-      - app-network
+      - majestic-network
+    healthcheck:
+      test: |
+        mongosh --host mongo:27017 --eval \
+        "try { db.adminCommand('ping') } catch (e) { print(e); quit(1); }"
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   redis:
-    image: redis:7-alpine
+    image: redis:latest
+    container_name: redis
     ports:
       - "6379:6379"
-    restart: unless-stopped
+    volumes:
+      - redis-data:/data
     networks:
-      - app-network
+      - majestic-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    container_name: meilisearch
+    environment:
+      - MEILI_MASTER_KEY=${MEILISEARCH_MASTER_KEY}
+      - MEILI_ENV=development
+    ports:
+      - "7700:7700"
+    volumes:
+      - meilisearch-data:/meili_data
+    networks:
+      - majestic-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
 
 volumes:
-  mongodb-data:
+  mongo-data:
   redis-data:
+  meilisearch-data:
 
 networks:
-  app-network:
+  majestic-network:
     driver: bridge 

@@ -1,7 +1,8 @@
 // jest.setup.js
 import { vi } from 'vitest';
 import IORedisMock from 'ioredis-mock';
-import '@/models';// Важнейший импорт для регистрации всех моделей!
+// Заменяем алиас на относительный путь, т.к. плагины Vitest не работают для setup-файлов.
+import './src/models/index.js';
 
 // Устанавливаем фиктивную переменную окружения для тестов.
 // Это необходимо, чтобы пройти проверку в src/lib/redis.js,
@@ -34,3 +35,20 @@ vi.mock('swr', () => ({
   })),
   mutate: vi.fn(),
 }));
+
+/**
+ * Этот файл выполняется один раз перед запуском всех тестов.
+ * Он идеально подходит для глобальной настройки тестового окружения.
+ */
+
+console.log('Запуск глобального файла настройки Vitest (vitest.setup.mjs)...');
+
+// Устанавливаем фиктивные переменные окружения для MeiliSearch,
+// чтобы конструктор SearchService не вызывал ошибку в тестах.
+process.env.MEILISEARCH_HOST = 'http://dummy-host.com';
+process.env.MEILISEARCH_MASTER_KEY = 'dummy-key';
+
+console.log('Переменные окружения для MeiliSearch установлены.');
+
+// В будущем здесь можно будет добавить другую глобальную логику,
+// например, mock для winston logger или других сервисов.

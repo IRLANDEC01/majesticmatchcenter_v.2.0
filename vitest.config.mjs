@@ -1,7 +1,11 @@
 import { defineConfig } from 'vitest/config';
+import tsconfigPaths from 'vite-tsconfig-paths';
 import path from 'path';
 
 export default defineConfig({
+  // Добавляем плагин. Он автоматически прочитает tsconfig.json
+  // и настроит алиасы для Vitest.
+  plugins: [tsconfigPaths()],
   test: {
     // Включаем глобальные переменные (describe, it, expect), чтобы не импортировать их вручную.
     globals: true,
@@ -36,11 +40,6 @@ export default defineConfig({
         'src/lib/test-helpers.js',
         'src/models/index.js',
       ],
-    },
-  },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
     },
   },
 }); 

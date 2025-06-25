@@ -4,6 +4,8 @@ import { cache } from '@/lib/cache';
 import { CacheAdapter } from '@/lib/cache/cache-adapter';
 import { AppError, NotFoundError } from '@/lib/errors';
 import auditLogRepo from '@/lib/repos/audit/audit-log-repo';
+import searchQueue from '@/queues/search-queue';
+import { meilisearchConfig } from '@/configs/meilisearch-config';
 
 // Определяем базовый интерфейс для документов, которые могут быть архивированы
 interface IArchivable {
@@ -91,6 +93,34 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     }
   }
 
+  /**
+   * Добавляет задачу в очередь для синхронизации с MeiliSearch.
+   * Ошибки не прерывают основной процесс.
+   * @protected
+   */
+  protected async _syncSearch(action: 'update' | 'delete', entityId: string) {
+    // Проверяем, настроена ли вообще синхронизация для этой модели
+    const modelName = this.model.modelName.toLowerCase() + 's';
+    if (!meilisearchConfig[modelName]) {
+      return;
+    }
+    
+    try {
+      await searchQueue.add({
+        action,
+        entity: this.model.modelName,
+        entityId,
+      });
+    } catch (error) {
+      console.error('FATAL: Search sync queue write failed.', {
+        err: error,
+        entity: this.model.modelName,
+        entityId,
+        action,
+      });
+    }
+  }
+
   async find({
     query = {},
     select,
@@ -141,6 +171,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     const newDoc = new this.model(data);
     await newDoc.save();
     await this._logAction('create', newDoc.id, newDoc.toObject());
+    await this._syncSearch('update', newDoc.id);
     return newDoc;
   }
 
@@ -161,6 +192,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
       const updatedObject = doc.toObject();
       const changes = diff(originalObject, updatedObject);
       await this._logAction('update', doc.id, changes);
+      await this._syncSearch('update', doc.id);
     }
 
       await this.cache.delete(this.getCacheKey(id));
@@ -183,6 +215,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     await this._logAction('archive', doc.id, {
       archivedAt: { from: originalArchivedAt, to: doc.archivedAt },
     });
+    await this._syncSearch('update', id);
 
     await this.cache.delete(this.getCacheKey(id));
     return doc;
@@ -204,6 +237,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     await this._logAction('restore', doc.id, {
       archivedAt: { from: originalArchivedAt, to: null },
     });
+    await this._syncSearch('update', id);
 
     await this.cache.delete(this.getCacheKey(id));
     return doc;
@@ -223,8 +257,15 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
   }
 
   async save(doc: HydratedDocument<T>): Promise<HydratedDocument<T>> {
+    const isNew = doc.isNew;
     await doc.save();
     await this.cache.delete(this.getCacheKey(doc.id));
+    // Вызываем синхронизацию только если документ был изменен.
+    // Если это новый документ, isNew будет true, и мы его проиндексируем.
+    // Если документ обновлялся, isModified() вернет true.
+    if (!isNew && !doc.isModified()) {
+        await this._syncSearch('update', doc.id);
+    }
     return doc;
   }
 }
