@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import tournamentTemplateService from '@/lib/domain/tournament-templates/tournament-template-service';
@@ -34,24 +35,20 @@ export async function GET(request: Request) {
 /**
  * Создает новый шаблон турнира.
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const json = await request.json();
+    const body = await request.json();
+    const data = createTournamentTemplateSchema.parse(body);
+    const newTemplate = await tournamentTemplateService.createTournamentTemplate(data);
 
-    const validationResult = createTournamentTemplateSchema.safeParse(json);
-    if (!validationResult.success) {
-      return NextResponse.json({ errors: validationResult.error.flatten().fieldErrors }, { status: 400 });
-    }
-
-    const newTemplate = await tournamentTemplateService.createTournamentTemplate(validationResult.data);
-    
     revalidatePath('/admin/tournament-templates');
 
-    return NextResponse.json(newTemplate, { status: 201 });
+    // Возвращаем созданный объект, обернутый в `data`, и статус 201
+    return NextResponse.json({ data: newTemplate }, { status: 201 });
   } catch (error) {
-    return handleApiError(
-      error instanceof Error ? error : new Error(String(error)),
-      'Не удалось создать шаблон турнира'
-    );
+    if (error instanceof Error) {
+      return handleApiError(error);
+    }
+    return handleApiError(new Error(String(error)));
   }
 } 

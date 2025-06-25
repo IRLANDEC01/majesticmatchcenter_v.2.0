@@ -1,8 +1,14 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { HydratedDocument } from 'mongoose';
 import { GET, POST } from './route';
-import { dbClear, createTestMapTemplate, createTestTournamentTemplate } from '@/lib/test-helpers';
+import {
+  connectToTestDB,
+  clearTestDB,
+  disconnectFromTestDB,
+  createTestMapTemplate,
+  createTestTournamentTemplate,
+} from '@/lib/test-helpers';
 import { revalidatePath } from 'next/cache';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
 import AuditLog from '@/models/audit/AuditLog';
@@ -13,19 +19,27 @@ vi.mock('next/cache', () => ({
 }));
 
 describe('/api/admin/tournament-templates', () => {
-  beforeEach(async () => {
-    await dbClear();
+  beforeAll(async () => {
+    await connectToTestDB();
+  });
+
+  afterEach(async () => {
+    await clearTestDB();
     vi.clearAllMocks();
+  });
+
+  afterAll(async () => {
+    await disconnectFromTestDB();
   });
 
   describe('GET', () => {
     it('должен возвращать список активных шаблонов по умолчанию', async () => {
       await createTestTournamentTemplate({ name: 'Active 1' });
       await createTestTournamentTemplate({ name: 'Active 2' });
-      await createTestTournamentTemplate({ name: 'Archived 1', isArchived: true });
+      await createTestTournamentTemplate({ name: 'Archived 1', archivedAt: new Date() });
       const request = new Request('http://localhost/api/admin/tournament-templates');
 
-      const response = await GET(request);
+      const response = await GET(request as any);
       const body = await response.json();
 
       expect(response.status).toBe(StatusCodes.OK);
@@ -40,7 +54,7 @@ describe('/api/admin/tournament-templates', () => {
       await createTestTournamentTemplate({ name: 'Template 3', createdAt: new Date('2023-01-03') });
       const request = new Request('http://localhost/api/admin/tournament-templates?page=2&limit=1');
       
-      const response = await GET(request);
+      const response = await GET(request as any);
       const body = await response.json();
 
       expect(response.status).toBe(StatusCodes.OK);
@@ -52,10 +66,10 @@ describe('/api/admin/tournament-templates', () => {
 
     it('должен возвращать только архивные шаблоны при status=archived', async () => {
       await createTestTournamentTemplate({ name: 'Active 1' });
-      await createTestTournamentTemplate({ name: 'Archived 1', isArchived: true });
+      await createTestTournamentTemplate({ name: 'Archived 1', archivedAt: new Date() });
       const request = new Request('http://localhost/api/admin/tournament-templates?status=archived');
       
-      const response = await GET(request);
+      const response = await GET(request as any);
       const body = await response.json();
 
       expect(response.status).toBe(StatusCodes.OK);
@@ -66,10 +80,10 @@ describe('/api/admin/tournament-templates', () => {
     
     it('должен возвращать все шаблоны при status=all', async () => {
       await createTestTournamentTemplate({ name: 'Active 1' });
-      await createTestTournamentTemplate({ name: 'Archived 1', isArchived: true });
+      await createTestTournamentTemplate({ name: 'Archived 1', archivedAt: new Date() });
       const request = new Request('http://localhost/api/admin/tournament-templates?status=all');
       
-      const response = await GET(request);
+      const response = await GET(request as any);
       const body = await response.json();
 
       expect(response.status).toBe(StatusCodes.OK);
@@ -82,7 +96,7 @@ describe('/api/admin/tournament-templates', () => {
       await createTestTournamentTemplate({ name: 'Banana Cup' });
       const request = new Request('http://localhost/api/admin/tournament-templates?q=apple');
       
-      const response = await GET(request);
+      const response = await GET(request as any);
       const body = await response.json();
 
       expect(response.status).toBe(StatusCodes.OK);
@@ -99,7 +113,7 @@ describe('/api/admin/tournament-templates', () => {
         name: 'New Majestic Cup',
         description: 'A brand new tournament template.',
         tournamentTemplateImage: 'http://example.com/new_image.png',
-        mapTemplates: [(mapTemplate as any)._id.toString()],
+        mapTemplates: [mapTemplate.id],
       };
       const request = new Request('http://localhost/api/admin/tournament-templates', {
         method: 'POST',
@@ -107,14 +121,14 @@ describe('/api/admin/tournament-templates', () => {
         body: JSON.stringify(newTemplateData),
       });
 
-      const response = await POST(request);
+      const response = await POST(request as any);
       const body = await response.json();
       const count = await TournamentTemplate.countDocuments();
-      const auditLog = await AuditLog.findOne({ entityId: body._id });
+      const auditLog = await AuditLog.findOne({ entityId: body.data._id });
 
       expect(response.status).toBe(StatusCodes.CREATED);
-      expect(body.name).toBe('New Majestic Cup');
-      expect(body.slug).toBe('new-majestic-cup');
+      expect(body.data.name).toBe('New Majestic Cup');
+      expect(body.data.slug).toBe('new-majestic-cup');
       expect(count).toBe(1);
       expect(revalidatePath).toHaveBeenCalledWith('/admin/tournament-templates');
       expect(revalidatePath).toHaveBeenCalledTimes(1);
@@ -122,7 +136,7 @@ describe('/api/admin/tournament-templates', () => {
       expect(auditLog).not.toBeNull();
       expect(auditLog!.entity).toBe('TournamentTemplate');
       expect(auditLog!.action).toBe('create');
-      expect(auditLog!.entityId.toString()).toBe(body._id);
+      expect(auditLog!.entityId.toString()).toBe(body.data._id);
     });
 
     it('должен возвращать 409, если шаблон с таким именем уже существует', async () => {
@@ -131,7 +145,7 @@ describe('/api/admin/tournament-templates', () => {
       const newTemplateData = {
         name: 'Existing Template',
         tournamentTemplateImage: 'http://example.com/image.png',
-        mapTemplates: [(mapTemplate as any)._id.toString()],
+        mapTemplates: [mapTemplate.id],
       };
       const request = new Request('http://localhost/api/admin/tournament-templates', {
         method: 'POST',
@@ -139,7 +153,7 @@ describe('/api/admin/tournament-templates', () => {
         body: JSON.stringify(newTemplateData),
       });
 
-      const response = await POST(request);
+      const response = await POST(request as any);
       const body = await response.json();
 
       expect(response.status).toBe(StatusCodes.CONFLICT);
@@ -151,7 +165,7 @@ describe('/api/admin/tournament-templates', () => {
       const invalidData = {
         description: 'Invalid data test',
         tournamentTemplateImage: 'http://example.com/invalid.png',
-        mapTemplates: [(mapTemplate as any)._id.toString()],
+        mapTemplates: [mapTemplate.id],
       };
       const request = new Request('http://localhost/api/admin/tournament-templates', {
         method: 'POST',
@@ -159,7 +173,7 @@ describe('/api/admin/tournament-templates', () => {
         body: JSON.stringify(invalidData),
       });
 
-      const response = await POST(request);
+      const response = await POST(request as any);
 
       expect(response.status).toBe(StatusCodes.BAD_REQUEST);
     });
@@ -174,9 +188,11 @@ describe('/api/admin/tournament-templates', () => {
       it('должен возвращать 400, если название слишком короткое', async () => {
         const invalidData = { ...baseValidData, name: 'a' };
         const request = new Request('http://localhost/api/admin/tournament-templates', {
-          method: 'POST', body: JSON.stringify(invalidData), headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          body: JSON.stringify(invalidData),
+          headers: { 'Content-Type': 'application/json' },
         });
-        const response = await POST(request);
+        const response = await POST(request as any);
         const body = await response.json();
         expect(response.status).toBe(StatusCodes.BAD_REQUEST);
         expect(body.errors.name).toBeDefined();
@@ -185,9 +201,11 @@ describe('/api/admin/tournament-templates', () => {
       it('должен возвращать 400, если не передан массив шаблонов карт', async () => {
         const { mapTemplates, ...invalidData } = baseValidData;
         const request = new Request('http://localhost/api/admin/tournament-templates', {
-          method: 'POST', body: JSON.stringify(invalidData), headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          body: JSON.stringify(invalidData),
+          headers: { 'Content-Type': 'application/json' },
         });
-        const response = await POST(request);
+        const response = await POST(request as any);
         const body = await response.json();
         expect(response.status).toBe(StatusCodes.BAD_REQUEST);
         expect(body.errors.mapTemplates).toBeDefined();
@@ -196,9 +214,11 @@ describe('/api/admin/tournament-templates', () => {
       it('должен возвращать 400, если массив шаблонов карт пустой', async () => {
         const invalidData = { ...baseValidData, mapTemplates: [] };
         const request = new Request('http://localhost/api/admin/tournament-templates', {
-          method: 'POST', body: JSON.stringify(invalidData), headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          body: JSON.stringify(invalidData),
+          headers: { 'Content-Type': 'application/json' },
         });
-        const response = await POST(request);
+        const response = await POST(request as any);
         const body = await response.json();
         expect(response.status).toBe(StatusCodes.BAD_REQUEST);
         expect(body.errors.mapTemplates).toBeDefined();
@@ -207,9 +227,11 @@ describe('/api/admin/tournament-templates', () => {
       it('должен возвращать 400, если в mapTemplates передан невалидный ID', async () => {
         const invalidData = { ...baseValidData, mapTemplates: ['invalid-id'] };
         const request = new Request('http://localhost/api/admin/tournament-templates', {
-          method: 'POST', body: JSON.stringify(invalidData), headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          body: JSON.stringify(invalidData),
+          headers: { 'Content-Type': 'application/json' },
         });
-        const response = await POST(request);
+        const response = await POST(request as any);
         const body = await response.json();
         expect(response.status).toBe(StatusCodes.BAD_REQUEST);
         expect(body.errors.mapTemplates).toBeDefined();

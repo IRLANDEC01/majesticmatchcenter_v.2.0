@@ -60,13 +60,24 @@ class TournamentTemplateService {
    * @returns {Promise<ITournamentTemplate>} Созданный шаблон турнира.
    */
   async createTournamentTemplate(data: CreateTournamentTemplateDto): Promise<HydratedDocument<ITournamentTemplate>> {
-    const { name } = data;
-    const existingTemplate = await this.repo.find({ query: { name }, limit: 1 });
-    if (existingTemplate.total > 0) {
+    const { name, mapTemplates, ...restData } = data;
+
+    // Проверка на уникальность имени
+    const existingTemplate = await this.repo.findOne({ name });
+    if (existingTemplate) {
       throw new ConflictError(`Шаблон турнира с именем "${name}" уже существует.`);
     }
 
-    return this.repo.create(data as any);
+    // Валидация шаблонов карт (проверка на существование и статус)
+    await this.validateMapTemplates(mapTemplates);
+
+    const createPayload: Partial<ITournamentTemplate> = {
+      ...restData,
+      name,
+      mapTemplates: mapTemplates.map(id => new mongoose.Types.ObjectId(id)),
+    };
+
+    return this.repo.create(createPayload);
   }
 
   /**
@@ -88,16 +99,15 @@ class TournamentTemplateService {
       }
     }
 
-    // Проверка существования и статуса шаблонов карт, если они были переданы.
-    if (data.mapTemplates) {
-      await this.validateMapTemplates(data.mapTemplates as string[]);
+    const { mapTemplates, ...restData } = data;
+    const updatePayload: Partial<ITournamentTemplate> = { ...restData };
+
+    if (mapTemplates) {
+      await this.validateMapTemplates(mapTemplates);
+      updatePayload.mapTemplates = mapTemplates.map(id => new mongoose.Types.ObjectId(id));
     }
 
-    // Шаг 3: Делегируем операцию обновления репозиторию.
-    // BaseRepo обработает find-and-save и создаст запись в логе аудита.
-    // Используем "as any" для обхода строгой типизации TS, т.к. Mongoose
-    // самостоятельно кастует string[] в ObjectId[] при сохранении.
-    return this.repo.update(id, data as any);
+    return this.repo.update(id, updatePayload);
   }
 
   /**
@@ -149,13 +159,14 @@ class TournamentTemplateService {
     if (!mapTemplateIds || mapTemplateIds.length === 0) {
       return;
     }
-    
+
     const queryResult = await this.mapTemplateRepo.find({
       query: { _id: { $in: mapTemplateIds } },
       limit: mapTemplateIds.length,
+      status: 'all', // Важно: ищем среди всех, чтобы найти и архивные
     });
     const existingMapTemplates = queryResult.data;
-    
+
     if (existingMapTemplates.length !== mapTemplateIds.length) {
       const foundIds = new Set(existingMapTemplates.map(t => String(t._id)));
       const notFoundId = mapTemplateIds.find(id => !foundIds.has(id));
@@ -164,7 +175,9 @@ class TournamentTemplateService {
 
     const archivedTemplate = existingMapTemplates.find((mt) => mt.archivedAt);
     if (archivedTemplate) {
-      throw new ConflictError(`Нельзя добавить в шаблон архивированную карту: ${archivedTemplate.name} (ID: ${archivedTemplate.id}).`);
+      throw new ConflictError(
+        `Нельзя добавить в шаблон архивированную карту: ${archivedTemplate.name} (ID: ${archivedTemplate.id}).`
+      );
     }
   }
 }

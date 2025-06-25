@@ -1,22 +1,23 @@
 import { NextResponse } from 'next/server';
-import { handleApiError } from '@/lib/api/handle-api-error';
+import type { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { handleApiError } from '@/lib/api/handle-api-error';
 import tournamentTemplateService from '@/lib/domain/tournament-templates/tournament-template-service';
 
-type RouteContext = {
-  params: {
-    id: string;
-  };
-};
-
-export async function PATCH(request: Request, { params }: RouteContext) {
+/**
+ * Восстанавливает шаблон турнира из архива.
+ */
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const restoredTemplate = await tournamentTemplateService.restoreTournamentTemplate(params.id);
-
+    const restoredTemplate = await tournamentTemplateService.restoreTournamentTemplate(
+      params.id
+    );
     revalidatePath('/admin/tournament-templates');
-
-    return NextResponse.json(restoredTemplate);
+    return NextResponse.json({ data: restoredTemplate });
   } catch (error) {
-    return handleApiError(error instanceof Error ? error : new Error(String(error)), 'Не удалось восстановить шаблон турнира');
+    if (error instanceof Error) {
+      return handleApiError(error);
+    }
+    return handleApiError(new Error(String(error)));
   }
-} 
+}

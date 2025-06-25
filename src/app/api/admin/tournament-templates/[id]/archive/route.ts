@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import tournamentTemplateService from '@/lib/domain/tournament-templates/tournament-template-service';
@@ -9,15 +10,18 @@ type RouteContext = {
   };
 };
 
-export async function PATCH(request: Request, { params }: RouteContext) {
+/**
+ * Архивирует шаблон турнира.
+ */
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { id } = params;
-    const archivedTemplate = await tournamentTemplateService.archiveTournamentTemplate(id);
-
+    const archivedTemplate = await tournamentTemplateService.archiveTournamentTemplate(params.id);
     revalidatePath('/admin/tournament-templates');
-
-    return NextResponse.json(archivedTemplate);
+    return NextResponse.json({ data: archivedTemplate });
   } catch (error) {
-    return handleApiError(error instanceof Error ? error : new Error(String(error)), 'Не удалось архивировать шаблон турнира');
+    if (error instanceof Error) {
+      return handleApiError(error);
+    }
+    return handleApiError(new Error(String(error)));
   }
 } 
