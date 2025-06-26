@@ -2,10 +2,11 @@ import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
 import Player from '@/models/player/Player';
 import { revalidatePath } from 'next/cache';
 import { PATCH } from './route';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 
 // Мокируем внешние зависимости
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
 describe('API /api/admin/players/[id]/archive', () => {

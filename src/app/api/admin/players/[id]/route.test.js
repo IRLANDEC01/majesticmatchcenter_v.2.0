@@ -3,10 +3,12 @@ import { dbClear } from '@/lib/test-helpers.js';
 import { revalidatePath } from 'next/cache';
 import Player from '@/models/player/Player.js';
 import mongoose from 'mongoose';
+import playerRepo from '@/lib/repos/players/player-repo';
+import { vi } from 'vitest';
 
 // Мокируем внешние зависимости
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
 describe('/api/admin/players/[id]', () => {

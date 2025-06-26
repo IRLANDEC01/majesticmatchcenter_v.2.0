@@ -5,6 +5,9 @@ import models from '../models/index.js';
 import { LIFECYCLE_STATUSES as STATUSES, CURRENCY_TYPES, RESULT_TIERS, MAP_TEMPLATE_STATUSES } from './constants.js';
 import MapTemplate from '@/models/map/MapTemplate';
 import TournamentTemplate from '@/models/tournament/TournamentTemplate';
+import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
+import tournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo';
+import { clearMemoryCache } from '@/lib/cache';
 
 let mongoServer;
 
@@ -75,6 +78,8 @@ export const clearTestDB = async () => {
     const collection = collections[key];
     await collection.deleteMany({});
   }
+  // Очищаем кэш после очистки базы данных для полной изоляции тестов
+  clearMemoryCache();
 };
 
 export const disconnectFromTestDB = async () => {
@@ -85,58 +90,66 @@ export const disconnectFromTestDB = async () => {
 };
 
 /**
- * Фабрика для создания тестового шаблона карты с валидными данными по умолчанию.
- * @param {object} [overrides] - Объект для переопределения полей по умолчанию.
- * @returns {Promise<import('mongoose').HydratedDocument<import('@/models/map/MapTemplate').IMapTemplate>>}
+ * Создает тестовый шаблон карты с уникальными значениями по умолчанию.
+ * Использует репозиторий для корректной работы с кэшем.
  */
 export const createTestMapTemplate = async (overrides = {}) => {
   const defaults = {
-    name: `Test Map Template ${new mongoose.Types.ObjectId().toString()}`,
-    description: 'A default description for a test map template.',
-    mapTemplateImage: 'default/image.png',
-    status: MAP_TEMPLATE_STATUSES.ACTIVE,
-    mapTemplates: [],
-    ...overrides,
+    name: new mongoose.Types.ObjectId().toString(),
+    mapTemplateImage: 'https://example.com/default-map.png',
+    isArchived: false,
+    isActive: true,
   };
-  const finalData = { ...defaults };
 
+  const templateData = { ...defaults, ...overrides };
+  
   // Обрабатываем флаг архивации для тестов
-  if (finalData.isArchived) {
-    finalData.archivedAt = new Date();
-    delete finalData.isArchived;
+  if (templateData.isArchived) {
+    // @ts-ignore - динамически добавляем поле archivedAt
+    templateData.archivedAt = new Date();
+    delete templateData.isArchived;
   }
-
-  return MapTemplate.create(finalData);
+  
+  return await mapTemplateRepo.create(templateData);
 };
 
 /**
- * Фабрика для создания тестового шаблона турнира с валидными данными по умолчанию.
- * @param {object} [overrides] - Объект для переопределения полей по умолчанию.
- * @returns {Promise<import('mongoose').HydratedDocument<import('@/models/tournament/TournamentTemplate').ITournamentTemplate>>}
+ * Создает тестовый шаблон турнира с уникальными значениями по умолчанию.
+ * Использует репозиторий для корректной работы с кэшем.
  */
 export const createTestTournamentTemplate = async (overrides = {}) => {
+  // Если mapTemplates не переданы, создаем один уникальный по умолчанию для валидации
+  let mapTemplates = overrides.mapTemplates;
+  if (!mapTemplates || mapTemplates.length === 0) {
+    // Каждый раз создаем уникальный шаблон карты с уникальным именем
+    const uniqueMapTemplate = await mapTemplateRepo.create({
+      name: `Map Template ${new mongoose.Types.ObjectId().toString().slice(-8)}`,
+      mapTemplateImage: 'https://example.com/unique-map.png',
+    });
+    mapTemplates = [uniqueMapTemplate._id];
+  }
+
   const defaults = {
-    name: `Test Tournament Template ${new mongoose.Types.ObjectId().toString()}`,
-    description: 'A default description for a test tournament template.',
-    tournamentTemplateImage: 'default/tournament-image.png',
-    prizePool: [],
+    name: new mongoose.Types.ObjectId().toString(),
+    tournamentTemplateImage: 'https://example.com/default-tournament.png',
+    description: 'Test tournament template description',
+    maxParticipants: 8,
+    gameRules: 'Test game rules',
+    mapTemplates: mapTemplates,
+    isArchived: false,
+    isActive: true,
   };
 
-  const finalData = { ...defaults, ...overrides };
-
+  const templateData = { ...defaults, ...overrides };
+  
   // Обрабатываем флаг архивации для тестов
-  if (finalData.isArchived) {
-    finalData.archivedAt = new Date();
-    delete finalData.isArchived;
-  }
-
-  // Если шаблоны карт не переданы, создаем один по умолчанию, чтобы пройти валидацию модели
-  if (!finalData.mapTemplates || finalData.mapTemplates.length === 0) {
-    const defaultMap = await createTestMapTemplate();
-    finalData.mapTemplates = [defaultMap._id];
+  if (templateData.isArchived) {
+    // @ts-ignore - динамически добавляем поле archivedAt
+    templateData.archivedAt = new Date();
+    delete templateData.isArchived;
   }
   
-  return TournamentTemplate.create(finalData);
+  return await tournamentTemplateRepo.create(templateData);
 };
 
 /**
@@ -146,17 +159,16 @@ export const createTestTournamentTemplate = async (overrides = {}) => {
  */
 export const createTestTournament = async (overrides = {}) => {
   const defaults = {
-    name: 'Default Tournament Template',
+    name: `Default Tournament ${new mongoose.Types.ObjectId().toString()}`,
     slug: 'default-tournament-template',
     template: new mongoose.Types.ObjectId(),
     tournamentType: 'family',
     status: STATUSES.ACTIVE,
     startDate: new Date(),
     participants: [],
-    ...overrides,
   };
 
-  const finalData = { ...defaults };
+  const finalData = { ...defaults, ...overrides };
 
   // Обрабатываем флаг архивации для тестов
   if (finalData.isArchived) {

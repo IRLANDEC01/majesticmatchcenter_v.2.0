@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { tournamentTemplateUpdateSchema } from '@/lib/api/schemas/tournament-templates/tournament-template-schemas';
 import tournamentTemplateService from '@/lib/domain/tournament-templates/tournament-template-service';
-import { handleApiError } from '@/lib/api/handle-api-error';
+import { handleApiError } from '@/lib/api/handle-api-error.js';
 
 type RouteContext = {
   params: { id: string; };

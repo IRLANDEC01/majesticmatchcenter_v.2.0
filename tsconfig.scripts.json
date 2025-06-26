@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "server-only": ["./scripts/shims/server-only.ts"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["scripts/**/*.ts", "src/lib/**/*.ts", "src/models/**/*.ts", "src/queues/**/*.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"]
+} 

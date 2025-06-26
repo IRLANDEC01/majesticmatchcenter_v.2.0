@@ -1,5 +1,5 @@
-import { vi } from 'vitest';
-import IORedisMock from 'ioredis-mock';
+import { vi, beforeAll, afterAll } from 'vitest';
+import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import dotenv from 'dotenv';
 import path from 'path';
 // Загружаем модели Mongoose для серверного окружения
@@ -12,18 +12,35 @@ import './src/models/index.js';
 // при работе с кодом, предназначенным для Next.js App Router.
 vi.mock('server-only', () => ({}));
 
-// 1. Мокаем Redis
-// Это позволяет изолировать тесты от реальной инфраструктуры Redis.
-vi.mock('ioredis', () => ({
-  default: IORedisMock,
-}));
-
-// 2. Мокаем Next.js Cache API
-// Необходимо для Route Handlers, которые могут вызывать revalidatePath.
+// Мокаем Next.js Cache API
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
   revalidateTag: vi.fn(),
 }));
+
+// --- Настройка Testcontainers для Redis ---
+
+let redisContainer;
+
+beforeAll(async () => {
+  console.log('🚀 Запуск Redis контейнера для тестов...');
+  redisContainer = await new GenericContainer('redis:7-alpine').withExposedPorts(6379).start();
+  const redisPort = redisContainer.getMappedPort(6379);
+  const redisHost = redisContainer.getHost();
+  
+  // Устанавливаем глобальную переменную, а не process.env
+  globalThis.__REDIS_URL__ = `redis://${redisHost}:${redisPort}`;
+  
+  console.log(`✅ Redis контейнер запущен. URL установлен в глобальную переменную.`);
+});
+
+afterAll(async () => {
+  console.log('🛑 Остановка Redis контейнера...');
+  if (redisContainer) {
+    await redisContainer.stop();
+  }
+  console.log('👍 Redis контейнер успешно остановлен.');
+});
 
 // --- Настройка переменных окружения ---
 

@@ -19,9 +19,13 @@ describe('/api/admin/tournament-templates/[id]', () => {
     await connectToTestDB();
   });
 
+  beforeEach(async () => {
+    await clearTestDB();
+    vi.clearAllMocks();
+  });
+
   afterAll(async () => {
     await disconnectFromTestDB();
-    vi.clearAllMocks();
   });
 
   describe('GET', () => {

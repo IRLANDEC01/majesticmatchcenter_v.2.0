@@ -1,3 +1,4 @@
+import 'server-only';
 import { MeiliSearch, Task, EnqueuedTask } from 'meilisearch';
 import { meilisearchConfig, MeiliIndexConfig } from '../../../../configs/meilisearch-config';
 import mongoose from 'mongoose';
@@ -91,8 +92,8 @@ class SearchService {
       const documents = await model.find({}).lean<LeanDocument[]>();
       
       const promises = documents.map(doc => {
-        return searchQueue.add({
-          action: 'update',
+        // BullMQ требует два аргумента: имя задачи и данные
+        return searchQueue.add('update', {
           entity: modelName,
           entityId: doc._id.toString(),
         });
@@ -132,14 +133,14 @@ class SearchService {
   public async search(query: string, entities: string[]): Promise<any> {
     const searchQueries = entities
       .map(entityKey => {
-        const indexConfig = meilisearchConfig[entityKey];
-        if (!indexConfig) {
-          console.warn(`Конфигурация для сущности "${entityKey}" не найдена.`);
+        const config = meilisearchConfig[entityKey];
+        if (!config) {
+          console.warn(`[SearchService] No search config found for entity key: ${entityKey}`);
           return null;
         }
-        return { indexName: indexConfig.indexName, q: query };
+        return { indexUid: config.indexName, q: query };
       })
-      .filter(Boolean);
+      .filter((q): q is { indexUid: string; q: string } => q !== null);
 
     if (searchQueries.length === 0) {
       return { query, entities, results: {} };
@@ -174,16 +175,19 @@ class SearchService {
       throw new Error(`Модель "${entityName}" не найдена в Mongoose.`);
     }
 
+    // Ищем конфиг по имени модели, чтобы найти нужную buildSearchEntry функцию
+    const config = Object.values(meilisearchConfig).find(c => c.modelName === entityName);
+    if (!config || !config.buildSearchEntry) {
+      throw new Error(`Конфигурация поиска или функция buildSearchEntry для модели "${entityName}" не найдена.`);
+    }
+
     const doc = await model.findById(entityId).lean<LeanDocument>();
     if (!doc) {
       return null;
     }
 
-    // Простое преобразование для примера. В будущем здесь может быть сложная логика.
-    return {
-      id: doc._id.toString(),
-      ...doc,
-    };
+    // Используем специальную функцию для построения документа
+    return config.buildSearchEntry(doc);
   }
 
   /**
@@ -193,19 +197,21 @@ class SearchService {
    * @param entityId - ID документа.
    */
   public async syncDocument(action: 'update' | 'delete', entityName: string, entityId: string): Promise<void> {
-    const modelKey = entityName.toLowerCase() + 's'; // 'MapTemplate' -> 'maptemplates'
-    const indexConfig = meilisearchConfig[modelKey];
+    // Ищем конфиг для этой модели по `modelName`, а не по выдуманному ключу.
+    const modelConfigEntry = Object.values(meilisearchConfig).find(
+      config => config.modelName === entityName
+    );
 
-    if (!indexConfig) {
+    if (!modelConfigEntry) {
       // Для этой модели не настроен поиск, просто выходим.
       return;
     }
 
-    const index = this.client.index(indexConfig.indexName);
+    const index = this.client.index(modelConfigEntry.indexName);
 
     if (action === 'delete') {
       await index.deleteDocument(entityId);
-      console.log(`[SearchService] Документ ${entityId} удален из индекса ${indexConfig.indexName}`);
+      console.log(`[SearchService] Документ ${entityId} удален из индекса ${modelConfigEntry.indexName}`);
       return;
     }
 
@@ -213,7 +219,7 @@ class SearchService {
     const documentPayload = await this._buildDocument(entityName, entityId);
     if (documentPayload) {
       await index.addDocuments([documentPayload], { primaryKey: 'id' });
-      console.log(`[SearchService] Документ ${entityId} синхронизирован с индексом ${indexConfig.indexName}`);
+      console.log(`[SearchService] Документ ${entityId} синхронизирован с индексом ${modelConfigEntry.indexName}`);
     } else {
       // Если документ не найден в БД, возможно, его нужно удалить и из индекса
       await index.deleteDocument(entityId).catch(e => console.warn(`Не удалось удалить отсутствующий документ ${entityId} из индекса. Возможно, его там и не было.`));

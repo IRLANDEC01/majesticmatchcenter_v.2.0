@@ -1,6 +1,10 @@
 import { connectToDatabase, disconnectFromDatabase } from '../src/lib/db';
 import searchService from '../src/lib/domain/search/search-service';
 
+// Явный импорт моделей для их регистрации в Mongoose
+import '../src/models/map/MapTemplate';
+import '../src/models/tournament/TournamentTemplate';
+
 /**
  * Функция-обертка для запуска полной переиндексации из командной строки.
  * Управляет подключением к БД, вызывает сервис и завершает процесс.

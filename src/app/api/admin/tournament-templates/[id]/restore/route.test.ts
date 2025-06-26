@@ -1,27 +1,26 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, vi } from 'vitest';
-import { HydratedDocument } from 'mongoose';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import mongoose from 'mongoose';
 import { PATCH } from './route';
 import {
   connectToTestDB,
   clearTestDB,
   disconnectFromTestDB,
   createTestTournamentTemplate,
-} from '@/lib/test-helpers';
-import TournamentTemplate, { ITournamentTemplate } from '@/models/tournament/TournamentTemplate';
+} from '@/lib/test-helpers.js';
 import { revalidatePath } from 'next/cache';
+import TournamentTemplate from '@/models/tournament/TournamentTemplate';
+import { clearMemoryCache } from '@/lib/cache';
 
-vi.mock('next/cache', () => ({
-  revalidatePath: vi.fn(),
-}));
+vi.mock('next/cache');
 
 describe('PATCH /api/admin/tournament-templates/[id]/restore', () => {
   beforeAll(async () => {
     await connectToTestDB();
-    await clearTestDB();
   });
 
   beforeEach(async () => {
     await clearTestDB();
+     clearMemoryCache();
     vi.clearAllMocks();
   });
 
@@ -30,51 +29,38 @@ describe('PATCH /api/admin/tournament-templates/[id]/restore', () => {
   });
 
   it('должен успешно восстанавливать шаблон из архива', async () => {
-    const archivedTemplate = await createTestTournamentTemplate({
-      name: 'Archived for Restore Test',
-      archivedAt: new Date(),
-    });
-    
-    // Arrange
-    const request = new Request(`http://localhost/api/admin/tournament-templates/${archivedTemplate.id}/restore`, {
+    const template = await createTestTournamentTemplate({ name: 'Template to restore', isArchived: true, tournamentTemplateImage: 'https://example.com/image15.png' });
+    const req = new Request(`http://localhost/api/admin/tournament-templates/${template.id}/restore`, {
       method: 'PATCH',
     });
 
-    // Act
-    const response = await PATCH(request as any, { params: { id: archivedTemplate.id } });
+    const response = await PATCH(req as any, { params: { id: template.id.toString() } });
     const body = await response.json();
-    const restoredTemplate = await TournamentTemplate.findById(archivedTemplate.id);
 
-    // Assert
+    const restoredTemplate = await TournamentTemplate.findById(template._id);
+
     expect(response.status).toBe(200);
     expect(restoredTemplate?.archivedAt).toBeNull();
     expect(body.data.archivedAt).toBeNull();
     expect(revalidatePath).toHaveBeenCalledWith('/admin/tournament-templates');
-    expect(revalidatePath).toHaveBeenCalledWith(`/admin/tournament-templates/${archivedTemplate.id}`);
+    expect(revalidatePath).toHaveBeenCalledWith(`/admin/tournament-templates/${template.id}`);
   });
 
   it('должен возвращать 404 для несуществующего ID', async () => {
-    const nonExistentId = '605c72ef9f1b2c001f7b8b17';
-    const request = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}/restore`, {
+    const nonExistentId = new mongoose.Types.ObjectId();
+    const req = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}/restore`, {
       method: 'PATCH',
     });
-
-    const response = await PATCH(request as any, { params: { id: nonExistentId } });
-
+    const response = await PATCH(req as any, { params: { id: nonExistentId.toString() } });
     expect(response.status).toBe(404);
   });
 
   it('должен возвращать 409, если шаблон не находится в архиве', async () => {
-    const activeTemplate = await createTestTournamentTemplate({
-      name: 'Active Template',
-    });
-    
-    const request = new Request(`http://localhost/api/admin/tournament-templates/${activeTemplate.id}/restore`, {
+    const template = await createTestTournamentTemplate({ name: 'Not Archived', tournamentTemplateImage: 'https://example.com/image16.png' });
+    const req = new Request(`http://localhost/api/admin/tournament-templates/${template.id}/restore`, {
       method: 'PATCH',
     });
-
-    const response = await PATCH(request as any, { params: { id: activeTemplate.id } });
-
+    const response = await PATCH(req as any, { params: { id: template.id.toString() } });
     expect(response.status).toBe(409);
   });
 }); 

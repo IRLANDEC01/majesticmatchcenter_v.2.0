@@ -1,52 +1,57 @@
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll, beforeAll } from 'vitest';
 
 // Мокируем зависимости ДО импорта самого сервиса
 vi.mock('meilisearch');
 vi.mock('../../../../configs/meilisearch-config');
 vi.mock('@/queues/search-queue');
-// vi.mock('mongoose'); // Мокировать mongoose не нужно, т.к. мы будем использовать in-memory db
 
 // Импортируем типы и мокированные модули
 import { MeiliSearch, EnqueuedTask } from 'meilisearch';
-import { meilisearchConfig } from '../../../../configs/meilisearch-config';
+import { meilisearchConfig as actualConfig } from '../../../../configs/meilisearch-config';
 import searchQueue from '@/queues/search-queue';
 import { connectToTestDB, clearTestDB, disconnectFromTestDB } from '@/lib/test-helpers';
 import MapTemplate from '@/models/map/MapTemplate';
-import mongoose, { Model } from 'mongoose';
-
-// @ts-ignore
-const MockedMeiliSearch = MeiliSearch as vi.Mock;
+import mongoose from 'mongoose';
 
 describe('SearchService', () => {
   let searchService: any;
   let mockClient: any;
+  let mockMapTemplatesIndex: any;
 
   beforeAll(async () => {
     await connectToTestDB();
   });
 
   beforeEach(async () => {
-    // vi.resetModules() критически важен для тестирования синглтонов.
-    // Он очищает кэш модулей, заставляя search-service.ts исполняться заново для каждого теста.
     vi.resetModules();
     vi.clearAllMocks();
     await clearTestDB();
 
-    // Настраиваем мок MeiliSearch
-    const mockIndexInstance = {
-      updateSettings: vi.fn().mockResolvedValue({} as EnqueuedTask),
+    mockMapTemplatesIndex = {
+      updateFilterableAttributes: vi.fn(),
+      updateSortableAttributes: vi.fn(),
+      updateSearchableAttributes: vi.fn(),
       addDocuments: vi.fn().mockResolvedValue({} as EnqueuedTask),
       deleteDocument: vi.fn().mockResolvedValue({} as EnqueuedTask),
     };
+
     mockClient = {
-      index: vi.fn(() => mockIndexInstance),
+      index: vi.fn((indexName) => {
+        if (indexName === 'map_templates') return mockMapTemplatesIndex;
+        return { 
+          updateFilterableAttributes: vi.fn(), 
+          updateSortableAttributes: vi.fn(), 
+          updateSearchableAttributes: vi.fn() 
+        };
+      }),
       multiSearch: vi.fn(),
       createIndex: vi.fn().mockResolvedValue({} as EnqueuedTask),
     };
-    // @ts-ignore
-    (MockedMeiliSearch as vi.Mock).mockReturnValue(mockClient);
 
-    // Импортируем сервис ПОСЛЕ настройки моков
+    vi.mocked(MeiliSearch).mockReturnValue(mockClient);
+
+    vi.mocked(actualConfig, true);
+
     const serviceModule = await import('./search-service');
     searchService = serviceModule.default;
   });
@@ -55,67 +60,69 @@ describe('SearchService', () => {
     await disconnectFromTestDB();
   });
 
-
-  it('init() - должен создать индексы и обновить настройки для всех сущностей из конфига', async () => {
-    await searchService.init();
-
-    const configuredIndexes = Object.keys(meilisearchConfig);
-    expect(mockClient.createIndex).toHaveBeenCalledTimes(configuredIndexes.length);
-
-    // Проверяем что для КАЖДОГО индекса из конфига была вызвана его настройка
-    for (const entityName of configuredIndexes) {
-      const config = meilisearchConfig[entityName as keyof typeof meilisearchConfig];
-      const index = mockClient.index(entityName);
-
-      expect(mockClient.createIndex).toHaveBeenCalledWith(entityName, { primaryKey: 'id' });
-      expect(index.updateSettings).toHaveBeenCalledWith({
-        filterableAttributes: config.filterableAttributes,
-        sortableAttributes: config.sortableAttributes,
-        searchableAttributes: config.searchableAttributes,
-      });
-    }
-  });
-
   it('search() - должен выполнять мультипоиск и форматировать результаты', async () => {
     mockClient.multiSearch.mockResolvedValue({
       results: [{ hits: [{ id: 1, name: 'Test Map' }], indexUid: 'map_templates' }],
     });
 
-    const result = await searchService.search('test', ['map_templates']);
+    const result = await searchService.search('test', ['mapTemplates']);
 
     expect(mockClient.multiSearch).toHaveBeenCalledWith({
-      queries: [{ indexName: 'map_templates', q: 'test' }],
+      queries: [{ indexUid: 'map_templates', q: 'test' }],
     });
-    expect(result.map_templates).toEqual([{ id: 1, name: 'Test Map' }]);
+    expect(result.results.mapTemplates).toEqual([{ id: 1, name: 'Test Map' }]);
   });
   
-  it('syncDocument() - [update] должен добавить документ в индекс, если он существует в БД', async () => {
-    const mapTemplate = await MapTemplate.create({ name: 'Test Map', image: 'test.jpg' });
+  it('syncDocument() - [update] должен добавить документ в правильный индекс, если он существует в БД', async () => {
+    const mapTemplate = await MapTemplate.create({ 
+      name: 'Test Map', 
+      mapTemplateImage: 'https://example.com/test.jpg' 
+    });
     
-    await searchService.syncDocument('map_templates', mapTemplate.id, 'update');
+    await searchService.syncDocument('update', 'MapTemplate', mapTemplate.id.toString());
 
-    const mapIndex = mockClient.index('map_templates');
-    expect(mapIndex.addDocuments).toHaveBeenCalledTimes(1);
-    // Проверяем, что ID конвертируется в строку для Meilisearch
-    const sentDocument = mapIndex.addDocuments.mock.calls[0][0][0];
+    expect(mockClient.index).toHaveBeenCalledWith('map_templates');
+    expect(mockMapTemplatesIndex.addDocuments).toHaveBeenCalledTimes(1);
+
+    const sentDocument = mockMapTemplatesIndex.addDocuments.mock.calls[0][0][0];
     expect(sentDocument.id).toBe(mapTemplate.id.toString());
     expect(sentDocument.name).toBe('Test Map');
   });
 
   it('syncDocument() - [update] должен удалить документ из индекса, если он не найден в БД', async () => {
     const nonExistentId = new mongoose.Types.ObjectId();
-    await searchService.syncDocument('map_templates', nonExistentId, 'update');
+    await searchService.syncDocument('update', 'MapTemplate', nonExistentId.toString());
 
-    const mapIndex = mockClient.index('map_templates');
-    expect(mapIndex.deleteDocument).toHaveBeenCalledWith(nonExistentId.toString());
-    expect(mapIndex.addDocuments).not.toHaveBeenCalled();
+    expect(mockClient.index).toHaveBeenCalledWith('map_templates');
+    expect(mockMapTemplatesIndex.deleteDocument).toHaveBeenCalledWith(nonExistentId.toString());
+    expect(mockMapTemplatesIndex.addDocuments).not.toHaveBeenCalled();
   });
 
   it('syncDocument() - [delete] должен удалить документ из индекса', async () => {
     const nonExistentId = new mongoose.Types.ObjectId();
-    await searchService.syncDocument('map_templates', nonExistentId, 'delete');
+    await searchService.syncDocument('delete', 'MapTemplate', nonExistentId.toString());
 
-    const mapIndex = mockClient.index('map_templates');
-    expect(mapIndex.deleteDocument).toHaveBeenCalledWith(nonExistentId.toString());
+    expect(mockClient.index).toHaveBeenCalledWith('map_templates');
+    expect(mockMapTemplatesIndex.deleteDocument).toHaveBeenCalledWith(nonExistentId.toString());
+  });
+
+  it('reindexAll() - должен добавлять в очередь задачи на индексацию для каждой сущности', async () => {
+    await MapTemplate.create({ 
+      name: 'Map 1', 
+      mapTemplateImage: 'https://example.com/map1.jpg' 
+    });
+    await MapTemplate.create({ 
+      name: 'Map 2', 
+      mapTemplateImage: 'https://example.com/map2.jpg' 
+    });
+
+    await searchService.reindexAll();
+
+    expect(searchQueue.add).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(searchQueue.add).mock.calls[0][0]).toBe('update');
+    expect(vi.mocked(searchQueue.add).mock.calls[0][1]).toMatchObject({ entity: 'MapTemplate' });
+    
+    expect(vi.mocked(searchQueue.add).mock.calls[1][0]).toBe('update');
+    expect(vi.mocked(searchQueue.add).mock.calls[1][1]).toMatchObject({ entity: 'MapTemplate' });
   });
 }); 

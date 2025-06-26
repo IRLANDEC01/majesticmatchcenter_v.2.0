@@ -3,13 +3,15 @@ import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers.js';
 import { revalidatePath } from 'next/cache';
 import Player from '@/models/player/Player.js';
 import mongoose from 'mongoose';
+import playerRepo from '@/lib/repos/players/player-repo';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
-jest.mock('@/lib/domain/players/player-service.js', () => ({
-  unarchivePlayer: jest.fn(),
+vi.mock('@/lib/domain/players/player-service.js', () => ({
+  unarchivePlayer: vi.fn(),
 }));
 
 import playerService from '@/lib/domain/players/player-service.js';

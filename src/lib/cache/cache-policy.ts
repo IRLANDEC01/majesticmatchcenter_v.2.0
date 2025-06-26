@@ -1,3 +1,18 @@
+import 'server-only';
+
+/**
+ * =================================================================================
+ * ЦЕНТРАЛИЗОВАННАЯ ПОЛИТИКА КЭШИРОВАНИЯ
+ * =================================================================================
+ * Этот файл - единственный источник правды для всех настроек, связанных с кэшем.
+ * Цель: избежать "магических строк" и чисел, разбросанных по кодовой базе.
+ *
+ * - `cacheTtls`: определяет время жизни (TTL) для разных типов данных.
+ * - `cacheKeys`: фабрика для генерации консистентных ключей кэша.
+ * - `cacheTags`: фабрика для генерации тегов для инвалидации.
+ * =================================================================================
+ */
+
 /**
  * Централизованная политика времени жизни (TTL) для ключей кэша в секундах.
  * Это обеспечивает консистентность и упрощает управление кэшированием.
@@ -19,22 +34,43 @@ export const cacheTTL = {
   'config:global': 60 * 60, // 1 час
 };
 
+// Время жизни кэша в секундах
+export const cacheTtls = {
+  // Короткий кэш для часто меняющихся списков
+  listShort: 60 * 5, // 5 минут
+  // Средний кэш для отдельных сущностей
+  entityMedium: 60 * 60, // 1 час
+  // Длинный кэш для редко меняющихся данных
+  staticLong: 60 * 60 * 24, // 24 часа
+};
+
 /**
- * Политика именования тегов для инвалидации кэша.
- * Использование консистентных тегов - ключ к эффективной ревалидации.
- *
- * Формат: `entity` или `entity:id`
+ * Фабрика для создания ключей кэша.
+ * Гарантирует консистентность по всему приложению.
+ */
+export const cacheKeys = {
+  // Ключи для MapTemplate
+  mapTemplate: (id: string) => `map-template:${id}`,
+  mapTemplatesList: (page: number, limit: number, rev: number) =>
+    `map-templates:list:p${page}:l${limit}:rev${rev}`,
+  mapTemplatesRev: () => 'rev:map-templates:list',
+
+  // Добавьте другие сущности по аналогии...
+  // player: (id: string) => `player:${id}`,
+  // playersList: (page: number, limit: number, rev: number) => `players:list:p${page}:l${limit}:rev${rev}`,
+  // playersRev: () => 'rev:players:list',
+};
+
+/**
+ * Фабрика для создания тегов для инвалидации.
+ * Теги позволяют группировать ключи для массовой инвалидации.
  */
 export const cacheTags = {
-  // Теги для списков
-  mapTemplateList: () => 'map-templates:list',
-  tournamentTemplateList: () => 'tournament-templates:list',
-  playerList: () => 'players:list',
-  familyList: () => 'families:list',
-
-  // Теги для отдельных сущностей
-  mapTemplate: (id: string) => `map-template:${id}`,
-  tournamentTemplate: (id: string) => `tournament-template:${id}`,
-  player: (id: string) => `player:${id}`,
-  family: (id: string) => `family:${id}`,
+  // Теги для MapTemplate
+  mapTemplate: (id: string) => `map-template:${id}`, // Тег для конкретной сущности
+  mapTemplatesList: () => `map-templates:list`,     // Тег для всех списков
+  
+  // Добавьте другие сущности по аналогии...
+  // player: (id: string) => `player:${id}`,
+  // playersList: () => `players:list`,
 }; 

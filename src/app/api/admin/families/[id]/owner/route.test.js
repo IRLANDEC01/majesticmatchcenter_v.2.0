@@ -4,9 +4,11 @@ import Family from '@/models/family/Family.js';
 import Player from '@/models/player/Player.js';
 import { revalidatePath } from 'next/cache';
 import { FAMILY_MEMBER_ROLES } from '@/lib/constants.js';
+import familyRepo from '@/lib/repos/families/family-repo';
+import { vi } from 'vitest';
 
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
 describe('API /api/admin/families/[id]/owner', () => {

@@ -13,7 +13,11 @@ export const createMapTemplateSchema = z.object({
     })
     .min(3, 'Название должно содержать минимум 3 символа')
     .max(50, 'Название не должно превышать 50 символов'),
-  mapTemplateImage: z.string().url('Некорректный URL изображения.'),
+  mapTemplateImage: z.union([
+    z.string().url('Некорректный URL изображения.'),
+    z.instanceof(File, { message: 'Файл изображения обязателен.' }),
+    z.string().min(1, 'Изображение обязательно.')
+  ]),
   description: z.string().max(500, 'Описание не может превышать 500 символов').optional(),
 });
 
@@ -26,7 +30,11 @@ export type CreateMapTemplateDto = z.infer<typeof createMapTemplateSchema>;
  */
 export const updateMapTemplateSchema = z.object({
   name: z.string().min(3).max(50).optional(),
-  mapTemplateImage: z.string().url('Некорректный URL изображения').optional(),
+  mapTemplateImage: z.union([
+    z.string().url('Некорректный URL изображения'),
+    z.instanceof(File),
+    z.string().min(1)
+  ]).optional(),
   description: z.string().max(500).optional(),
 });
 

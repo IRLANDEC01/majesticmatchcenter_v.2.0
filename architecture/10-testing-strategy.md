@@ -22,7 +22,30 @@
 
 Мы **никогда** не мокируем наши собственные сервисы или репозитории. Тест должен проверять всю вертикаль: `API Route` -> `Service` -> `Repo` -> `DB`. Мокировать разрешено **только** внешние зависимости (например, `next/cache`, сторонние SDK).
 
-### 3. Паттерн "Прагматичный мост для NextRequest"
+### 3. Паттерн "Селективное мокирование внешних интеграций"
+
+**Новое (Январь 2025):** При тестировании сервисов с внешними интеграциями (Meilisearch, S3, внешние API) применяем **селективное мокирование**:
+
+```typescript
+// ✅ ПРАВИЛЬНО: Мокируем только внешние сервисы
+vi.mock('@/lib/domain/search/search-service', () => ({
+  default: {
+    syncDocument: vi.fn().mockResolvedValue(undefined),
+  }
+}));
+
+// ✅ ПРАВИЛЬНО: Мокируем Next.js кэш
+vi.mock('next/cache', () => ({
+  revalidateTag: vi.fn(),
+}));
+
+// ❌ НЕПРАВИЛЬНО: Мокировать собственные репозитории/сервисы
+vi.mock('@/lib/repos/map-templates/map-template-repo');
+```
+
+**Принцип:** Мокируем только то, что **выходит за границы нашего приложения**.
+
+### 4. Паттерн "Прагматичный мост для NextRequest"
 
 Для имитации HTTP-запроса мы используем стандартный Web API `new Request(...)`. Поскольку обработчики Next.js ожидают специфичный тип `NextRequest`, мы используем приведение типа `req as any` при вызове обработчика. Это осознанный технический компромисс, позволяющий использовать стандартный API и избежать хрупких сторонних библиотек вроде `node-mocks-http`.
 
@@ -99,6 +122,107 @@ describe('/api/admin/map-templates/[id]', () => {
 
 ---
 
+## Тестирование React компонентов с внешними интеграциями
+
+**Новый раздел (Январь 2025):** Рекомендации по тестированию компонентов, использующих SWR, внешние API и переиспользуемые хуки.
+
+### Паттерн тестирования компонентов с SWR
+
+```typescript
+// EntitySearch.test.tsx
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { SWRConfig } from 'swr';
+import { EntitySearch } from './entity-search';
+
+// Мокируем SWR для контроля над данными
+const mockSWRConfig = {
+  dedupingInterval: 0,
+  provider: () => new Map(),
+};
+
+describe('EntitySearch', () => {
+  it('должен отображать результаты поиска', async () => {
+    const mockResults = [{ id: '1', name: 'Test Map' }];
+    const mockOnResults = vi.fn();
+
+    // Мокируем fetch для SWR
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        data: { results: { mapTemplates: mockResults } }
+      }),
+    });
+
+    render(
+      <SWRConfig value={mockSWRConfig}>
+        <EntitySearch
+          entities="mapTemplates"
+          onResults={mockOnResults}
+        />
+      </SWRConfig>
+    );
+
+    const input = screen.getByPlaceholderText(/поиск/i);
+    fireEvent.change(input, { target: { value: 'test' } });
+
+    await waitFor(() => {
+      expect(mockOnResults).toHaveBeenCalledWith(
+        mockResults,
+        expect.objectContaining({ isLoading: false })
+      );
+    });
+  });
+});
+```
+
+### Паттерн тестирования хуков с внешними зависимостями
+
+```typescript
+// useSearch.test.ts
+import { renderHook, waitFor } from '@testing-library/react';
+import { SWRConfig } from 'swr';
+import { useSearch } from './use-search';
+
+describe('useSearch', () => {
+  it('должен выполнять поиск с debounce', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: { results: { mapTemplates: [] } } }),
+    });
+    global.fetch = mockFetch;
+
+    const { result } = renderHook(
+      () => useSearch({ entities: 'mapTemplates' }),
+      {
+        wrapper: ({ children }) => (
+          <SWRConfig value={{ provider: () => new Map() }}>
+            {children}
+          </SWRConfig>
+        ),
+      }
+    );
+
+    // Проверяем debounce
+    result.current.setSearchTerm('test');
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/admin/search?q=test')
+      );
+    }, { timeout: 1000 });
+  });
+});
+```
+
+**Ключевые принципы:**
+- ✅ Мокировать `fetch` для контроля над данными
+- ✅ Использовать `SWRConfig` для изоляции кэша
+- ✅ Тестировать debounce и асинхронное поведение
+- ✅ Проверять правильность вызовов коллбеков
+
+---
+
 ## Анти-паттерны v2.2: Чему мы научились
 
 ### 1. ❌ Глобальное подключение к БД в `vitest.setup.mjs`
@@ -121,6 +245,49 @@ describe('/api/admin/map-templates/[id]', () => {
 *   **Почему это плохо:** Приводит к дублированию логики и ошибкам.
 *   **Решение:** Стремиться к максимальному переиспользованию кода внутри сервиса.
 
+### 5. ❌ Тестирование реальных внешних сервисов
+*   **Проблема:** Попытка тестировать интеграцию с реальным Meilisearch, S3 или другими внешними сервисами в unit/integration тестах.
+*   **Почему это плохо:** 
+    - Тесты становятся медленными и нестабильными
+    - Зависимость от внешней инфраструктуры
+    - Сложность настройки CI/CD
+*   **Решение:** Мокировать внешние сервисы и тестировать только логику интеграции.
+
+### 6. ❌ Игнорирование синхронных операций в тестах
+*   **Проблема:** При добавлении синхронных вызовов внешних сервисов (например, `syncDocument`) не обновлять существующие тесты.
+*   **Почему это плохо:** Тесты не покрывают новую логику и могут пропустить ошибки.
+*   **Решение:** Всегда проверять, что моки внешних сервисов вызываются с правильными параметрами:
+```typescript
+it('должен синхронно индексировать новый шаблон', async () => {
+  // ... создание шаблона
+  
+  expect(mockSearchService.syncDocument).toHaveBeenCalledWith(
+    'update', 
+    'MapTemplate', 
+    expect.any(String)
+  );
+});
+```
+
+### 7. ❌ Отсутствие тестов для переиспользуемых компонентов
+*   **Проблема:** Создание универсальных компонентов (EntitySearch, useSearch) без соответствующих тестов.
+*   **Почему это плохо:** Баги в переиспользуемых компонентах влияют на множество страниц.
+*   **Решение:** **Обязательное** покрытие тестами всех переиспользуемых компонентов и хуков.
+
 ## Заключение
 
-Новая стратегия, основанная на **самодостаточных интеграционных тестах**, делает наш тестовый набор значительно более надежным, читаемым и простым в поддержке. Этот стандарт является обязательным для всей новой и рефакторимой кодовой базы. 
+Новая стратегия, основанная на **самодостаточных интеграционных тестах**, делает наш тестовый набор значительно более надежным, читаемым и простым в поддержке. 
+
+**Обновления v2.3 (Январь 2025):**
+- ✅ Добавлены паттерны тестирования внешних интеграций (Meilisearch, S3)
+- ✅ Рекомендации по тестированию React компонентов с SWR
+- ✅ Новые анти-паттерны для современной архитектуры
+- ✅ Обязательное покрытие переиспользуемых компонентов
+
+**Приоритеты покрытия:**
+1. **API Routes** (интеграционные тесты) - 90% усилий
+2. **Переиспользуемые компоненты** (EntitySearch, хуки) - обязательно
+3. **Сложная бизнес-логика** (unit тесты) - по необходимости
+4. **Критические пути** (E2E) - минимально
+
+Этот стандарт является обязательным для всей новой и рефакторимой кодовой базы. 

@@ -1,7 +1,7 @@
 // scripts/run-search-worker.ts
 
 import { connectToDatabase, disconnectFromDatabase } from '../src/lib/db';
-import '../src/queues/search-worker'; // Важно: просто импортируем, чтобы запустить код воркера
+import worker from '../src/queues/search-worker'; // Импортируем сам воркер
 
 console.log('[RunWorker] 🚀 Скрипт запуска воркера стартовал.');
 
@@ -18,26 +18,31 @@ async function startWorker() {
     const keepAlive = () => {};
     process.on('SIGINT', gracefulShutdown);
     process.on('SIGTERM', gracefulShutdown);
-    setInterval(keepAlive, 1000 * 60 * 60); // Просто чтобы процесс не завершился
   } catch (error) {
     console.error('[RunWorker] ❌ Критическая ошибка при запуске воркера:', error);
-    process.exit(1);
+    await gracefulShutdown(1);
   }
 }
 
-async function gracefulShutdown() {
+async function gracefulShutdown(exitCode = 0) {
   console.log('\n[RunWorker] 🛑 Получен сигнал завершения. Начинаю остановку...');
   try {
+    // 1. Закрываем воркер. Он дождется завершения активной задачи.
+    console.log('[RunWorker] ⏳ Закрытие воркера BullMQ...');
+    await worker.close();
+    console.log('[RunWorker] ✅ Воркер BullMQ успешно остановлен.');
+
+    // 2. Отключаемся от БД
     await disconnectFromDatabase();
     console.log('[RunWorker] ✅ Успешно отключено от базы данных.');
   } catch (error) {
     console.error(
-      '[RunWorker] ❌ Ошибка при отключении от базы данных:',
+      '[RunWorker] ❌ Ошибка при корректном завершении работы:',
       error
     );
   } finally {
     console.log('[RunWorker] 👋 Процесс воркера завершен.');
-    process.exit(0);
+    process.exit(exitCode);
   }
 }
 

@@ -3,9 +3,10 @@ import { dbConnect, dbDisconnect, dbClear } from '@/lib/test-helpers';
 import Family from '@/models/family/Family';
 import Player from '@/models/player/Player';
 import { revalidatePath } from 'next/cache';
+import { vi } from 'vitest';
 
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
 describe('PATCH /api/admin/families/[id]/archive', () => {

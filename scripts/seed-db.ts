@@ -1,3 +1,7 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+import mongoose from 'mongoose';
 import { connectToDatabase, disconnectFromDatabase } from '../src/lib/db';
 import MapTemplate from '../src/models/map/MapTemplate';
 import TournamentTemplate from '../src/models/tournament/TournamentTemplate';
@@ -36,10 +40,11 @@ async function seedDatabase() {
       name: 'Majestic Major 2025',
       description: 'Главный турнир года с классическим набором карт.',
       rules: 'Стандартные правила 5x5.',
+      tournamentTemplateImage: 'https://placehold.co/600x400/E9C46A/2A9D8F?text=Majestic+Major',
       prizePool: [
-        { type: 'rank', rank: 1, amount: 10000 },
-        { type: 'rank', rank: 2, amount: 5000 },
-        { type: 'rank', rank: 3, amount: 2500 },
+        { reward: { amount: 10000, currency: 'rub' }, target: { rank: { from: 1, to: 1 } } },
+        { reward: { amount: 5000, currency: 'rub' }, target: { rank: { from: 2, to: 2 } } },
+        { reward: { amount: 2500, currency: 'rub' }, target: { rank: { from: 3, to: 3 } } },
       ],
       mapTemplates: [
         createdMapTemplates[0]._id, // Dust 2

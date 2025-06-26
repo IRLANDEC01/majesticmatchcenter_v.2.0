@@ -21,6 +21,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const restoredTemplate = await mapTemplateService.restoreMapTemplate(id);
 
     revalidatePath('/admin/map-templates');
+    revalidatePath(`/admin/map-templates/${id}`);
 
     return NextResponse.json(restoredTemplate, { status: 200 });
   } catch (error) {

@@ -1,8 +1,7 @@
 import 'server-only';
 import mongoose, { Document, Model, FilterQuery, HydratedDocument } from 'mongoose';
 import { diff } from 'deep-object-diff';
-import { cache } from '@/lib/cache';
-import { CacheAdapter } from '@/lib/cache/cache-adapter';
+import { invalidate } from '@/lib/cache';
 import { AppError, NotFoundError } from '@/lib/errors';
 import auditLogRepo from '@/lib/repos/audit/audit-log-repo';
 
@@ -48,7 +47,6 @@ export interface IBaseRepo<T> {
 abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
   protected model: Model<T>;
   protected cachePrefix: string;
-  protected cache: CacheAdapter;
 
   constructor(model: Model<T>, cachePrefix: string) {
     if (this.constructor === BaseRepo) {
@@ -56,7 +54,6 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     }
     this.model = model;
     this.cachePrefix = cachePrefix;
-    this.cache = cache;
   }
 
   protected getCacheKey(id: string): string {
@@ -142,6 +139,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     const newDoc = new this.model(data);
     await newDoc.save();
     await this._logAction('create', newDoc.id, newDoc.toObject());
+    await invalidate(this.getCacheKey(newDoc.id));
     return newDoc;
   }
 
@@ -164,7 +162,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
       await this._logAction('update', doc.id, changes);
     }
 
-    await this.cache.delete(this.getCacheKey(id));
+    await invalidate(this.getCacheKey(id));
     return doc;
   }
 
@@ -185,7 +183,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
       archivedAt: { from: originalArchivedAt, to: doc.archivedAt },
     });
 
-    await this.cache.delete(this.getCacheKey(id));
+    await invalidate(this.getCacheKey(id));
     return doc;
   }
 
@@ -203,21 +201,19 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
       archivedAt: { from: originalArchivedAt, to: null },
     });
 
-    await this.cache.delete(this.getCacheKey(id));
+    await invalidate(this.getCacheKey(id));
     return doc;
   }
 
   async findOne(
     query: FilterQuery<T>,
-    options?: { includeArchived?: boolean },
+    { includeArchived = false } = {},
   ): Promise<HydratedDocument<T> | null> {
     const finalQuery: FilterQuery<T> = { ...query };
-    if (options?.includeArchived) {
-      finalQuery['archivedAt'] = { $ne: null };
-    } else {
+    if (!includeArchived) {
       finalQuery['archivedAt'] = { $eq: null };
     }
-    return this.model.findOne(finalQuery);
+    return this.model.findOne(finalQuery).exec();
   }
 
   async save(doc: HydratedDocument<T>): Promise<HydratedDocument<T>> {
@@ -230,7 +226,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
       // Метод toObject() вернет чистый объект для лога.
       await this._logAction('update', doc.id, doc.toObject());
     }
-    await this.cache.delete(this.getCacheKey(doc.id));
+    await invalidate(this.getCacheKey(doc.id));
     return doc; 
   }
 }

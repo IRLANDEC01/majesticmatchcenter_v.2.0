@@ -8,6 +8,7 @@ import {
 } from '@/lib/api/schemas/map-templates/map-template-schemas';
 import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
 import { revalidatePath } from 'next/cache';
+import { connectToDatabase } from '@/lib/db';
 
 /**
  * Обработчик GET-запроса для получения шаблонов карт.
@@ -16,6 +17,9 @@ import { revalidatePath } from 'next/cache';
  */
 export async function GET(request: NextRequest) {
   try {
+    // Инициализируем подключение к базе данных
+    await connectToDatabase();
+    
     const { searchParams } = new URL(request.url);
     const params: GetMapTemplatesDto = getMapTemplatesSchema.parse(
       Object.fromEntries(searchParams.entries())
@@ -35,6 +39,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Инициализируем подключение к базе данных
+    await connectToDatabase();
+    
     const body: CreateMapTemplateDto = await request.json();
     const data = createMapTemplateSchema.parse(body);
     const newTemplate = await mapTemplateService.createMapTemplate(data);

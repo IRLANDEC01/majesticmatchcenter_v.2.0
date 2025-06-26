@@ -23,15 +23,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { SubmitButton } from '@/components/ui/submit-button';
 
 // Шаг 1: Выносим форму в отдельный, стабильный компонент.
-const MapTemplateForm = ({ form, isEditMode, isSubmitting, onSubmit, onClose }) => {
-  const { control, handleSubmit, formState: { isDirty } } = form;
+const MapTemplateForm = ({ form, isDirty, isEditMode, isSubmitting, onSubmit, onClose }) => {
+  const { handleSubmit } = form;
 
   return (
     <Form {...form}>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <fieldset disabled={isSubmitting} className="space-y-4">
           <FormField
-            control={control}
+            control={form.control}
             name="name"
             render={({ field }) => (
               <FormItem>
@@ -46,7 +46,7 @@ const MapTemplateForm = ({ form, isEditMode, isSubmitting, onSubmit, onClose }) 
             )}
           />
           <FormField
-            control={control}
+            control={form.control}
             name="description"
             render={({ field }) => (
               <FormItem>
@@ -59,7 +59,7 @@ const MapTemplateForm = ({ form, isEditMode, isSubmitting, onSubmit, onClose }) 
             )}
           />
           <FormField
-            control={control}
+            control={form.control}
             name="mapTemplateImage"
             render={({ field }) => (
               <FormItem>
@@ -101,12 +101,7 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = Boolean(template);
 
-  const {
-    control,
-    handleSubmit,
-    reset,
-    formState: { isDirty },
-  } = useForm({
+  const form = useForm({
     resolver: zodResolver(createMapTemplateSchema),
     defaultValues: {
       name: '',
@@ -114,6 +109,8 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
       mapTemplateImage: '',
     },
   });
+
+  const { reset, formState: { isDirty } } = form;
 
   useEffect(() => {
     if (isOpen) {
@@ -239,7 +236,7 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
           </DialogDescription>
           {serverError && <div className="text-sm font-medium text-destructive">{serverError}</div>}
         </DialogHeader>
-        {isLoading ? <DialogSkeleton /> : <MapTemplateForm form={{ control, handleSubmit, isDirty }} isEditMode={isEditMode} isSubmitting={isSubmitting} onSubmit={onSubmit} onClose={handleClose} />}
+        {isLoading ? <DialogSkeleton /> : <MapTemplateForm form={form} isDirty={isDirty} isEditMode={isEditMode} isSubmitting={isSubmitting} onSubmit={onSubmit} onClose={handleClose} />}
       </DialogContent>
     </Dialog>
   );

@@ -4,9 +4,10 @@ import { revalidatePath } from 'next/cache';
 import Player from '@/models/player/Player.js';
 import PlayerStats from '@/models/player/PlayerStats.js';
 import playerRepo from '@/lib/repos/players/player-repo';
+import { StatusCodes } from 'http-status-codes';
 
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
 describe('API /api/admin/players', () => {
