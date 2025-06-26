@@ -1,3 +1,4 @@
+import 'server-only';
 import { CacheAdapter } from './cache-adapter';
 import getRedisClient from '../redis';
 

@@ -3,9 +3,10 @@ import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers
 import { revalidatePath } from 'next/cache';
 import { STATUSES } from '@/lib/constants';
 import Map from '@/models/map/Map.js';
+import { vi } from 'vitest';
 
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
 describe('POST /api/admin/maps/[id]/rollback', () => {

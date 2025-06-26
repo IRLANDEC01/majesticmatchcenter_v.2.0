@@ -9,7 +9,7 @@ export interface IMapTemplate extends Document {
   name: string;
   slug: string;
   description?: string;
-  image?: string;
+  mapTemplateImage: string;
   archivedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -42,8 +42,10 @@ const mapTemplateSchema = new Schema<IMapTemplate>(
       trim: true,
       comment: 'Версия схемы для поддержки будущих миграций данных.',
     },
-    image: {
-      type: String, // URL or path to image
+    mapTemplateImage: {
+      type: String,
+      required: true,
+      trim: true,
     },
     archivedAt: {
       type: Date,

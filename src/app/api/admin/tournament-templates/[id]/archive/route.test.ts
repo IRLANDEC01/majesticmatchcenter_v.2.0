@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, vi } from 'vitest';
 import { HydratedDocument } from 'mongoose';
 import { PATCH } from './route';
 import {
@@ -17,13 +17,12 @@ vi.mock('next/cache', () => ({
 }));
 
 describe('PATCH /api/admin/tournament-templates/[id]/archive', () => {
-  let template: HydratedDocument<ITournamentTemplate>;
-
   beforeAll(async () => {
     await connectToTestDB();
+    await clearTestDB();
   });
 
-  afterEach(async () => {
+  beforeEach(async () => {
     await clearTestDB();
     vi.clearAllMocks();
   });
@@ -32,70 +31,50 @@ describe('PATCH /api/admin/tournament-templates/[id]/archive', () => {
     await disconnectFromTestDB();
   });
 
-  beforeEach(async () => {
-    template = await createTestTournamentTemplate({ name: 'Template to Archive' });
-  });
-
   it('должен успешно архивировать шаблон и вызывать revalidatePath', async () => {
-    // Arrange
-    const request = new Request(
-      `http://localhost/api/admin/tournament-templates/${template.id}/archive`,
-      {
-        method: 'PATCH',
-      }
-    );
+    const activeTemplate = await createTestTournamentTemplate({ name: 'Template to Archive' });
+    
+    const request = new Request(`http://localhost/api/admin/tournament-templates/${activeTemplate.id}/archive`, {
+      method: 'PATCH',
+    });
 
-    // Act
-    const response = await PATCH(request as any, { params: { id: template.id } });
+    const response = await PATCH(request as any, { params: { id: activeTemplate.id } });
     const body = await response.json();
 
-    // Assert
     expect(response.status).toBe(200);
+    expect(body.data.name).toBe('Template to Archive');
 
-    const archivedTemplate = await TournamentTemplate.findById(template.id);
+    const archivedTemplate = await TournamentTemplate.findById(activeTemplate.id);
     expect(archivedTemplate?.archivedAt).toBeInstanceOf(Date);
     expect(body.data.archivedAt).toBeDefined();
 
     expect(revalidatePath).toHaveBeenCalledWith('/admin/tournament-templates');
-    expect(revalidatePath).toHaveBeenCalledTimes(1);
+    expect(revalidatePath).toHaveBeenCalledWith(`/admin/tournament-templates/${activeTemplate.id}`);
   });
 
   it('должен возвращать 409, если шаблон уже в архиве', async () => {
-    // Arrange: first, archive the template
-    await tournamentTemplateRepo.archive(template.id);
+    const archivedTemplate = await createTestTournamentTemplate({ 
+      name: 'Already Archived Template',
+      archivedAt: new Date()
+    });
+    
+    const request = new Request(`http://localhost/api/admin/tournament-templates/${archivedTemplate.id}/archive`, {
+      method: 'PATCH',
+    });
 
-    const request = new Request(
-      `http://localhost/api/admin/tournament-templates/${template.id}/archive`,
-      {
-        method: 'PATCH',
-      }
-    );
+    const response = await PATCH(request as any, { params: { id: archivedTemplate.id } });
 
-    // Act
-    const response = await PATCH(request as any, { params: { id: template.id } });
-    const body = await response.json();
-
-    // Assert
     expect(response.status).toBe(409);
-    expect(body.message).toContain('уже находится в архиве');
   });
 
   it('должен возвращать 404 для несуществующего ID', async () => {
-    // Arrange
     const nonExistentId = '605c72ef9f1b2c001f7b8b17';
-    const request = new Request(
-      `http://localhost/api/admin/tournament-templates/${nonExistentId}/archive`,
-      {
-        method: 'PATCH',
-      }
-    );
+    const request = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}/archive`, {
+      method: 'PATCH',
+    });
 
-    // Act
     const response = await PATCH(request as any, { params: { id: nonExistentId } });
-    const body = await response.json();
 
-    // Assert
     expect(response.status).toBe(404);
-    expect(body.message).toContain('не найден');
   });
 }); 

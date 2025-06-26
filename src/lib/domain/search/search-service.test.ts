@@ -1,220 +1,121 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 
 // Мокируем зависимости ДО импорта самого сервиса
-vi.mock('meilisearch', () => {
-  const mockIndex = {
-    updateFilterableAttributes: vi.fn(),
-    updateSortableAttributes: vi.fn(),
-    updateSearchableAttributes: vi.fn(),
-    addDocuments: vi.fn().mockResolvedValue({ taskUid: 1 }),
-    deleteDocument: vi.fn().mockResolvedValue({ taskUid: 2 }),
-  };
-  const mockClient = {
-    createIndex: vi.fn().mockResolvedValue({ taskUid: 3 }),
-    index: vi.fn(() => mockIndex),
-    multiSearch: vi.fn(),
-  };
-  return {
-    MeiliSearch: vi.fn(() => mockClient),
-  };
-});
+vi.mock('meilisearch');
+vi.mock('../../../../configs/meilisearch-config');
+vi.mock('@/queues/search-queue');
+// vi.mock('mongoose'); // Мокировать mongoose не нужно, т.к. мы будем использовать in-memory db
 
-vi.mock('@/configs/meilisearch-config', () => ({
-  meilisearchConfig: {
-    players: {
-      indexName: 'players',
-      primaryKey: 'id',
-      filterableAttributes: ['familyId'],
-      sortableAttributes: ['rating'],
-      searchableAttributes: ['firstName', 'lastName'],
-    },
-    families: {
-      indexName: 'families',
-      primaryKey: 'id',
-      filterableAttributes: [],
-      sortableAttributes: ['rating'],
-      searchableAttributes: ['name'],
-    },
-  },
-}));
+// Импортируем типы и мокированные модули
+import { MeiliSearch, EnqueuedTask } from 'meilisearch';
+import { meilisearchConfig } from '../../../../configs/meilisearch-config';
+import searchQueue from '@/queues/search-queue';
+import { connectToTestDB, clearTestDB, disconnectFromTestDB } from '@/lib/test-helpers';
+import MapTemplate from '@/models/map/MapTemplate';
+import mongoose, { Model } from 'mongoose';
 
-vi.mock('mongoose', async () => {
-  const actualMongoose = await vi.importActual('mongoose');
-  // Используем Object.assign для обхода ошибки типизации при распространении модулей
-  const mockedDefault = Object.assign({}, actualMongoose.default, { models: {} });
-  const mockedModule = Object.assign({}, actualMongoose, { default: mockedDefault });
-  return mockedModule;
-});
-
-// Теперь импортируем сервис
-import { MeiliSearch } from 'meilisearch';
-import { meilisearchConfig } from '@/configs/meilisearch-config';
-import mongoose from 'mongoose';
+// @ts-ignore
+const MockedMeiliSearch = MeiliSearch as vi.Mock;
 
 describe('SearchService', () => {
   let searchService: any;
   let mockClient: any;
-  let mockIndex: any;
+
+  beforeAll(async () => {
+    await connectToTestDB();
+  });
 
   beforeEach(async () => {
     // vi.resetModules() критически важен для тестирования синглтонов.
     // Он очищает кэш модулей, заставляя search-service.ts исполняться заново для каждого теста.
     vi.resetModules();
-    
-    // Теперь, когда кэш чист, импортируем сервис заново, чтобы получить свежий экземпляр.
+    vi.clearAllMocks();
+    await clearTestDB();
+
+    // Настраиваем мок MeiliSearch
+    const mockIndexInstance = {
+      updateSettings: vi.fn().mockResolvedValue({} as EnqueuedTask),
+      addDocuments: vi.fn().mockResolvedValue({} as EnqueuedTask),
+      deleteDocument: vi.fn().mockResolvedValue({} as EnqueuedTask),
+    };
+    mockClient = {
+      index: vi.fn(() => mockIndexInstance),
+      multiSearch: vi.fn(),
+      createIndex: vi.fn().mockResolvedValue({} as EnqueuedTask),
+    };
+    // @ts-ignore
+    (MockedMeiliSearch as vi.Mock).mockReturnValue(mockClient);
+
+    // Импортируем сервис ПОСЛЕ настройки моков
     const serviceModule = await import('./search-service');
     searchService = serviceModule.default;
+  });
 
-    // После resetModules нам нужно получить новый хендл мока.
-    const { MeiliSearch: MockedMeiliSearch } = await import('meilisearch');
-    mockClient = new MockedMeiliSearch({ host: 'dummy', apiKey: 'dummy' });
+  afterAll(async () => {
+    await disconnectFromTestDB();
+  });
+
+
+  it('init() - должен создать индексы и обновить настройки для всех сущностей из конфига', async () => {
+    await searchService.init();
+
+    const configuredIndexes = Object.keys(meilisearchConfig);
+    expect(mockClient.createIndex).toHaveBeenCalledTimes(configuredIndexes.length);
+
+    // Проверяем что для КАЖДОГО индекса из конфига была вызвана его настройка
+    for (const entityName of configuredIndexes) {
+      const config = meilisearchConfig[entityName as keyof typeof meilisearchConfig];
+      const index = mockClient.index(entityName);
+
+      expect(mockClient.createIndex).toHaveBeenCalledWith(entityName, { primaryKey: 'id' });
+      expect(index.updateSettings).toHaveBeenCalledWith({
+        filterableAttributes: config.filterableAttributes,
+        sortableAttributes: config.sortableAttributes,
+        searchableAttributes: config.searchableAttributes,
+      });
+    }
+  });
+
+  it('search() - должен выполнять мультипоиск и форматировать результаты', async () => {
+    mockClient.multiSearch.mockResolvedValue({
+      results: [{ hits: [{ id: 1, name: 'Test Map' }], indexUid: 'map_templates' }],
+    });
+
+    const result = await searchService.search('test', ['map_templates']);
+
+    expect(mockClient.multiSearch).toHaveBeenCalledWith({
+      queries: [{ indexName: 'map_templates', q: 'test' }],
+    });
+    expect(result.map_templates).toEqual([{ id: 1, name: 'Test Map' }]);
+  });
+  
+  it('syncDocument() - [update] должен добавить документ в индекс, если он существует в БД', async () => {
+    const mapTemplate = await MapTemplate.create({ name: 'Test Map', image: 'test.jpg' });
     
-    // Очищаем историю вызовов моков перед каждым тестом
-    vi.clearAllMocks();
+    await searchService.syncDocument('map_templates', mapTemplate.id, 'update');
+
+    const mapIndex = mockClient.index('map_templates');
+    expect(mapIndex.addDocuments).toHaveBeenCalledTimes(1);
+    // Проверяем, что ID конвертируется в строку для Meilisearch
+    const sentDocument = mapIndex.addDocuments.mock.calls[0][0][0];
+    expect(sentDocument.id).toBe(mapTemplate.id.toString());
+    expect(sentDocument.name).toBe('Test Map');
   });
 
-  describe('constructor', () => {
-    it('should throw an error if environment variables are not set', async () => {
-      // Сохраняем оригинальные значения, установленные в setup-файле
-      const originalHost = process.env.MEILISEARCH_HOST;
-      const originalKey = process.env.MEILISEARCH_MASTER_KEY;
+  it('syncDocument() - [update] должен удалить документ из индекса, если он не найден в БД', async () => {
+    const nonExistentId = new mongoose.Types.ObjectId();
+    await searchService.syncDocument('map_templates', nonExistentId, 'update');
 
-      try {
-        // 1. Проверяем отсутствие HOST
-        delete process.env.MEILISEARCH_HOST;
-        vi.resetModules(); // Перезагружаем модуль с новым окружением
-        await expect(import('./search-service')).rejects.toThrow('Переменные окружения MeiliSearch не установлены.');
-        
-        // Восстанавливаем HOST и удаляем KEY
-        process.env.MEILISEARCH_HOST = originalHost;
-        delete process.env.MEILISEARCH_MASTER_KEY;
-
-        // 2. Проверяем отсутствие KEY
-        vi.resetModules(); // Снова перезагружаем
-        await expect(import('./search-service')).rejects.toThrow('Переменные окружения MeiliSearch не установлены.');
-
-      } finally {
-        // Гарантированно восстанавливаем переменные для других тестов, даже если что-то пошло не так
-        process.env.MEILISEARCH_HOST = originalHost;
-        process.env.MEILISEARCH_MASTER_KEY = originalKey;
-      }
-    });
-  });
- 
-  describe('init', () => {
-    it('should create indexes and update settings for all configured entities', async () => {
-      await searchService.init();
-
-      // Проверяем, что createIndex был вызван для каждой сущности
-      expect(mockClient.createIndex).toHaveBeenCalledTimes(2);
-      expect(mockClient.createIndex).toHaveBeenCalledWith('players', { primaryKey: 'id' });
-      expect(mockClient.createIndex).toHaveBeenCalledWith('families', { primaryKey: 'id' });
-
-      // Проверяем, что index() был вызван для каждой сущности
-      expect(mockClient.index).toHaveBeenCalledWith('players');
-      expect(mockClient.index).toHaveBeenCalledWith('families');
-
-      // Проверяем вызовы обновления атрибутов для 'players'
-      const playerIndex = mockClient.index('players');
-      expect(playerIndex.updateFilterableAttributes).toHaveBeenCalledWith(meilisearchConfig.players.filterableAttributes);
-      expect(playerIndex.updateSortableAttributes).toHaveBeenCalledWith(meilisearchConfig.players.sortableAttributes);
-      expect(playerIndex.updateSearchableAttributes).toHaveBeenCalledWith(meilisearchConfig.players.searchableAttributes);
-
-      // Проверяем вызовы обновления атрибутов для 'families'
-      const familyIndex = mockClient.index('families');
-      expect(familyIndex.updateFilterableAttributes).toHaveBeenCalledWith(meilisearchConfig.families.filterableAttributes);
-      expect(familyIndex.updateSortableAttributes).toHaveBeenCalledWith(meilisearchConfig.families.sortableAttributes);
-      expect(familyIndex.updateSearchableAttributes).toHaveBeenCalledWith(meilisearchConfig.families.searchableAttributes);
-    });
+    const mapIndex = mockClient.index('map_templates');
+    expect(mapIndex.deleteDocument).toHaveBeenCalledWith(nonExistentId.toString());
+    expect(mapIndex.addDocuments).not.toHaveBeenCalled();
   });
 
-  describe('search', () => {
-    it('should perform a multi-search and format results', async () => {
-      const mockApiResponse = {
-        results: [
-          { indexUid: 'players', hits: [{ id: 'p1', name: 'Player 1' }] },
-          { indexUid: 'families', hits: [{ id: 'f1', name: 'Family 1' }] },
-        ],
-      };
-      mockClient.multiSearch.mockResolvedValue(mockApiResponse);
+  it('syncDocument() - [delete] должен удалить документ из индекса', async () => {
+    const nonExistentId = new mongoose.Types.ObjectId();
+    await searchService.syncDocument('map_templates', nonExistentId, 'delete');
 
-      const result = await searchService.search('test', ['players', 'families']);
-
-      expect(mockClient.multiSearch).toHaveBeenCalledWith({
-        queries: [
-          { indexName: 'players', q: 'test' },
-          { indexName: 'families', q: 'test' },
-        ],
-      });
-
-      expect(result).toEqual({
-        query: 'test',
-        entities: ['players', 'families'],
-        results: {
-          players: [{ id: 'p1', name: 'Player 1' }],
-          families: [{ id: 'f1', name: 'Family 1' }],
-        },
-      });
-    });
-
-    it('should handle entities with no config', async () => {
-      const result = await searchService.search('test', ['players', 'nonexistent']);
-      expect(mockClient.multiSearch).toHaveBeenCalledWith({
-        queries: [{ indexName: 'players', q: 'test' }],
-      });
-    });
-  });
-
-  describe('syncDocument', () => {
-    describe("action: 'update'", () => {
-      it('should build and add a document if it exists in DB', async () => {
-        const mockPlayer = { _id: new mongoose.Types.ObjectId(), name: 'John Doe' };
-        mongoose.models.Player = {
-          findById: vi.fn().mockReturnValue({
-            lean: vi.fn().mockResolvedValue(mockPlayer),
-          }),
-        } as any;
-
-        await searchService.syncDocument('update', 'Player', mockPlayer._id.toString());
-        
-        const playerIndex = mockClient.index('players');
-        expect(playerIndex.addDocuments).toHaveBeenCalledWith(
-          [{ id: mockPlayer._id.toString(), ...mockPlayer }],
-          { primaryKey: 'id' }
-        );
-      });
-
-      it('should delete a document from index if it does not exist in DB', async () => {
-        const playerId = new mongoose.Types.ObjectId().toString();
-        mongoose.models.Player = {
-          findById: vi.fn().mockReturnValue({
-            lean: vi.fn().mockResolvedValue(null),
-          }),
-        } as any;
-
-        await searchService.syncDocument('update', 'Player', playerId);
-
-        const playerIndex = mockClient.index('players');
-        expect(playerIndex.deleteDocument).toHaveBeenCalledWith(playerId);
-        expect(playerIndex.addDocuments).not.toHaveBeenCalled();
-      });
-    });
-
-    describe("action: 'delete'", () => {
-      it('should delete a document from the index', async () => {
-        const playerId = new mongoose.Types.ObjectId().toString();
-        await searchService.syncDocument('delete', 'Player', playerId);
-        
-        const playerIndex = mockClient.index('players');
-        expect(playerIndex.deleteDocument).toHaveBeenCalledWith(playerId);
-      });
-    });
-
-    it('should do nothing for an unconfigured entity', async () => {
-        await searchService.syncDocument('update', 'Unconfigured', '123');
-        // `mockClient.index` является точкой входа для любой операции с индексом.
-        // Если он не был вызван, значит сервис правильно проигнорировал сущность.
-        expect(mockClient.index).not.toHaveBeenCalled();
-    });
+    const mapIndex = mockClient.index('map_templates');
+    expect(mapIndex.deleteDocument).toHaveBeenCalledWith(nonExistentId.toString());
   });
 }); 

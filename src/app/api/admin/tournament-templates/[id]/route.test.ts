@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { HydratedDocument } from 'mongoose';
 import { GET, PATCH } from './route';
 import {
@@ -15,30 +15,23 @@ vi.mock('next/cache', () => ({
 }));
 
 describe('/api/admin/tournament-templates/[id]', () => {
-  let testTemplate: HydratedDocument<ITournamentTemplate>;
-
   beforeAll(async () => {
     await connectToTestDB();
   });
 
-  afterEach(async () => {
-    await clearTestDB();
-    vi.clearAllMocks();
-  });
-
   afterAll(async () => {
     await disconnectFromTestDB();
-  });
-
-  beforeEach(async () => {
-    testTemplate = await createTestTournamentTemplate({
-      name: 'Test Template',
-      tournamentTemplateImage: 'https://example.com/image.png',
-    });
+    vi.clearAllMocks();
   });
 
   describe('GET', () => {
     it('должен возвращать шаблон турнира по ID', async () => {
+      await clearTestDB();
+      const testTemplate = await createTestTournamentTemplate({
+        name: 'Test Template',
+        tournamentTemplateImage: 'https://example.com/image.png',
+      });
+      
       const request = new Request(`http://localhost/api/admin/tournament-templates/${testTemplate.id}`);
       const response = await GET(request as any, { params: { id: testTemplate.id } });
       const body = await response.json();
@@ -48,6 +41,7 @@ describe('/api/admin/tournament-templates/[id]', () => {
     });
 
     it('должен возвращать 404, если шаблон не найден', async () => {
+      await clearTestDB();
       const nonExistentId = '605c72ef9f1b2c001f7b8b17'; // Используем валидный, но несуществующий ID
       const request = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}`);
       const response = await GET(request as any, { params: { id: nonExistentId } });
@@ -58,6 +52,12 @@ describe('/api/admin/tournament-templates/[id]', () => {
 
   describe('PATCH', () => {
     it('должен успешно обновлять шаблон и вызывать revalidatePath', async () => {
+      await clearTestDB();
+      const testTemplate = await createTestTournamentTemplate({
+        name: 'Test Template',
+        tournamentTemplateImage: 'https://example.com/image.png',
+      });
+      
       const updateData = {
         name: 'Updated Name',
         description: 'Updated description',
@@ -83,7 +83,13 @@ describe('/api/admin/tournament-templates/[id]', () => {
     });
 
     it('должен возвращать 409 при попытке установить уже существующее имя', async () => {
+      await clearTestDB();
+      const testTemplate = await createTestTournamentTemplate({
+        name: 'Test Template',
+        tournamentTemplateImage: 'https://example.com/image.png',
+      });
       await createTestTournamentTemplate({ name: 'Existing Name' });
+      
       const updateData = { name: 'Existing Name' };
       const request = new Request(`http://localhost/api/admin/tournament-templates/${testTemplate.id}`, {
         method: 'PATCH',
@@ -98,6 +104,12 @@ describe('/api/admin/tournament-templates/[id]', () => {
 
     describe('Validation', () => {
       it('должен возвращать 400, если название слишком короткое', async () => {
+        await clearTestDB();
+        const testTemplate = await createTestTournamentTemplate({
+          name: 'Test Template',
+          tournamentTemplateImage: 'https://example.com/image.png',
+        });
+        
         // Arrange
         const request = new Request(`http://localhost/api/admin/tournament-templates/${testTemplate.id}`, {
           method: 'PATCH',
@@ -115,6 +127,12 @@ describe('/api/admin/tournament-templates/[id]', () => {
       });
 
       it('должен возвращать 400, если массив шаблонов карт пустой', async () => {
+        await clearTestDB();
+        const testTemplate = await createTestTournamentTemplate({
+          name: 'Test Template',
+          tournamentTemplateImage: 'https://example.com/image.png',
+        });
+        
         // Arrange
         const request = new Request(`http://localhost/api/admin/tournament-templates/${testTemplate.id}`, {
           method: 'PATCH',

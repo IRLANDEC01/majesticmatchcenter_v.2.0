@@ -1,5 +1,5 @@
 import { MeiliSearch, Task, EnqueuedTask } from 'meilisearch';
-import { meilisearchConfig, MeiliIndexConfig } from '@/configs/meilisearch-config';
+import { meilisearchConfig, MeiliIndexConfig } from '../../../../configs/meilisearch-config';
 import mongoose from 'mongoose';
 import searchQueue from '@/queues/search-queue';
 

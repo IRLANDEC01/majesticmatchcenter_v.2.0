@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Edit, Search, Trash2, Frown } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/admin/delete-confirmation-dialog';
@@ -47,6 +48,22 @@ export default function MapTemplatesTable({
   };
 
   const columns = [
+    {
+      key: 'mapTemplateImage',
+      header: 'Изображение',
+      width: 'w-24',
+      cell: (item) => (
+        <div className="flex items-center justify-center">
+          <Image
+            src={item.mapTemplateImage || 'https://placehold.co/600x400/CCCCCC/E9C46A?text=No+Image'}
+            alt={item.name}
+            width={80}
+            height={45}
+            className="rounded-md object-cover"
+          />
+        </div>
+      ),
+    },
     {
       key: 'name',
       header: 'Название',

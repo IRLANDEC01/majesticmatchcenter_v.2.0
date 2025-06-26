@@ -52,7 +52,7 @@ const MapTemplateForm = ({ form, isEditMode, isSubmitting, onSubmit, onClose }) 
               <FormItem>
                 <FormLabel>Описание</FormLabel>
                 <FormControl>
-                  <Textarea placeholder="Краткое описание карты..." {...field} />
+                  <Textarea placeholder="Краткое описание шаблона карты" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -60,14 +60,18 @@ const MapTemplateForm = ({ form, isEditMode, isSubmitting, onSubmit, onClose }) 
           />
           <FormField
             control={control}
-            name="mapImage"
+            name="mapTemplateImage"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
                   Изображение карты <span className="text-destructive">*</span>
                 </FormLabel>
                 <FormControl>
-                  <ImageUploader value={field.value} onFileSelect={field.onChange} />
+                  <ImageUploader
+                    value={field.value}
+                    onChange={field.onChange}
+                    disabled={isSubmitting}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -97,12 +101,17 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = Boolean(template);
 
-  const form = useForm({
+  const {
+    control,
+    handleSubmit,
+    reset,
+    formState: { isDirty },
+  } = useForm({
     resolver: zodResolver(createMapTemplateSchema),
     defaultValues: {
       name: '',
       description: '',
-      mapImage: '',
+      mapTemplateImage: '',
     },
   });
 
@@ -111,35 +120,36 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
       setServerError(null);
       setIsSubmitting(false); // Сбрасываем состояние при открытии
       if (isEditMode && template) {
-        form.reset({
+        reset({
           name: template.name || '',
           description: template.description || '',
-          mapImage: template.mapImage || '',
+          mapTemplateImage: template.mapTemplateImage || '',
         });
       } else {
-        form.reset({
+        reset({
           name: '',
           description: '',
-          mapImage: '',
+          mapTemplateImage: '',
         });
       }
     }
-  }, [isOpen, isEditMode, template, form]);
+  }, [isOpen, isEditMode, template, reset]);
 
   async function onSubmit(values) {
-    setServerError(null);
     setIsSubmitting(true);
-
+    setServerError(null);
     const submissionValues = { ...values };
-    
-    if (submissionValues.mapImage && typeof submissionValues.mapImage === 'object') {
+
+    if (submissionValues.mapTemplateImage && typeof submissionValues.mapTemplateImage === 'object') {
       const placeholders = [
-        '/images/map-placeholders/map-1.webp',
-        '/images/map-placeholders/map-2.webp',
-        '/images/map-placeholders/map-3.webp',
+        'https://placehold.co/600x400/F4A261/E9C46A?text=Map+1',
+        'https://placehold.co/600x400/2A9D8F/E9C46A?text=Map+2',
+        'https://placehold.co/600x400/E76F51/E9C46A?text=Map+3',
+        'https://placehold.co/600x400/264653/E9C46A?text=Map+4',
+        'https://placehold.co/600x400/A8DADC/1D3557?text=Map+5',
       ];
       const randomIndex = Math.floor(Math.random() * placeholders.length);
-      submissionValues.mapImage = placeholders[randomIndex];
+      submissionValues.mapTemplateImage = placeholders[randomIndex];
     }
 
     const url = isEditMode ? `/api/admin/map-templates/${template._id}` : '/api/admin/map-templates';
@@ -156,7 +166,11 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
         const errorData = await response.json();
         const message = errorData.message || 'Произошла ошибка';
         if (response.status === 409) {
-          form.setError('name', { type: 'manual', message });
+          reset({
+            name: values.name,
+            description: values.description,
+            mapTemplateImage: values.mapTemplateImage,
+          });
         } else {
           setServerError(message);
         }
@@ -225,7 +239,7 @@ export function MapTemplateDialog({ isOpen, onClose, template, isLoading }) {
           </DialogDescription>
           {serverError && <div className="text-sm font-medium text-destructive">{serverError}</div>}
         </DialogHeader>
-        {isLoading ? <DialogSkeleton /> : <MapTemplateForm form={form} isEditMode={isEditMode} isSubmitting={isSubmitting} onSubmit={onSubmit} onClose={handleClose} />}
+        {isLoading ? <DialogSkeleton /> : <MapTemplateForm form={{ control, handleSubmit, isDirty }} isEditMode={isEditMode} isSubmitting={isSubmitting} onSubmit={onSubmit} onClose={handleClose} />}
       </DialogContent>
     </Dialog>
   );

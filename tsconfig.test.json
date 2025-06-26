@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -17,11 +13,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
+    "plugins": [],
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
@@ -38,7 +30,5 @@
     ".next/types/**/*.ts",
     "scripts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
-}
+  "exclude": ["node_modules"]
+} 

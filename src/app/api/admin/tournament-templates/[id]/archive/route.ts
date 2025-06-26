@@ -17,6 +17,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   try {
     const archivedTemplate = await tournamentTemplateService.archiveTournamentTemplate(params.id);
     revalidatePath('/admin/tournament-templates');
+    revalidatePath(`/admin/tournament-templates/${params.id}`);
     return NextResponse.json({ data: archivedTemplate });
   } catch (error) {
     if (error instanceof Error) {

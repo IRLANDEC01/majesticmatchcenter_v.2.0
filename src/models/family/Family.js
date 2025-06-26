@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
-import socialLinkSchema from '@/models/shared/social-link-schema.js';
-import seoSchema from '@/models/shared/seo-schema.js';
-import earningsSchema from '@/models/shared/earnings-schema.js';
-import { FAMILY_MEMBER_ROLE_VALUES } from '@/lib/constants.js';
+import socialLinkSchema from '../shared/social-link-schema.js';
+import seoSchema from '../shared/seo-schema.js';
+import earningsSchema from '../shared/earnings-schema.js';
+import { FAMILY_MEMBER_ROLE_VALUES } from '../../lib/constants.js';
 import slugify from 'slugify';
 
 // Схема для текущих участников семьи.

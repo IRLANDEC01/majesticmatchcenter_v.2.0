@@ -1,3 +1,4 @@
+import 'server-only';
 import Bull from 'bull';
 
 if (!process.env.REDIS_URL) {

@@ -4,10 +4,11 @@ import { populateDb, dbClear } from '@/lib/test-helpers.js';
 import { CURRENCY_TYPES, RESULT_TIERS, STATUSES } from '@/lib/constants.js';
 import tournamentRepo from '@/lib/repos/tournaments/tournament-repo';
 import { Types } from 'mongoose';
+import { vi } from 'vitest';
 
 const { Tournament, TournamentTemplate } = models;
 
-jest.mock('@/lib/repos/tournaments/tournament-repo');
+vi.mock('@/lib/repos/tournaments/tournament-repo');
 
 describe('API /api/admin/tournaments', () => {
   let testData;

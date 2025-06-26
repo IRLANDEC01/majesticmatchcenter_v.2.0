@@ -1,5 +1,6 @@
 import { HydratedDocument, UpdateQuery } from 'mongoose';
 import mapTemplateRepo, { IMapTemplateRepo } from '@/lib/repos/map-templates/map-template-repo';
+import searchQueue from '@/queues/search-queue';
 import tournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo';
 import { IMapTemplate } from '@/models/map/MapTemplate';
 import { NotFoundError, ConflictError } from '@/lib/errors';
@@ -31,7 +32,9 @@ class MapTemplateService implements IMapTemplateService {
     if (existingTemplate) {
       throw new ConflictError(`Шаблон карты с именем "${data.name}" уже существует.`);
     }
-    return this.repo.create(data);
+    const newTemplate = await this.repo.create(data);
+    await searchQueue.add('update-index', { entity: 'map-template', id: newTemplate.id });
+    return newTemplate;
   }
 
   /**
@@ -86,8 +89,10 @@ class MapTemplateService implements IMapTemplateService {
     }
     
     Object.assign(templateToUpdate, data);
-
-    return this.repo.save(templateToUpdate);
+    
+    const updatedTemplate = await this.repo.save(templateToUpdate);
+    await searchQueue.add('update-index', { entity: 'map-template', id: updatedTemplate.id });
+    return updatedTemplate;
   }
 
   /**
@@ -106,7 +111,9 @@ class MapTemplateService implements IMapTemplateService {
       throw new ConflictError('Этот шаблон уже находится в архиве.');
     }
     
-    return this.repo.archive(id);
+    const archivedTemplate = await this.repo.archive(id);
+    await searchQueue.add('update-index', { entity: 'map-template', id: archivedTemplate.id });
+    return archivedTemplate;
   }
 
   /**
@@ -124,7 +131,9 @@ class MapTemplateService implements IMapTemplateService {
       throw new ConflictError('Этот шаблон не находится в архиве.');
     }
 
-    return this.repo.restore(id);
+    const restoredTemplate = await this.repo.restore(id);
+    await searchQueue.add('update-index', { entity: 'map-template', id: restoredTemplate.id });
+    return restoredTemplate;
   }
 }
 

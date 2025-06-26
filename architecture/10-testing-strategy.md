@@ -15,7 +15,7 @@
 Каждый тестовый файл (`*.test.ts`) должен быть полностью автономным и управлять своим собственным жизненным циклом подключения к базе данных.
 
 *   **`beforeAll`**: Устанавливает соединение с тестовой базой данных с помощью `connectToTestDB()`.
-*   **`afterEach`**: **Очищает** базу данных (`clearTestDB()`) и сбрасывает все моки (`vi.clearAllMocks()`) после **каждого** теста (`it`-блока). Это гарантирует, что тесты не влияют друг на друга.
+*   **`beforeEach`**: **Очищает** базу данных (`clearTestDB()`) и сбрасывает все моки (`vi.clearAllMocks()`) перед **каждым** тестом (`it`-блока). Это гарантирует, что каждый тест начинается с чистого состояния.
 *   **`afterAll`**: Закрывает соединение с базой данных (`disconnectFromTestDB()`) после выполнения всех тестов в файле.
 
 ### 2. Принцип "Без моков для внутреннего API"
@@ -53,11 +53,10 @@ describe('/api/admin/map-templates/[id]', () => {
     await connectToTestDB();
   });
 
-  // 4. Готовим данные для КАЖДОГО теста изолированно и очищаем моки.
+  // 4. Готовим чистое состояние для КАЖДОГО теста.
   beforeEach(async () => {
     await clearTestDB(); // Критически важно для изоляции!
     vi.clearAllMocks();
-    activeTemplate = await createTestMapTemplate({ name: 'Active Map' });
   });
 
   // 5. Закрываем соединение после всех тестов.
@@ -66,7 +65,8 @@ describe('/api/admin/map-templates/[id]', () => {
   });
 
   it('должен успешно возвращать шаблон по ID', async () => {
-    // Arrange: Создаем запрос, используя стандартный Web API.
+    // Arrange: Создаем тестовые данные внутри теста.
+    const activeTemplate = await createTestMapTemplate({ name: 'Active Map' });
     const req = new Request(`http://localhost/api/admin/map-templates/${activeTemplate.id}`);
 
     // Act: Вызываем обработчик, используя "прагматичный мост".

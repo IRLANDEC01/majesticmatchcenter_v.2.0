@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
     const newTemplate = await tournamentTemplateService.createTournamentTemplate(data);
 
     revalidatePath('/admin/tournament-templates');
+    revalidatePath(`/admin/tournament-templates/${newTemplate.slug}`);
 
     // Возвращаем созданный объект, обернутый в `data`, и статус 201
     return NextResponse.json({ data: newTemplate }, { status: 201 });

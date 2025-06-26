@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
-import { CURRENCY_VALUES } from '@/lib/constants';
+import { CURRENCY_VALUES } from '../../lib/constants.js';
 
 /**
- * Переиспользуемая схема для хранения информации о заработках.
+ * Схема для заработков, которая может быть переиспользована
  * Встраивается в PlayerStats и FamilyStats.
  */
 const earningsSchema = new mongoose.Schema({

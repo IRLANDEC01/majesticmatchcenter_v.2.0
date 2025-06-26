@@ -2,10 +2,11 @@ import { GET, POST } from './route.js';
 import models from '@/models/index.js';
 import { dbConnect, dbDisconnect, dbClear, populateDb } from '@/lib/test-helpers.js';
 import { revalidatePath } from 'next/cache';
+import { vi } from 'vitest';
 
 // Мокируем 'next/cache' для всех тестов в этом файле
-jest.mock('next/cache', () => ({
-  revalidatePath: jest.fn(),
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
 }));
 
 const { Map, Tournament, MapTemplate } = models;

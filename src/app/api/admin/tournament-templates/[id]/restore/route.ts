@@ -13,6 +13,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       params.id
     );
     revalidatePath('/admin/tournament-templates');
+    revalidatePath(`/admin/tournament-templates/${params.id}`);
     return NextResponse.json({ data: restoredTemplate });
   } catch (error) {
     if (error instanceof Error) {

@@ -1,3 +1,4 @@
+import 'server-only';
 import mongoose from 'mongoose';
 import '@/queues/search-worker';
 import searchService from './domain/search/search-service';
@@ -11,10 +12,20 @@ export async function connectToDatabase() {
     return cachedConnection;
   }
 
-  // jest-mongodb-preset предоставляет MONGO_URL. Для локальной разработки/продакшена используем MONGODB_URI.
-  const MONGODB_URI = process.env.MONGO_URL || process.env.MONGODB_URI;
-  if (!MONGODB_URI) {
-    throw new Error('Please define the MONGO_URL or MONGODB_URI environment variable');
+  let MONGODB_URI;
+
+  if (process.env.NODE_ENV === 'test') {
+    MONGODB_URI = process.env.MONGODB_URI_TEST;
+    if (!MONGODB_URI) {
+      throw new Error(
+        'Тестовая среда запущена, но переменная MONGODB_URI_TEST не определена в .env.test'
+      );
+    }
+  } else {
+    MONGODB_URI = process.env.MONGODB_URI;
+    if (!MONGODB_URI) {
+      throw new Error('Please define the MONGODB_URI environment variable');
+    }
   }
 
   // Создаем уникальное имя БД для каждого воркера Jest для полной изоляции.
