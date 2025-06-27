@@ -118,4 +118,11 @@ export const MAP_TEMPLATE_STATUSES = {
   ACTIVE: 'active',
   INACTIVE: 'inactive',
 };
-export const MAP_TEMPLATE_STATUSES_ENUM = Object.values(MAP_TEMPLATE_STATUSES); 
+export const MAP_TEMPLATE_STATUSES_ENUM = Object.values(MAP_TEMPLATE_STATUSES);
+
+// Экспортируем базовые константы приложения
+export const APP_NAME = 'MajesticMatchCenter';
+export const APP_VERSION = '2.0';
+
+// Константы для поиска
+export const MIN_SEARCH_LENGTH = 2; 

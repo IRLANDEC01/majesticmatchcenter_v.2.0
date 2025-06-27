@@ -1,8 +1,10 @@
+import React from "react";
+import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { cn } from "@/lib/utils.ts";
-import GlobalHeader from "@/components/layout/global-header";
-import { SWRProvider } from "@/components/providers/swr-provider";
+import { cn } from "@/lib/utils";
+import GlobalHeader from "@/shared/ui/layout/global-header";
+import { SWRProvider } from "@/shared/providers/swr-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -11,7 +13,7 @@ export const metadata = {
   description: "The central hub for all Majestic series tournaments and statistics.",
 };
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" className="dark">
       <body

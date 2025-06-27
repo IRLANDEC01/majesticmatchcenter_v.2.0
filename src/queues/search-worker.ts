@@ -1,6 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import searchService from '../lib/domain/search/search-service';
 import { getBackgroundRedisClient } from '../lib/redis-clients';
+import { connectToDatabase } from '../lib/db.js';
 
 // Явный импорт моделей для их регистрации в Mongoose в процессе воркера
 import '../models/map/MapTemplate';
@@ -12,6 +13,20 @@ import '../models/family/Family';
 interface SearchSyncJobData {
   entity: string;
   entityId: string;
+}
+
+// Объявляем переменную worker с типом
+let worker: Worker | null = null;
+
+// Инициализация подключения к MongoDB
+async function initializeWorker() {
+  try {
+    await connectToDatabase();
+    console.log('[SearchWorker] ✅ Успешно подключен к MongoDB');
+  } catch (error) {
+    console.error('[SearchWorker] ❌ Ошибка подключения к MongoDB:', error);
+    process.exit(1);
+  }
 }
 
 const redisClient = getBackgroundRedisClient();
@@ -40,8 +55,9 @@ const processSearchSyncJob = async (job: Job<SearchSyncJobData>) => {
   }
 };
 
-
-const worker = new Worker('search-sync', processSearchSyncJob, { 
+// Инициализируем worker только после подключения к MongoDB
+initializeWorker().then(() => {
+worker = new Worker('search-sync', processSearchSyncJob, { 
   connection: redisClient,
   concurrency: 5, // Обрабатывать до 5 задач одновременно
 });
@@ -54,7 +70,10 @@ worker.on('failed', (job, err) => {
   console.log(`[SearchWorker] Job ${job?.id} has failed with ${err.message}`);
 });
 
-
 console.log('[SearchWorker] 🚀 Обработчик очереди поиска запущен и готов к работе.');
+}).catch(error => {
+  console.error('[SearchWorker] ❌ Критическая ошибка инициализации:', error);
+  process.exit(1);
+});
 
 export default worker; 

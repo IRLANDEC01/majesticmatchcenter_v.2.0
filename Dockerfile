@@ -1,5 +1,5 @@
 # Используем официальный образ Node.js
-FROM node:20-alpine
+FROM node:22-alpine
 
 # Устанавливаем рабочую директорию в контейнере
 WORKDIR /app
@@ -7,8 +7,13 @@ WORKDIR /app
 # Копируем package.json и package-lock.json
 COPY package*.json ./
 
+# Настраиваем npm для стабильной установки
+RUN npm config set fetch-timeout 600000 && \
+    npm config set fetch-retry-mintimeout 10000 && \
+    npm config set fetch-retry-maxtimeout 60000
+
 # Устанавливаем зависимости
-RUN npm install
+RUN npm install --verbose
 
 # Копируем остальной код приложения
 COPY . .

@@ -29,8 +29,10 @@ async function gracefulShutdown(exitCode = 0) {
   try {
     // 1. Закрываем воркер. Он дождется завершения активной задачи.
     console.log('[RunWorker] ⏳ Закрытие воркера BullMQ...');
-    await worker.close();
-    console.log('[RunWorker] ✅ Воркер BullMQ успешно остановлен.');
+    if (worker) {
+      await worker.close();
+      console.log('[RunWorker] ✅ Воркер BullMQ успешно остановлен.');
+    }
 
     // 2. Отключаемся от БД
     await disconnectFromDatabase();

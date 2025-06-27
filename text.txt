@@ -1,0 +1,35 @@
+# Остановить все контейнеры и пересобрать
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Проверить статус сервисов
+docker-compose ps
+
+
+# Создать тестовые данные
+npm run db:seed
+
+# Переиндексировать в Meilisearch
+npm run search:reindex
+
+# Основное приложение в dev режиме
+npm run dev
+
+# Запуск search-worker для обработки очередей Meilisearch
+npm run start:worker
+
+# Мониторинг очередей (Bull Board UI)
+npm run start:queue-monitor
+
+# Очистка очереди поиска (если нужно)
+npm run queue:clear:search
+
+# Все API тесты (интеграционные)
+npm run test
+
+# Watch режим для разработки
+npm run test:watch
+
+# Тесты React компонентов (когда будут готовы)
+npm run test:client
