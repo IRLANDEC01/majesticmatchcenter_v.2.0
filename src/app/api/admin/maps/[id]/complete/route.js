@@ -55,7 +55,8 @@ function getMapService() {
 
 
 export async function POST(request, { params }) {
-  const { id } = params;
+  const { id } = await params;
+  
   try {
     const mapService = getMapService();
     const payload = await request.json(); 

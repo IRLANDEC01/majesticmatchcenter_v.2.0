@@ -10,11 +10,13 @@ import { updateFamilySchema, familyParamsSchema } from '@/lib/api/schemas/famili
  */
 export async function GET(request, { params }) {
   try {
-    const { id } = familyParamsSchema.parse(params);
+    const awaitedParams = await params;
+    const { id } = familyParamsSchema.parse(awaitedParams);
     const family = await familyService.getFamilyById(id);
     return NextResponse.json(family);
   } catch (error) {
-    return handleApiError(error, `Не удалось получить семью ${params.id}`);
+    const { id } = await params;
+    return handleApiError(error, `Не удалось получить семью ${id}`);
   }
 }
 
@@ -24,7 +26,8 @@ export async function GET(request, { params }) {
  */
 export async function PUT(request, { params }) {
   try {
-    const { id } = familyParamsSchema.parse(params);
+    const awaitedParams = await params;
+    const { id } = familyParamsSchema.parse(awaitedParams);
     const body = await request.json();
     const validatedData = updateFamilySchema.parse(body);
 
@@ -35,7 +38,8 @@ export async function PUT(request, { params }) {
     
     return NextResponse.json(updatedFamily);
   } catch (error) {
-    return handleApiError(error, `Не удалось обновить семью ${params.id}`);
+    const { id } = await params;
+    return handleApiError(error, `Не удалось обновить семью ${id}`);
   }
 }
 
@@ -47,7 +51,8 @@ export async function PUT(request, { params }) {
  */
 export async function DELETE(request, { params }) {
   try {
-    const { id } = familyParamsSchema.parse(params);
+    const awaitedParams = await params;
+    const { id } = familyParamsSchema.parse(awaitedParams);
     await familyService.archiveFamily(id);
 
     revalidatePath('/admin/families');
@@ -55,6 +60,7 @@ export async function DELETE(request, { params }) {
 
     return new Response(null, { status: 204 });
   } catch (error) {
-    return handleApiError(error, `Не удалось архивировать семью ${params.id}`);
+    const { id } = await params;
+    return handleApiError(error, `Не удалось архивировать семью ${id}`);
   }
 } 

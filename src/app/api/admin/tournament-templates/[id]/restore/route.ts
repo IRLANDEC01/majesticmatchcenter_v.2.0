@@ -7,13 +7,13 @@ import tournamentTemplateService from '@/lib/domain/tournament-templates/tournam
 /**
  * Восстанавливает шаблон турнира из архива.
  */
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  
   try {
-    const restoredTemplate = await tournamentTemplateService.restoreTournamentTemplate(
-      params.id
-    );
+    const restoredTemplate = await tournamentTemplateService.restoreTournamentTemplate(id);
     revalidatePath('/admin/tournament-templates');
-    revalidatePath(`/admin/tournament-templates/${params.id}`);
+    revalidatePath(`/admin/tournament-templates/${id}`);
     return NextResponse.json({ data: restoredTemplate });
   } catch (error) {
     if (error instanceof Error) {

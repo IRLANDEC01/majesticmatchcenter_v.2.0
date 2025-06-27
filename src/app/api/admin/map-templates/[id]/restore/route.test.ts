@@ -35,7 +35,8 @@ describe('PATCH /api/admin/map-templates/[id]/restore', () => {
       method: 'PATCH',
     });
 
-    const response = await PATCH(req as any, { params: { id: templateId } });
+    const params = Promise.resolve({ id: templateId });
+    const response = await PATCH(req as any, { params });
 
     expect(response.status).toBe(200);
     const dbTemplate = await MapTemplate.findById(template._id);
@@ -49,7 +50,8 @@ describe('PATCH /api/admin/map-templates/[id]/restore', () => {
     const req = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}/restore`, {
       method: 'PATCH',
     });
-    const response = await PATCH(req as any, { params: { id: nonExistentId.toString() } });
+    const params = Promise.resolve({ id: nonExistentId.toString() });
+    const response = await PATCH(req as any, { params });
     expect(response.status).toBe(404);
   });
 
@@ -59,7 +61,8 @@ describe('PATCH /api/admin/map-templates/[id]/restore', () => {
     const req = new Request(`http://localhost/api/admin/map-templates/${templateId}/restore`, {
       method: 'PATCH',
     });
-    const response = await PATCH(req as any, { params: { id: templateId } });
+    const params = Promise.resolve({ id: templateId });
+    const response = await PATCH(req as any, { params });
     expect(response.status).toBe(409);
   });
 });

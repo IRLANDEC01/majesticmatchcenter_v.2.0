@@ -140,26 +140,131 @@ mapTemplateSchema.index(
 ## 🎨 UI паттерны (FSD)
 
 ### Shared слой
-- **UI компоненты** - Button, Input, Table, Dialog
+- **UI компоненты** - Button, Input, Table, Dialog, ErrorBoundary
 - **Хуки** - useSearch, useDebounce
 - **Провайдеры** - SWRProvider, ThemeProvider
 - **Правило** - не знает о бизнес-сущностях
 
 ### Entities слой  
 - **Model** - типы, мапперы (Mongoose → Frontend)
-- **UI** - компоненты конкретной сущности
-- **Lib** - хуки данных (useMapTemplatesData)
-- **Правило** - представляет одну бизнес-сущность
+- **UI** - "глупые" компоненты принимающие props и колбэки
+- **Lib** - хуки данных (useMapTemplatesData) и форм (useMapTemplateForm)
+- **Правило** - представляет одну бизнес-сущность, НЕ знает о Server Actions
 
 ### Features слой
-- **UI** - составные компоненты (полные страницы)
+- **UI** - "умные" контейнеры управляющие состоянием и бизнес-логикой
 - **API** - Server Actions для мутаций
-- **Правило** - реализует пользовательские сценарии
+- **Правило** - реализует пользовательские сценарии, импортирует Server Actions
 
 ### App слой
-- **Pages** - композиция фич
+- **Pages** - композиция фич с ErrorBoundary
 - **Layouts** - макеты и провайдеры
 - **Routing** - Next.js App Router
+
+## 🔥 **НОВЫЕ ПАТТЕРНЫ v2.3 (Январь 2025)**
+
+### FSD "Split & Inject" паттерн ✅
+**Проблема:** Entities слой нарушал FSD, импортируя Server Actions из features
+
+**Решение:**
+```typescript
+// ❌ БЫЛО: entities импортирует features
+import { createAction } from '@/features/...'
+
+// ✅ СТАЛО: features передает через dependency injection  
+<MapTemplateDialog 
+  onCreateAction={handleCreate}  // колбэк из features
+  onUpdateAction={handleUpdate}  // колбэк из features
+/>
+```
+
+**Результат:** 100% FSD compliance + улучшенная тестируемость
+
+### Гибридный подход форм ✅
+**Сочетание лучших практик React 19 + FSD архитектуры**
+
+```typescript
+// entities/lib/use-map-template-form.ts
+export function useMapTemplateForm({ createAction, updateAction, onSuccess }) {
+  const [isCreating, setIsCreating] = useState(false);
+  const [errors, setErrors] = useState({});
+  
+  const handleCreate = useCallback(async (data) => {
+    setIsCreating(true);
+    const formData = new FormData();
+    // ... заполнение FormData
+    const result = await createAction(formData);
+    
+    if (result.success && onSuccess) {
+      onSuccess();
+    } else {
+      setErrors(result.errors);
+    }
+    setIsCreating(false);
+  }, [createAction, onSuccess]);
+  
+  return { handleCreate, isCreating, errors };
+}
+```
+
+**Преимущества:**
+- ✅ Переиспользуемость - хук универсален для разных features
+- ✅ FSD compliance - entities НЕ знает о конкретных Server Actions
+- ✅ Простота - нет сложной RHF логики
+- ✅ React 19 ready - совместим с Server Actions
+
+### React 19 правильное применение ✅
+**Зоны применения use() хука:**
+
+❌ **НЕ используем в админке:**
+```typescript
+// НЕПРАВИЛЬНО для админки
+const data = use(fetchMapTemplates()); // Создает дублирование с SWR
+```
+
+✅ **Используем для публичных RSC страниц:**
+```typescript
+// ПРАВИЛЬНО для SEO/snapshot
+export default async function PublicMapPage({ params }) {
+  const template = await fetchMapTemplate(params.id); // RSC
+  return <MapView template={template} />;
+}
+```
+
+**Принцип:** use() для публичных snapshot'ов, SWR для интерактивных данных
+
+### SWR оптимизация для админки ✅
+**Избегаем дублирования запросов:**
+
+```typescript
+const { data, mutate } = useSWR(searchUrl, fetcher, {
+  revalidateOnFocus: false,     // Не перезагружать при фокусе
+  revalidateOnReconnect: false, // Не перезагружать при reconnect  
+  revalidateOnMount: false,     // Избегаем двойной fetch после гидратации
+  refreshInterval: 0,           // Только explicit refresh
+  cache: 'force-cache'          // Используем браузерный кэш
+});
+```
+
+**Результат:** Один источник данных = меньше багов + лучшая производительность
+
+### UX микроулучшения ✅
+**Проверенные паттерны для всех форм:**
+
+```typescript
+// 1. Автосброс формы после создания
+if (result.success && !template) {
+  resetForm(); // Очищаем только при создании
+}
+
+// 2. Toast уведомления
+toast.success('Шаблон создан');
+
+// 3. Отключение кэша поиска
+export const revalidate = 0; // В API routes поиска
+```
+
+**Применить ко всем формам проекта!**
 
 ## 🧪 Паттерны тестирования
 

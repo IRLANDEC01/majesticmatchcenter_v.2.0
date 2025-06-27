@@ -4,9 +4,9 @@ import { handleApiError } from '@/lib/api/handle-api-error';
 import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 /**
@@ -16,8 +16,9 @@ type RouteContext = {
  * @param {RouteContext} context - Контекст запроса с параметрами маршрута.
  */
 export async function PATCH(request: Request, { params }: RouteContext) {
+  const { id } = await params;
+  
   try {
-    const { id } = params;
     const restoredTemplate = await mapTemplateService.restoreMapTemplate(id);
 
     revalidatePath('/admin/map-templates');
@@ -25,6 +26,6 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     return NextResponse.json(restoredTemplate, { status: 200 });
   } catch (error) {
-    return handleApiError(error instanceof Error ? error : new Error(String(error)), `Failed to restore map template ${params.id}`);
+    return handleApiError(error instanceof Error ? error : new Error(String(error)), `Failed to restore map template ${id}`);
   }
 } 

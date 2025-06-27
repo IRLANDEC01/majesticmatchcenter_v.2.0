@@ -6,15 +6,16 @@ import tournamentTemplateService from '@/lib/domain/tournament-templates/tournam
 import { handleApiError } from '@/lib/api/handle-api-error.js';
 
 type RouteContext = {
-  params: { id: string; };
+  params: Promise<{ id: string; }>;
 };
 
 /**
  * Получает один шаблон турнира по ID.
  */
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const template = await tournamentTemplateService.getTournamentTemplateById(params.id);
+    const { id } = await params;
+    const template = await tournamentTemplateService.getTournamentTemplateById(id);
     return NextResponse.json({ data: template });
   } catch (error) {
     if (error instanceof Error) {
@@ -30,14 +31,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 /**
  * Обновляет существующий шаблон турнира.
  */
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const data = tournamentTemplateUpdateSchema.parse(body);
-    const updatedTemplate = await tournamentTemplateService.updateTournamentTemplate(params.id, data);
+    const updatedTemplate = await tournamentTemplateService.updateTournamentTemplate(id, data);
 
     revalidatePath('/admin/tournament-templates');
-    revalidatePath(`/admin/tournament-templates/${params.id}`);
+    revalidatePath(`/admin/tournament-templates/${id}`);
 
     return NextResponse.json({ data: updatedTemplate });
   } catch (error) {

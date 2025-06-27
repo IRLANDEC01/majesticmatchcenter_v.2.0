@@ -37,7 +37,8 @@ describe('/api/admin/tournament-templates/[id]', () => {
       });
       
       const request = new Request(`http://localhost/api/admin/tournament-templates/${testTemplate.id}`);
-      const response = await GET(request as any, { params: { id: testTemplate.id } });
+      const params = Promise.resolve({ id: testTemplate.id });
+      const response = await GET(request as any, { params });
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -48,7 +49,8 @@ describe('/api/admin/tournament-templates/[id]', () => {
       await clearTestDB();
       const nonExistentId = '605c72ef9f1b2c001f7b8b17'; // Используем валидный, но несуществующий ID
       const request = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}`);
-      const response = await GET(request as any, { params: { id: nonExistentId } });
+      const params = Promise.resolve({ id: nonExistentId });
+      const response = await GET(request as any, { params });
 
       expect(response.status).toBe(404);
     });
@@ -73,7 +75,8 @@ describe('/api/admin/tournament-templates/[id]', () => {
         body: JSON.stringify(updateData),
       });
 
-      const response = await PATCH(request as any, { params: { id: testTemplate.id } });
+      const params = Promise.resolve({ id: testTemplate.id });
+      const response = await PATCH(request as any, { params });
       const body = await response.json();
       const dbTemplate = await TournamentTemplate.findById(testTemplate.id);
 
@@ -101,7 +104,8 @@ describe('/api/admin/tournament-templates/[id]', () => {
         body: JSON.stringify(updateData),
       });
 
-      const response = await PATCH(request as any, { params: { id: testTemplate.id } });
+      const params = Promise.resolve({ id: testTemplate.id });
+      const response = await PATCH(request as any, { params });
 
       expect(response.status).toBe(409);
     });
@@ -122,7 +126,8 @@ describe('/api/admin/tournament-templates/[id]', () => {
         });
 
         // Act
-        const response = await PATCH(request as any, { params: { id: testTemplate.id } });
+        const params = Promise.resolve({ id: testTemplate.id });
+        const response = await PATCH(request as any, { params });
         const body = await response.json();
 
         // Assert
@@ -145,7 +150,8 @@ describe('/api/admin/tournament-templates/[id]', () => {
         });
 
         // Act
-        const response = await PATCH(request as any, { params: { id: testTemplate.id } });
+        const params = Promise.resolve({ id: testTemplate.id });
+        const response = await PATCH(request as any, { params });
         const body = await response.json();
 
         // Assert

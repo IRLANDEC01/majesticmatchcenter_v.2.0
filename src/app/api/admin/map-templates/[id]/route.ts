@@ -14,9 +14,10 @@ import mongoose from 'mongoose';
  * @param {Request} request - Объект запроса (не используется).
  * @param {RouteContext} context - Контекст с параметрами маршрута.
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const mapTemplate = await mapTemplateService.getMapTemplateById(params.id);
+    const { id } = await params;
+    const mapTemplate = await mapTemplateService.getMapTemplateById(id);
     return NextResponse.json({ data: mapTemplate });
   } catch (error) {
     return handleApiError(error instanceof Error ? error : new Error(String(error)));
@@ -29,14 +30,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
  * @param {Request} request - Объект запроса.
  * @param {RouteContext} context - Контекст с параметрами маршрута.
  */
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const data: UpdateMapTemplateDto = updateMapTemplateSchema.parse(body);
-    const updatedTemplate = await mapTemplateService.updateMapTemplate(params.id, data);
+    const updatedTemplate = await mapTemplateService.updateMapTemplate(id, data);
 
     revalidatePath('/admin/map-templates');
-    revalidatePath(`/admin/map-templates/${params.id}`);
+    revalidatePath(`/admin/map-templates/${id}`);
 
     return NextResponse.json({ data: updatedTemplate });
   } catch (error) {

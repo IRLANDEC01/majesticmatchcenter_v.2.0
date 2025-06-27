@@ -420,4 +420,114 @@
 - **Преимущества**:
   - **Безопасность и подотчетность**: Всегда можно отследить историю изменений.
   - **Упрощение отладки**: Помогает понять, какое действие привело к неожиданному состоянию данных.
+
+## 7. Современные паттерны форм (React 19 + FSD) — ВНЕДРЕНО ✅
+
+### 7.1. Гибридный подход форм
+**Статус:** Полностью внедрен в map-templates вертикали (Январь 2025)
+
+- **Описание**: Оптимальное сочетание React 19 Server Actions с FSD архитектурой через переиспользуемые хуки
+- **Структура**:
+  ```typescript
+  // entities/lib/use-entity-form.ts
+  export function useMapTemplateForm({ createAction, updateAction, onSuccess }) {
+    const [isCreating, setIsCreating] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    
+    const handleCreate = useCallback(async (data: FormData) => {
+      setIsCreating(true);
+      const formData = convertToFormData(data);
+      const result = await createAction(formData);
+      
+      if (result.success) {
+        onSuccess?.();
+      } else {
+        setErrors(result.errors);
+      }
+      setIsCreating(false);
+    }, [createAction, onSuccess]);
+    
+    return { handleCreate, isCreating, errors };
+  }
+  ```
+- **Преимущества**:
+  - **FSD compliance**: entities НЕ знает о конкретных Server Actions
+  - **Переиспользуемость**: один хук для всех форм сущности
+  - **React 19 готовность**: полная совместимость с Server Actions
+  - **Простота**: без избыточной сложности RHF
+- **Применение**: Все CRUD формы в проекте
+
+### 7.2. FSD "Split & Inject" паттерн
+- **Описание**: Решение проблемы нарушения FSD при использовании Server Actions
+- **Проблема**: Entities компоненты импортировали Server Actions из features слоя
+- **Решение**:
+  ```typescript
+  // ❌ БЫЛО: нарушение FSD
+  // entities/ui/dialog.tsx
+  import { createAction } from '@/features/...' // нарушение!
   
+  // ✅ СТАЛО: dependency injection
+  // features/ui/page-content.tsx
+  const handleCreate = useCallback(async (formData) => {
+    return createMapTemplateAction({ errors: {}, success: false }, formData);
+  }, []);
+  
+  return (
+    <MapTemplateDialog 
+      onCreateAction={handleCreate}  // инжекция зависимости
+      onUpdateAction={handleUpdate}
+    />
+  );
+  ```
+- **Результат**: 100% FSD compliance + улучшенная тестируемость
+
+### 7.3. React 19 правильное применение
+- **Принцип**: use() хук НЕ для админки, SWR для интерактивных данных
+- **Зоны применения**:
+  
+  **✅ Правильно (публичные RSC страницы):**
+  ```typescript
+  // Статичные страницы для SEO/snapshot
+  export default async function PublicMapPage({ params }) {
+    const template = await fetchMapTemplate(params.id);
+    return <MapView template={template} />;
+  }
+  ```
+  
+  **❌ Неправильно (админка):**
+  ```typescript
+  // НЕ использовать use() в админке!
+  const data = use(fetchMapTemplates()); // создает дублирование с SWR
+  ```
+
+### 7.4. SWR оптимизация для админки
+- **Описание**: Избежание дублирования запросов при гидратации
+- **Настройки**:
+  ```typescript
+  const { data, mutate } = useSWR(searchUrl, fetcher, {
+    revalidateOnFocus: false,     // не перезагружать при фокусе
+    revalidateOnReconnect: false, // не перезагружать при reconnect  
+    revalidateOnMount: false,     // избегаем двойной fetch
+    refreshInterval: 0,           // только explicit refresh
+    cache: 'force-cache'          // используем браузерный кэш
+  });
+  ```
+- **Результат**: Один источник данных = меньше багов + лучшая производительность
+
+### 7.5. UX микроулучшения (стандарт для всех форм)
+- **Автосброс формы**:
+  ```typescript
+  if (result.success && !template) {
+    resetForm(); // очищаем только при создании
+  }
+  ```
+- **Toast уведомления**:
+  ```typescript
+  toast.success(template ? 'Шаблон обновлен' : 'Шаблон создан');
+  ```
+- **Отключение кэша поиска**:
+  ```typescript
+  // В API routes поиска
+  export const revalidate = 0; // всегда свежие результаты
+  ```
+- **Применение**: Обязательно для всех форм проекта

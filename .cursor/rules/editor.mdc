@@ -60,60 +60,6 @@ alwaysApply: true
 
 ---
 
-## 3. Код-стиль и структура проекта
-
-- Репозитории — в `src/lib/repos/**`
-- Доменные функции — в `src/lib/domain/**`
-- Очереди BullMQ — в `src/queues/**`
-- Компоненты: PascalCase. Хуки: camelCase с префиксом `use`. Файлы и папки: kebab-case.
-- UI: TailwindCSS + shadcn/ui, на TypeScript.
-- Коммиты: `Conventional Commits` (`feat:`, `fix:`, `chore:`, `refactor:`)
-- Не используем классы без необходимости — предпочтительно функции и композиция.
-
----
-
-## 4. Работа с кешем
-
-- Используем `getCacheAdapter()` — никакого прямого доступа к Redis.
-- Все операции кэширования и инвалидации реализованы через `cacheService` или `cache-adapter`.
-- Кэш на уровне Next.js (`revalidateTag`) включается вручную через `dynamic = 'force-static'`.
-- SWR и React Query работают в режиме `stale-while-revalidate` в UI.
-
----
-
-## 5. Поиск (Meilisearch)
-
-- Все документы индексируются через `search-service.ts`, а не напрямую.
-- При изменении данных добавляется задача в очередь `searchQueue` (`update-index`, `delete-index`).
-- Для подготовки search-документа используется `buildSearchEntry(entity)`, логика изолирована.
-- Настраиваются `filterableAttributes`, `sortableAttributes`, `searchableAttributes`.
-- Универсальный API-эндпоинт: `/api/search?q=...&entities=players,families`, с форматом:
-
-```json
-{
-  "data": {
-    "query": "Иван",
-    "results": {
-      "players": [...],
-      "families": [...]
-    }
-  }
-}
-```
-
----
-
-## 6. Тестирование
-
-- Пишем тесты на `Vitest + Testing Library`
-- Среда: `happy-dom`, покрытие: `@vitest/coverage-v8`
-- Используем `Builder pattern` в тестах (`playerBuilder().withRating(100).build()`)
-- Моки через `vi.mock`, Redis — через `ioredis-mock`
-- Интеграционные тесты изолированы: база данных очищается перед каждым запуском
-- `vitest.setup.ts` содержит: очистку Mongo, подключение `.env.test`, инициализацию моки
-
----
-
 ## 7. Процесс «Plan → Act»
 
 ### Plan Mode
@@ -148,3 +94,80 @@ alwaysApply: true
 - ✅ Тесты на **Vitest** написаны или обновлены
 - ✅ Покрытие кода не упало (если актуально)
 - ✅ Коммит подписан как `feat`, `fix`, `refactor` и т.п.
+
+
+- **Rule Improvement Triggers:**
+  - New code patterns not covered by existing rules
+  - Repeated similar implementations across files
+  - Common error patterns that could be prevented
+  - New libraries or tools being used consistently
+  - Emerging best practices in the codebase
+
+- **Analysis Process:**
+  - Compare new code with existing rules
+  - Identify patterns that should be standardized
+  - Look for references to external documentation
+  - Check for consistent error handling patterns
+  - Monitor test patterns and coverage
+
+- **Rule Updates:**
+  - **Add New Rules When:**
+    - A new technology/pattern is used in 3+ files
+    - Common bugs could be prevented by a rule
+    - Code reviews repeatedly mention the same feedback
+    - New security or performance patterns emerge
+
+  - **Modify Existing Rules When:**
+    - Better examples exist in the codebase
+    - Additional edge cases are discovered
+    - Related rules have been updated
+    - Implementation details have changed
+
+- **Example Pattern Recognition:**
+  ```typescript
+  // If you see repeated patterns like:
+  const data = await prisma.user.findMany({
+    select: { id: true, email: true },
+    where: { status: 'ACTIVE' }
+  });
+  
+
+- **Rule Quality Checks:**
+  - Rules should be actionable and specific
+  - Examples should come from actual code
+  - References should be up to date
+  - Patterns should be consistently enforced
+
+- **Continuous Improvement:**
+  - Monitor code review comments
+  - Track common development questions
+  - Update rules after major refactors
+  - Add links to relevant documentation
+  - Cross-reference related rules
+
+- **Rule Deprecation:**
+  - Mark outdated patterns as deprecated
+  - Remove rules that no longer apply
+  - Update references to deprecated rules
+  - Document migration paths for old patterns
+
+- **Documentation Updates:**
+  - Keep examples synchronized with code
+  - Update references to external docs
+  - Maintain links between related rules
+  - Document breaking changes
+
+1. АНАЛИЗ → 2. ПЛАН → 3. СОГЛАСОВАНИЕ → 4. РЕАЛИЗАЦИЯ
+📊 АНАЛИЗ: Изучу существующий код, архитектуру, паттерны проекта
+📝 ПЛАН: Составлю четкий план с обоснованием необходимости изменений
+🤝 СОГЛАСОВАНИЕ: Представлю план на твое утверждение с аргументами
+⚡ РЕАЛИЗАЦИЯ: Только после твоего одобрения внесу изменения
+🔍 ОБЯЗАТЕЛЬНЫЕ ВОПРОСЫ ПЕРЕД РЕФАКТОРИНГОМ:
+Есть ли уже решение этой проблемы в проекте?
+Какие существующие паттерны я должен соблюдать?
+Действительно ли это изменение необходимо?
+Как это впишется в общую архитектуру?
+Какие могут быть побочные эффекты?
+📋 ПРИМЕР НОВОГО ПОДХОДА:
+Вместо: "Давайте добавим AdminErrorFallback!"
+Теперь: "Я проанализировал ErrorBoundary компонент и вижу, что у нас уже есть DefaultErrorFallback. Предлагаю использовать его без изменений, так как он покрывает все необходимые сценарии для админки. Согласен?"

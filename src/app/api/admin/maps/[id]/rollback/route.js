@@ -53,8 +53,9 @@ function getMapService() {
 }
 
 export async function POST(request, { params }) {
+  const { id: mapId } = await params;
+  
   try {
-    const { id: mapId } = params;
     const mapService = getMapService();
 
     const rolledBackMap = await mapService.rollbackMapCompletion(mapId);
@@ -65,6 +66,6 @@ export async function POST(request, { params }) {
 
     return NextResponse.json(rolledBackMap, { status: 200 });
   } catch (error) {
-    return handleApiError(error, `Failed to roll back map ${params.id}`);
+    return handleApiError(error, `Failed to roll back map ${mapId}`);
   }
 } 

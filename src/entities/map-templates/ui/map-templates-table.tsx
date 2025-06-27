@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useTransition } from 'react';
 import Image from 'next/image';
 import { 
   Table,
@@ -35,11 +35,15 @@ interface MapTemplatesTableProps {
   onEditAction: (template: MapTemplate) => void;
   onRefreshAction: () => void;
   searchTerm: string;
+  // FSD: Колбэки вместо прямых импортов из features слоя
+  onArchiveAction: (template: MapTemplate) => Promise<void>;
+  onRestoreAction: (template: MapTemplate) => Promise<void>;
 }
 
 /**
  * Таблица шаблонов карт с действиями и tooltips.
  * Поддерживает редактирование, архивацию и восстановление.
+ * React 19: Использует Server Actions вместо fetch запросов.
  */
 export function MapTemplatesTable({
   templates,
@@ -47,64 +51,57 @@ export function MapTemplatesTable({
   error,
   onEditAction,
   onRefreshAction,
-  searchTerm
+  searchTerm,
+  onArchiveAction,
+  onRestoreAction
 }: MapTemplatesTableProps) {
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  const [isPending, startTransition] = useTransition();
 
-  // Обработчик архивации
+  // FSD: Используем колбэк из features слоя
   const handleArchive = async (template: MapTemplate) => {
-    if (processingIds.has(template.id)) return;
+    if (processingIds.has(template.id) || isPending) return;
     
     setProcessingIds(prev => new Set([...prev, template.id]));
     
-    try {
-      const response = await fetch(`/api/admin/map-templates/${template.id}/archive`, {
-        method: 'PATCH',
-      });
-      
-      if (!response.ok) {
-        throw new Error('Ошибка архивации');
+    startTransition(async () => {
+      try {
+        await onArchiveAction(template);
+        toast.success('Шаблон карты успешно архивирован');
+        onRefreshAction();
+      } catch (error) {
+        toast.error(`Ошибка архивации: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
+      } finally {
+        setProcessingIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(template.id);
+          return newSet;
+        });
       }
-      
-      toast.success('Шаблон карты успешно архивирован');
-      onRefreshAction();
-    } catch (error) {
-      toast.error(`Ошибка архивации: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
-    } finally {
-      setProcessingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(template.id);
-        return newSet;
-      });
-    }
+    });
   };
 
-  // Обработчик восстановления
+  // FSD: Используем колбэк из features слоя
   const handleRestore = async (template: MapTemplate) => {
-    if (processingIds.has(template.id)) return;
+    if (processingIds.has(template.id) || isPending) return;
     
     setProcessingIds(prev => new Set([...prev, template.id]));
     
-    try {
-      const response = await fetch(`/api/admin/map-templates/${template.id}/restore`, {
-        method: 'PATCH',
-      });
-      
-      if (!response.ok) {
-        throw new Error('Ошибка восстановления');
+    startTransition(async () => {
+      try {
+        await onRestoreAction(template);
+        toast.success('Шаблон карты успешно восстановлен');
+        onRefreshAction();
+      } catch (error) {
+        toast.error(`Ошибка восстановления: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
+      } finally {
+        setProcessingIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(template.id);
+          return newSet;
+        });
       }
-      
-      toast.success('Шаблон карты успешно восстановлен');
-      onRefreshAction();
-    } catch (error) {
-      toast.error(`Ошибка восстановления: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
-    } finally {
-      setProcessingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(template.id);
-        return newSet;
-      });
-    }
+    });
   };
 
   // Состояние загрузки
@@ -164,96 +161,100 @@ export function MapTemplatesTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {templates.map((template) => (
-              <TableRow key={template.id}>
-                <TableCell className="font-medium">
-                  <div className="flex items-center gap-3">
-                    {template.mapTemplateImage && (
-                      <Image
-                        src={template.mapTemplateImage}
-                        alt={template.name}
-                        width={40}
-                        height={40}
-                        className="w-10 h-10 rounded object-cover"
-                        unoptimized={template.mapTemplateImage.startsWith('http')}
-                      />
-                    )}
-                    <div>
-                      <div className="font-medium">{template.name}</div>
+            {templates.map((template) => {
+              const isProcessing = processingIds.has(template.id);
+              
+              return (
+                <TableRow key={template.id}>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-3">
+                      {template.mapTemplateImage && (
+                        <Image
+                          src={template.mapTemplateImage}
+                          alt={template.name}
+                          width={40}
+                          height={40}
+                          className="w-10 h-10 rounded object-cover"
+                          unoptimized={template.mapTemplateImage.startsWith('http')}
+                        />
+                      )}
+                      <div>
+                        <div className="font-medium">{template.name}</div>
+                      </div>
                     </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={template.isArchived ? 'archived' : 'success'}>
-                    {template.isArchived ? 'Архивирован' : 'Активен'}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {new Date(template.createdAt).toLocaleDateString('ru-RU')}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onEditAction(template)}
-                          disabled={processingIds.has(template.id)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Редактировать шаблон</p>
-                      </TooltipContent>
-                    </Tooltip>
-
-                    {template.isArchived ? (
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={template.isArchived ? 'archived' : 'success'}>
+                      {template.isArchived ? 'Архивирован' : 'Активен'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {new Date(template.createdAt).toLocaleDateString('ru-RU')}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleRestore(template)}
-                            disabled={processingIds.has(template.id)}
+                            onClick={() => onEditAction(template)}
+                            disabled={isProcessing || isPending}
                           >
-                            {processingIds.has(template.id) ? (
-                              <RefreshCw className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <ArchiveRestore className="h-4 w-4" />
-                            )}
+                            <Edit className="h-4 w-4" />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>Восстановить из архива</p>
+                          <p>Редактировать</p>
                         </TooltipContent>
                       </Tooltip>
-                    ) : (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleArchive(template)}
-                            disabled={processingIds.has(template.id)}
-                          >
-                            {processingIds.has(template.id) ? (
-                              <RefreshCw className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Archive className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Архивировать шаблон</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                      
+                      {template.isArchived ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRestore(template)}
+                              disabled={isProcessing || isPending}
+                            >
+                              {isProcessing ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <ArchiveRestore className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Восстановить</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleArchive(template)}
+                              disabled={isProcessing || isPending}
+                            >
+                              {isProcessing ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Archive className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Архивировать</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

@@ -10,7 +10,8 @@ import { familyParamsSchema } from '@/lib/api/schemas/families/family-schemas.js
  */
 export async function PATCH(request, { params }) {
   try {
-    const { id } = familyParamsSchema.parse(params);
+    const awaitedParams = await params;
+    const { id } = familyParamsSchema.parse(awaitedParams);
     const result = await familyService.archiveFamily(id);
 
     revalidatePath('/admin/families');
@@ -18,6 +19,7 @@ export async function PATCH(request, { params }) {
 
     return NextResponse.json(result);
   } catch (error) {
-    return handleApiError(error, `Не удалось архивировать семью ${params.id}`);
+    const { id } = await params;
+    return handleApiError(error, `Не удалось архивировать семью ${id}`);
   }
 } 

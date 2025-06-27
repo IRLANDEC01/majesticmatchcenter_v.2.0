@@ -1,65 +1,53 @@
-'use server'
+'use server';
 
-import { revalidateTag } from 'next/cache';
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
 import { createMapTemplateSchema, updateMapTemplateSchema } from '@/lib/api/schemas/map-templates/map-template-schemas';
-import { mapTemplateToDto, type MapTemplate } from '@/entities/map-templates';
 
-interface ActionState {
-  success?: boolean;
-  errors?: Record<string, string>;
-  data?: MapTemplate; // ✅ Теперь строго типизированo
+// Типы для состояния действий
+export interface ActionState {
+  errors: Record<string, string>;
+  success: boolean;
 }
 
 /**
- * Server Action для создания шаблона карты (React 19)
+ * Server Action для создания шаблона карты
  */
 export async function createMapTemplateAction(
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
   try {
-    // Валидация данных формы
-    const rawData = {
-      name: formData.get('name') as string,
-      description: formData.get('description') as string,
-      mapTemplateImage: formData.get('mapTemplateImage') as string,
-    };
+    // Валидация данных формы с Zod
+    const validatedFields = createMapTemplateSchema.safeParse({
+      name: formData.get('name'),
+      mapTemplateImage: formData.get('mapTemplateImage'),
+      description: formData.get('description'),
+    });
 
-    const validatedData = createMapTemplateSchema.parse(rawData);
-    
-    // Создание через сервис
-    const newTemplate = await mapTemplateService.createMapTemplate(validatedData);
-    
-    // Инвалидация кэша
-    revalidateTag('map-templates');
-    
-    return {
-      success: true,
-      data: mapTemplateToDto(newTemplate), // ✅ Преобразуем в clean DTO
-    };
-  } catch (error) {
-    console.error('Ошибка создания шаблона карты:', error);
-    
-    if (error instanceof z.ZodError) {
-      const fieldErrors: Record<string, string> = {};
-      error.errors.forEach((err) => {
-        const field = err.path[0] as string;
-        fieldErrors[field] = err.message;
-      });
+    if (!validatedFields.success) {
       return {
+        errors: validatedFields.error.flatten().fieldErrors as Record<string, string>,
         success: false,
-        errors: fieldErrors,
       };
     }
 
+    // Создание через сервисный слой
+    await mapTemplateService.createMapTemplate(validatedFields.data);
+
+    // Инвалидация кэша
+    revalidatePath('/admin/map-templates');
+
     return {
+      errors: {},
+      success: true,
+    };
+  } catch (error: any) {
+    return {
+      errors: { general: error.message || 'Ошибка создания шаблона' },
       success: false,
-      errors: {
-        general: error instanceof Error ? error.message : 'Неизвестная ошибка',
-      },
     };
   }
 }
@@ -68,48 +56,82 @@ export async function createMapTemplateAction(
  * Server Action для обновления шаблона карты
  */
 export async function updateMapTemplateAction(
-  templateId: string,
+  id: string,
   prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
   try {
-    const rawData = {
-      name: formData.get('name') as string,
-      description: formData.get('description') as string,
-      mapTemplateImage: formData.get('mapTemplateImage') as string,
-    };
+    // Валидация данных формы с Zod
+    const validatedFields = updateMapTemplateSchema.safeParse({
+      name: formData.get('name'),
+      mapTemplateImage: formData.get('mapTemplateImage'),
+      description: formData.get('description'),
+    });
 
-    const validatedData = updateMapTemplateSchema.parse(rawData);
-    
-    const updatedTemplate = await mapTemplateService.updateMapTemplate(templateId, validatedData);
-    
-    revalidateTag('map-templates');
-    revalidateTag(`map-template:${templateId}`);
-    
-    return {
-      success: true,
-      data: mapTemplateToDto(updatedTemplate), // ✅ Преобразуем в clean DTO
-    };
-  } catch (error) {
-    console.error('Ошибка обновления шаблона карты:', error);
-    
-    if (error instanceof z.ZodError) {
-      const fieldErrors: Record<string, string> = {};
-      error.errors.forEach((err) => {
-        const field = err.path[0] as string;
-        fieldErrors[field] = err.message;
-      });
+    if (!validatedFields.success) {
       return {
+        errors: validatedFields.error.flatten().fieldErrors as Record<string, string>,
         success: false,
-        errors: fieldErrors,
       };
     }
 
+    // Обновление через сервисный слой
+    await mapTemplateService.updateMapTemplate(id, validatedFields.data);
+
+    // Инвалидация кэша
+    revalidatePath('/admin/map-templates');
+    revalidatePath(`/admin/map-templates/${id}`);
+
     return {
+      errors: {},
+      success: true,
+    };
+  } catch (error: any) {
+    return {
+      errors: { general: error.message || 'Ошибка обновления шаблона' },
       success: false,
-      errors: {
-        general: error instanceof Error ? error.message : 'Неизвестная ошибка',
-      },
+    };
+  }
+}
+
+/**
+ * Server Action для архивации шаблона карты
+ * React 19: Заменяет fetch запрос на серверную логику
+ */
+export async function archiveMapTemplateAction(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await mapTemplateService.archiveMapTemplate(id);
+    
+    // Инвалидация кэша
+    revalidatePath('/admin/map-templates');
+    revalidatePath(`/admin/map-templates/${id}`);
+
+    return { success: true };
+  } catch (error: any) {
+    return { 
+      success: false, 
+      error: error.message || 'Ошибка архивации шаблона' 
+    };
+  }
+}
+
+/**
+ * Server Action для восстановления шаблона карты
+ * React 19: Заменяет fetch запрос на серверную логику
+ */
+export async function restoreMapTemplateAction(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await mapTemplateService.restoreMapTemplate(id);
+    
+    // Инвалидация кэша
+    revalidatePath('/admin/map-templates');
+    revalidatePath(`/admin/map-templates/${id}`);
+
+    return { success: true };
+  } catch (error: any) {
+    return { 
+      success: false, 
+      error: error.message || 'Ошибка восстановления шаблона' 
     };
   }
 } 

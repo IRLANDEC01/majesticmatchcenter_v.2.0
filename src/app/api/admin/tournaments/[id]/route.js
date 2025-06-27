@@ -11,7 +11,7 @@ const tournamentUpdateSchema = z.object({
 }).strict(); // Запрещаем передавать поля, не описанные в схеме
 
 export async function GET(request, { params }) {
-  const { id } = params;
+  const { id } = await params;
 
   try {
     const tournament = await tournamentService.getById(id);
@@ -29,7 +29,7 @@ export async function GET(request, { params }) {
 }
 
 export async function PUT(request, { params }) {
-  const { id } = params;
+  const { id } = await params;
 
   try {
     const body = await request.json();

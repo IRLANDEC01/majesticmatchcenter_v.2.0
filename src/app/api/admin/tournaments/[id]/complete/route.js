@@ -21,7 +21,7 @@ const completePayloadSchema = z.object({
  */
 export async function PATCH(request, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const payload = await request.json();
     
     const validationResult = completePayloadSchema.safeParse(payload);

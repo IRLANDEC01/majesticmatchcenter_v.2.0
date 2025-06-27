@@ -9,20 +9,29 @@ import {
   MapTemplatesTable, 
   MapTemplateDialog, 
   useMapTemplatesData,
-  type MapTemplate
+  useMapTemplateForm,
+  type MapTemplate,
+  type MapTemplateFormData
 } from "@/entities/map-templates";
+import { 
+  archiveMapTemplateAction, 
+  restoreMapTemplateAction,
+  createMapTemplateAction,
+  updateMapTemplateAction
+} from "../api/actions.server";
 
 /**
- * Основной контент страницы управления шаблонами карт.
- * Содержит поиск, фильтры, таблицу и диалог создания/редактирования.
+ * Клиентский компонент с данными (только SWR)
  */
-export function MapTemplatesPageContent() {
-  // Состояние UI
-  const [status, setStatus] = useState<EntityStatus>('active');
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<MapTemplate | undefined>(undefined);
-  
-  // Хук данных с React 19 паттернами
+function MapTemplatesDataProvider({ 
+  onEdit,
+  onArchive,
+  onRestore
+}: {
+  onEdit: (template: MapTemplate) => void;
+  onArchive: (template: MapTemplate) => Promise<void>;
+  onRestore: (template: MapTemplate) => Promise<void>;
+}) {
   const {
     optimisticTemplates,
     isLoading,
@@ -32,7 +41,80 @@ export function MapTemplatesPageContent() {
     refreshData,
   } = useMapTemplatesData();
 
-  // Обработчики действий
+  return (
+    <>
+      {/* Поиск - интегрирован с хуком данных */}
+      <div className="w-full sm:w-96">
+        <EntitySearch
+          entities="mapTemplates"
+          placeholder="Поиск шаблонов карт..."
+          onSearchChange={setSearchTerm}
+        />
+      </div>
+
+      {/* Таблица с данными и колбэками из features слоя */}
+      <MapTemplatesTable
+        templates={optimisticTemplates}
+        isLoading={isLoading}
+        error={error}
+        onEditAction={onEdit}
+        onRefreshAction={refreshData}
+        searchTerm={searchTerm}
+        onArchiveAction={onArchive}
+        onRestoreAction={onRestore}
+      />
+    </>
+  );
+}
+
+/**
+ * Основной контент страницы управления шаблонами карт.
+ * 
+ * Упрощенная React 19 архитектура:
+ * - Только SWR для данных (нет дублирования запросов)
+ * - useOptimistic для оптимистичных обновлений
+ * - useTransition для pending состояний
+ */
+export function MapTemplatesPageContent() {
+  // Состояние UI (только локальное)
+  const [status, setStatus] = useState<EntityStatus>('active');
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<MapTemplate | undefined>(undefined);
+
+  // Обработчики UI (определяем перед хуком)
+  const handleDialogClose = () => {
+    setIsCreateDialogOpen(false);
+    setEditingTemplate(undefined);
+  };
+
+  const handleSuccess = () => {
+    handleDialogClose();
+    // Данные обновятся автоматически через optimistic updates
+  };
+
+  // Гибридный подход: useActionState в features слое
+  const formManager = useMapTemplateForm({
+    createAction: createMapTemplateAction,
+    updateAction: updateMapTemplateAction,
+    onSuccess: handleSuccess,
+  });
+
+  // FSD: Простые wrapper функции для архивации (без useActionState)
+  const handleArchive = async (template: MapTemplate) => {
+    const result = await archiveMapTemplateAction(template.id);
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+  };
+
+  const handleRestore = async (template: MapTemplate) => {
+    const result = await restoreMapTemplateAction(template.id);
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+  };
+
+  // Обработчики действий UI
   const handleCreateNew = () => {
     setEditingTemplate(undefined);
     setIsCreateDialogOpen(true);
@@ -41,25 +123,6 @@ export function MapTemplatesPageContent() {
   const handleEdit = (template: MapTemplate) => {
     setEditingTemplate(template);
     setIsCreateDialogOpen(true);
-  };
-
-  const handleDialogClose = () => {
-    setIsCreateDialogOpen(false);
-    setEditingTemplate(undefined);
-  };
-
-  const handleSuccess = () => {
-    handleDialogClose();
-    refreshData();
-  };
-
-  // Обработчики поиска
-  const handleSearchResults = (results: any[] | Record<string, any[]>, meta: { isLoading: boolean; isError: any; hasSearch: boolean; canSearch: boolean; mutate: () => void }) => {
-    // Результаты поиска обрабатываются автоматически в хуке
-  };
-
-  const handleSearchChange = (term: string) => {
-    setSearchTerm(term);
   };
 
   return (
@@ -72,16 +135,6 @@ export function MapTemplatesPageContent() {
             value={status}
             onValueChange={setStatus}
           />
-          
-          {/* Поиск */}
-          <div className="w-full sm:w-96">
-            <EntitySearch
-              entities="mapTemplates"
-              placeholder="Поиск шаблонов карт..."
-              onResults={handleSearchResults}
-              onSearchChange={handleSearchChange}
-            />
-          </div>
         </div>
 
         {/* Кнопка создания */}
@@ -96,22 +149,24 @@ export function MapTemplatesPageContent() {
         </Button>
       </div>
 
-      {/* Таблица результатов */}
-      <MapTemplatesTable
-        templates={optimisticTemplates}
-        isLoading={isLoading}
-        error={error}
-        onEditAction={handleEdit}
-        onRefreshAction={refreshData}
-        searchTerm={searchTerm}
+      {/* SWR данные с FSD колбэками */}
+      <MapTemplatesDataProvider 
+        onEdit={handleEdit} 
+        onArchive={handleArchive}
+        onRestore={handleRestore}
       />
 
-      {/* Диалог создания/редактирования */}
+      {/* Диалог с гибридным подходом: useActionState + FSD колбэки */}
       <MapTemplateDialog
         isOpen={isCreateDialogOpen}
         onCloseAction={handleDialogClose}
         onSuccessAction={handleSuccess}
         template={editingTemplate}
+        onCreateAction={formManager.handleCreate}
+        onUpdateAction={formManager.handleUpdate}
+        isCreating={formManager.isCreating}
+        isUpdating={formManager.isUpdating}
+        errors={formManager.errors}
       />
     </div>
   );

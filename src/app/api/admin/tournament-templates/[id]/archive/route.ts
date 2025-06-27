@@ -5,19 +5,21 @@ import { handleApiError } from '@/lib/api/handle-api-error.js';
 import tournamentTemplateService from '@/lib/domain/tournament-templates/tournament-template-service';
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 /**
  * Архивирует шаблон турнира.
  */
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  
   try {
-    const archivedTemplate = await tournamentTemplateService.archiveTournamentTemplate(params.id);
+    const archivedTemplate = await tournamentTemplateService.archiveTournamentTemplate(id);
     revalidatePath('/admin/tournament-templates');
-    revalidatePath(`/admin/tournament-templates/${params.id}`);
+    revalidatePath(`/admin/tournament-templates/${id}`);
     return NextResponse.json({ data: archivedTemplate });
   } catch (error) {
     if (error instanceof Error) {

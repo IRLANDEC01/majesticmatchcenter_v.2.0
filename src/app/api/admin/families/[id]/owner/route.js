@@ -10,7 +10,8 @@ import { familyParamsSchema, changeOwnerSchema } from '@/lib/api/schemas/familie
  */
 export async function PATCH(request, { params }) {
   try {
-    const { id: familyId } = familyParamsSchema.parse(params);
+    const awaitedParams = await params;
+    const { id: familyId } = familyParamsSchema.parse(awaitedParams);
     const body = await request.json();
     const { newOwnerId } = changeOwnerSchema.parse(body);
 
@@ -21,6 +22,7 @@ export async function PATCH(request, { params }) {
 
     return NextResponse.json(updatedFamily);
   } catch (error) {
-    return handleApiError(error, `Не удалось сменить владельца для семьи ${params.id}`);
+    const { id } = await params;
+    return handleApiError(error, `Не удалось сменить владельца для семьи ${id}`);
   }
 } 

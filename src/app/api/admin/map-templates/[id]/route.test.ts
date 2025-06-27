@@ -29,7 +29,8 @@ describe('/api/admin/map-templates/:id', () => {
       });
 
       const req = new Request(`http://localhost/api/admin/map-templates/${template.id}`);
-      const response = await GET(req as any, { params: { id: template.id } });
+      const params = Promise.resolve({ id: template.id });
+      const response = await GET(req as any, { params });
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -41,7 +42,8 @@ describe('/api/admin/map-templates/:id', () => {
       await clearTestDB();
       const nonExistentId = '605c72ef9f1b2c001f7b8b17';
       const req = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}`);
-      const response = await GET(req as any, { params: { id: nonExistentId } });
+      const params = Promise.resolve({ id: nonExistentId });
+      const response = await GET(req as any, { params });
       expect(response.status).toBe(404);
     });
   });
@@ -64,7 +66,8 @@ describe('/api/admin/map-templates/:id', () => {
         body: JSON.stringify(payload),
       });
 
-      const response = await PATCH(req as any, { params: { id: template.id } });
+      const params = Promise.resolve({ id: template.id });
+      const response = await PATCH(req as any, { params });
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -85,7 +88,8 @@ describe('/api/admin/map-templates/:id', () => {
         method: 'PATCH',
         body: JSON.stringify({ name: 'Existing Name' }),
       });
-      const response = await PATCH(req as any, { params: { id: template1.id } });
+      const params = Promise.resolve({ id: template1.id });
+      const response = await PATCH(req as any, { params });
       expect(response.status).toBe(409);
     });
   });

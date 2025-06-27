@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import searchService from '@/lib/domain/search/search-service';
 
+// Next.js 15: Отключаем кэширование для поиска (всегда свежие результаты)
+export const revalidate = 0;
+
 const searchSchema = z.object({
   q: z.string().min(1, 'Поисковый запрос должен содержать хотя бы 1 символ.'),
   entities: z.string().min(1, 'Необходимо указать хотя бы одну сущность для поиска.'),

@@ -6,7 +6,7 @@ import { NotFoundError } from '@/lib/errors';
 
 export async function PATCH(request, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const result = await playerService.unarchivePlayer(id);
 
     if (!result) {

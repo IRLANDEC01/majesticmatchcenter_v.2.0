@@ -55,6 +55,7 @@ export {
 
 // Переиспользуемые компоненты
 export { EntitySearch } from './entity-search';
+export { ErrorBoundary } from './error-boundary';
 
 // Layout компоненты
 export { default as GlobalHeader } from './layout/global-header';

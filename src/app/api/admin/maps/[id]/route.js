@@ -58,8 +58,9 @@ function getMapService() {
  * Возвращает карту по ID.
  */
 export async function GET(request, { params }) {
+  const { id } = await params;
+  
   try {
-    const { id } = params;
     // Простая валидация формата ID, чтобы отсечь заведомо неверные запросы
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return NextResponse.json({ message: 'Некорректный ID карты' }, { status: 400 });
@@ -74,7 +75,7 @@ export async function GET(request, { params }) {
 
     return NextResponse.json(map);
   } catch (error) {
-    return handleApiError(error, `Failed to get map ${params.id}`);
+    return handleApiError(error, `Failed to get map ${id}`);
   }
 }
 
@@ -83,8 +84,9 @@ export async function GET(request, { params }) {
  * Обновляет существующую карту.
  */
 export async function PUT(request, { params }) {
+  const { id } = await params;
+  
   try {
-    const { id } = params;
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return NextResponse.json({ message: 'Некорректный ID карты' }, { status: 400 });
     }
@@ -95,7 +97,7 @@ export async function PUT(request, { params }) {
 
     return NextResponse.json(updatedMap);
   } catch (error) {
-    return handleApiError(error, `Failed to update map ${params.id}`);
+    return handleApiError(error, `Failed to update map ${id}`);
   }
 }
 

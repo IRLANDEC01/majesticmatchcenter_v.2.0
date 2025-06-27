@@ -35,7 +35,8 @@ describe('PATCH /api/admin/map-templates/[id]/archive', () => {
       method: 'PATCH',
     });
 
-    const response = await PATCH(req as any, { params: { id: templateId } });
+    const params = Promise.resolve({ id: templateId });
+    const response = await PATCH(req as any, { params });
 
     expect(response.status).toBe(200);
     const dbTemplate = await MapTemplate.findById(template._id);
@@ -49,7 +50,8 @@ describe('PATCH /api/admin/map-templates/[id]/archive', () => {
     const req = new Request(`http://localhost/api/admin/map-templates/${nonExistentId}/archive`, {
       method: 'PATCH',
     });
-    const response = await PATCH(req as any, { params: { id: nonExistentId.toString() } });
+    const params = Promise.resolve({ id: nonExistentId.toString() });
+    const response = await PATCH(req as any, { params });
     expect(response.status).toBe(404);
   });
 
@@ -62,7 +64,8 @@ describe('PATCH /api/admin/map-templates/[id]/archive', () => {
     const req = new Request(`http://localhost/api/admin/map-templates/${templateId}/archive`, {
       method: 'PATCH',
     });
-    const response = await PATCH(req as any, { params: { id: templateId } });
+    const params = Promise.resolve({ id: templateId });
+    const response = await PATCH(req as any, { params });
     expect(response.status).toBe(409);
   });
 });

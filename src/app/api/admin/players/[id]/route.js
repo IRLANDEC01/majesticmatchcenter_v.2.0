@@ -10,7 +10,8 @@ import { revalidatePath } from 'next/cache';
  */
 export async function GET(req, { params }) {
   try {
-    const player = await playerService.getPlayerById(params.id);
+    const { id } = await params;
+    const player = await playerService.getPlayerById(id);
     return NextResponse.json(player);
   } catch (error) {
     return handleApiError(error);
@@ -23,7 +24,7 @@ export async function GET(req, { params }) {
  */
 export async function PATCH(req, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const json = await req.json();
     const validatedData = updatePlayerSchema.parse(json);
 

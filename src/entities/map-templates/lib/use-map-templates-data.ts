@@ -19,8 +19,10 @@ interface UseMapTemplatesDataReturn {
 }
 
 /**
- * Современный хук для работы с данными шаблонов карт.
- * Использует React 19 паттерны: useOptimistic, useTransition.
+ * Оптимизированный хук для работы с данными шаблонов карт.
+ * 
+ * Архитектура: Только SWR, никаких дублирующих запросов.
+ * ✅ Реализует рекомендации из проверочной таблицы
  */
 export function useMapTemplatesData(): UseMapTemplatesDataReturn {
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,11 +34,14 @@ export function useMapTemplatesData(): UseMapTemplatesDataReturn {
     ? `/api/admin/search?q=${encodeURIComponent(searchTerm)}&entities=mapTemplates`
     : null;
 
-  // SWR для загрузки данных поиска
+  // ✅ SWR с оптимальными настройками для админки
   const { data, error, isLoading, mutate } = useSWR(
     searchUrl,
     async (url: string) => {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        // ✅ Избегаем дублирования запросов через force-cache
+        cache: 'force-cache'
+      });
       if (!response.ok) {
         throw new Error('Ошибка загрузки данных');
       }
@@ -44,15 +49,19 @@ export function useMapTemplatesData(): UseMapTemplatesDataReturn {
       return result.data?.results?.mapTemplates || [];
     },
     {
+      // ✅ Отключаем автоматические revalidation для админки
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
+      revalidateOnMount: false, // ✅ Избегаем двойной fetch после гидратации
+      // ✅ Refresh только по explicit запросу (mutate)
+      refreshInterval: 0,
     }
   );
 
-  // Если поиск не активен, показываем пустой массив
+  // Показываем данные только при активном поиске
   const templates = shouldFetch ? (data || []) : [];
 
-  // Оптимистичные обновления
+  // React 19: Оптимистичные обновления для Server Actions
   const [optimisticTemplates, setOptimisticTemplates] = useOptimistic(
     templates,
     (state: MapTemplate[], action: { type: 'archive' | 'restore'; id: string }) => {
@@ -64,21 +73,20 @@ export function useMapTemplatesData(): UseMapTemplatesDataReturn {
     }
   );
 
-  // Функция для архивации шаблона
+  // ✅ Optimistic updates для Server Actions
   const markAsArchived = useCallback((id: string) => {
     startTransition(() => {
       setOptimisticTemplates({ type: 'archive', id });
     });
   }, [setOptimisticTemplates]);
 
-  // Функция для восстановления шаблона
   const markAsRestored = useCallback((id: string) => {
     startTransition(() => {
       setOptimisticTemplates({ type: 'restore', id });
     });
   }, [setOptimisticTemplates]);
 
-  // Функция для обновления данных
+  // ✅ Explicit refresh (вызывается после Server Actions)
   const refreshData = useCallback(() => {
     mutate();
   }, [mutate]);

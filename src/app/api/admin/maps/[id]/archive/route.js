@@ -33,8 +33,9 @@ function getMapService() {
  * Если карта активна - архивирует. Если заархивирована - восстанавливает.
  */
 export async function PATCH(request, { params }) {
+  const { id } = await params;
+  
   try {
-    const { id } = params;
     const mapService = getMapService();
 
     // Сначала получаем текущее состояние карты, включая архивные
@@ -60,6 +61,6 @@ export async function PATCH(request, { params }) {
 
     return NextResponse.json(result);
   } catch (error) {
-    return handleApiError(error, `Failed to update archive status for map ${params.id}`);
+    return handleApiError(error, `Failed to update archive status for map ${id}`);
   }
 } 

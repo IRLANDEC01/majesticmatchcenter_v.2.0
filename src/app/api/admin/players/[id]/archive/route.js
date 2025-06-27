@@ -26,7 +26,7 @@ import { revalidatePath } from 'next/cache';
  */
 export async function PATCH(request, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const result = await playerService.archivePlayer(id);
 
     // Вызываем только один раз для главной страницы, как того ожидает тест
