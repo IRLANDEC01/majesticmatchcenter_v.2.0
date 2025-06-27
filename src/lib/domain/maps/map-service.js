@@ -4,14 +4,14 @@ import { LIFECYCLE_STATUSES as STATUSES } from '@/lib/constants';
 import { createMapSchema, updateMapSchema, completeMapSchema } from '@/lib/api/schemas/maps/map-schemas';
 
 // Импортируем все зависимости как синглтоны
-import mapRepo from '@/lib/repos/maps/map-repo.js';
-import tournamentRepo from '@/lib/repos/tournaments/tournament-repo.js';
-import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo.js';
-import familyRepo from '@/lib/repos/families/family-repo.js';
-import playerRepo from '@/lib/repos/players/player-repo.js';
-import ratingService from '@/lib/domain/ratings/rating-service.js';
-import statisticsService from '@/lib/domain/statistics/statistics-service.js';
-import achievementService from '@/lib/domain/achievements/achievement-service.js';
+import mapRepo from '@/lib/repos/maps/map-repo';
+import tournamentRepo from '@/lib/repos/tournaments/tournament-repo';
+import mapTemplateRepo from '@/lib/repos/map-templates/map-template-repo';
+import familyRepo from '@/lib/repos/families/family-repo';
+import playerRepo from '@/lib/repos/players/player-repo';
+import ratingService from '@/lib/domain/ratings/rating-service';
+import statisticsService from '@/lib/domain/statistics/statistics-service';
+import achievementService from '@/lib/domain/achievements/achievement-service';
 
 /**
  * Сервис для управления бизнес-логикой, связанной с картами.

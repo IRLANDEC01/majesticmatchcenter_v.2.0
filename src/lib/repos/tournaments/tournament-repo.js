@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import Tournament from '@/models/tournament/Tournament.js';
 import PlayerMapParticipation from '@/models/player/PlayerMapParticipation.js';
 import Map from '@/models/map/Map.js';
-import { cache } from '@/lib/cache/index.js';
+import { cache } from '@/lib/cache';
 import { NotFoundError } from '@/lib/errors.js';
 import FamilyMapParticipation from '@/models/family/FamilyMapParticipation.js';
 import BaseRepo from '../base-repo';
