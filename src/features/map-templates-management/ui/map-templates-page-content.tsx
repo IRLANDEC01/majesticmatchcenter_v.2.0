@@ -2,15 +2,13 @@
 
 import React, { useState, useCallback } from 'react';
 import { Button } from "@/shared/ui/button";
-import { Input } from "@/shared/ui/input";
-import { Plus, Search, X } from "lucide-react";
-import { StatusFilter } from "@/shared/ui/status-filter";
+import { Plus } from "lucide-react";
 import { usePermissions } from "@/shared/hooks/use-permissions";
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  MapTemplatesTable,
+  MapTemplatesTable, // ✅ ИЗМЕНЕНИЕ: Переходим на infinite scroll таблицу
   MapTemplateDialog,
-  useMapTemplatesQuery,
+  useInfiniteMapTemplatesQuery, // ✅ НОВОЕ: Infinite scroll хук
   useCreateMapTemplateMutation,
   useUpdateMapTemplateMutation,
   useArchiveMapTemplateMutation,
@@ -28,9 +26,12 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
   const permissions = usePermissions(userRole);
   const queryClient = useQueryClient();
   
-  // ✅ УПРОЩЕНО: Убираем дублированный debounce (он уже в useMapTemplatesQuery)
+  // ✅ ИЗМЕНЕНИЕ: Переходим на infinite scroll - локальный state для фильтров
   const [searchTerm, setSearchTerm] = useState('');
   const [status, setStatus] = useState<EntityStatus>('active');
+  
+  // ✅ ДОБАВЛЕНО: Состояние для явного управления загрузкой данных
+  const [shouldLoadData, setShouldLoadData] = useState(false);
   
   // Состояние диалога
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -39,11 +40,56 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
   // ✅ ДОБАВЛЕНО: Состояние для ошибок валидации
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  // ✅ ИСПРАВЛЕНО: Данные загружаются только при явном действии
+  const shouldFetchData = shouldLoadData || 
+    searchTerm.trim().length >= 2 || 
+    status !== 'active';
+
+  // ✅ НОВОЕ: Infinite scroll данные - НЕ загружаются автоматически
+  const {
+    templates,
+    isLoading,
+    isError,
+    error,
+    hasNextPage,
+    isFetchingNextPage,
+    loadMore,
+    totalCount,
+    refetch,
+  } = useInfiniteMapTemplatesQuery({
+    searchTerm,
+    status,
+    enabled: shouldFetchData, // ✅ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: enabled управляется явно
+  });
+
   // ✅ РЕФАКТОРИНГ: Используем TanStack Query хуки вместо Server Actions
   const createMutation = useCreateMapTemplateMutation();
   const updateMutation = useUpdateMapTemplateMutation();
   const archiveMutation = useArchiveMapTemplateMutation();
   const restoreMutation = useRestoreMapTemplateMutation();
+
+  // ✅ ДОБАВЛЕНО: Обработчики для активации загрузки данных
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchTerm(value);
+    // Активируем загрузку если есть поиск от 2 символов
+    if (value.trim().length >= 2) {
+      setShouldLoadData(true);
+    }
+  }, []);
+
+  const handleStatusChange = useCallback((newStatus: EntityStatus) => {
+    setStatus(newStatus);
+    // Активируем загрузку при изменении фильтра (кроме active)
+    if (newStatus !== 'active') {
+      setShouldLoadData(true);
+    }
+  }, []);
+
+  const handleShowAll = useCallback(() => {
+    setShouldLoadData(true);
+    setSearchTerm('');
+    setStatus('active');
+  }, []);
 
   // ✅ РЕФАКТОРИНГ: Колбэки для диалога
   const handleCreateAction = useCallback(async (data: MapTemplateFormValues) => {
@@ -55,6 +101,7 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
       if (result.success) {
         setIsDialogOpen(false);
         setFormErrors({}); // Очищаем ошибки при успехе
+        refetch(); // ✅ Перезагружаем infinite data
       } else {
         // Устанавливаем ошибки валидации
         console.log('🚨 Ошибки валидации:', result.errors); // Отладка
@@ -67,7 +114,7 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
       setFormErrors({ general: error instanceof Error ? error.message : 'Неизвестная ошибка' });
       throw error;
     }
-  }, [createMutation]);
+  }, [createMutation, refetch]);
 
   const handleUpdateAction = useCallback(async (id: string, data: MapTemplateFormValues) => {
     try {
@@ -77,6 +124,7 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
         setIsDialogOpen(false);
         setSelectedTemplate(undefined);
         setFormErrors({}); // Очищаем ошибки при успехе
+        refetch(); // ✅ Перезагружаем infinite data
       } else {
         // Устанавливаем ошибки валидации
         setFormErrors(result.errors || {});
@@ -87,32 +135,27 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
       setFormErrors({ general: error instanceof Error ? error.message : 'Неизвестная ошибка' });
       throw error;
     }
-  }, [updateMutation]);
+  }, [updateMutation, refetch]);
 
   const handleArchiveAction = useCallback(async (template: MapTemplate) => {
     await archiveMutation.mutateAsync(template.id);
+    // ✅ ИЗМЕНЕНИЕ: Инвалидируем infinite queries
     queryClient.invalidateQueries({
       predicate: (query) => query.queryKey[0] === 'mapTemplates'
     });
-  }, [archiveMutation, queryClient]);
+    refetch(); // ✅ Перезагружаем infinite data
+  }, [archiveMutation, queryClient, refetch]);
 
   const handleRestoreAction = useCallback(async (template: MapTemplate) => {
     await restoreMutation.mutateAsync(template.id);
+    // ✅ ИЗМЕНЕНИЕ: Инвалидируем infinite queries
     queryClient.invalidateQueries({
       predicate: (query) => query.queryKey[0] === 'mapTemplates'
     });
-  }, [restoreMutation, queryClient]);
+    refetch(); // ✅ Перезагружаем infinite data
+  }, [restoreMutation, queryClient, refetch]);
 
-  // ✅ ОБНОВЛЕНО: Получение данных через TanStack Query (debounce внутри хука)
-  const { 
-    data: templates = [], 
-    isLoading, 
-    error,
-  } = useMapTemplatesQuery({
-    searchTerm, // Без debounce - он внутри хука
-    status,
-    enabled: true,
-  });
+  // ✅ СЕРВЕРНАЯ ПАГИНАЦИЯ: Данные управляются серверной таблицей через URL
 
   // Обработчики UI
   const handleCreateClick = () => {
@@ -125,10 +168,6 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
     setSelectedTemplate(template);
     setFormErrors({}); // Очищаем ошибки при открытии
     setIsDialogOpen(true);
-  };
-
-  const handleSearchClear = () => {
-    setSearchTerm('');
   };
 
   // ✅ Вычисляем общее состояние загрузки из всех мутаций
@@ -150,36 +189,44 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
 
       {/* Панель управления */}
       <div className="flex items-center justify-between gap-4 mb-6">
-        {/* Поиск */}
-        <div className="relative flex-1 max-w-md">
-          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-            <Search className="h-4 w-4 text-muted-foreground" />
+        {/* ✅ ИЗМЕНЕНИЕ: Добавляем поиск и фильтры для infinite scroll */}
+        <div className="flex items-center gap-4">
+          {/* Поиск */}
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Введите шаблона карты..."
+              value={searchTerm}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-4 pr-4 py-2 border rounded-md w-80"
+            />
           </div>
-          <Input
-            placeholder="Поиск шаблонов карт..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 pr-10"
-          />
-          {searchTerm && (
-            <button
-              type="button"
-              onClick={handleSearchClear}
-              className="absolute inset-y-0 right-0 flex cursor-pointer items-center rounded-r-md px-3 text-muted-foreground transition-colors hover:text-primary"
-              aria-label="Очистить поиск"
+          
+          {/* Фильтр статуса */}
+          {permissions.canViewArchived && (
+            <select
+              value={status}
+              onChange={(e) => handleStatusChange(e.target.value as EntityStatus)}
+              className="px-3 py-2 border rounded-md"
             >
-              <X className="h-4 w-4" />
-            </button>
+              <option value="active">Активные</option>
+              <option value="archived">Архивные</option>
+              <option value="all">Все</option>
+            </select>
+          )}
+
+          {/* ✅ ДОБАВЛЕНО: Кнопка "Показать все" */}
+          {!shouldLoadData && (
+            <Button 
+              variant="outline"
+              onClick={handleShowAll}
+              disabled={isMutating}
+            >
+              Показать все
+            </Button>
           )}
         </div>
-
-        {/* Фильтр статуса */}
-        <StatusFilter 
-          value={status} 
-          onChange={setStatus}
-          canViewArchived={permissions.canViewArchived}
-        />
-
+        
         {/* Кнопка создания */}
         <Button 
           onClick={handleCreateClick}
@@ -190,16 +237,42 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
         </Button>
       </div>
 
-      {/* ✅ РЕФАКТОРИНГ: Таблица использует мутации вместо Server Actions */}
+      {/* ✅ INFINITE SCROLL ТАБЛИЦА: Умная виртуализация + автозагрузка */}
       <MapTemplatesTable
         templates={templates}
-        isLoading={isLoading || isMutating}
+        isLoading={isLoading}
         error={error}
         onEditAction={handleEditClick}
-        searchTerm={searchTerm} // Передаем оригинальный searchTerm для подсветки
+        searchTerm={searchTerm}
         onArchiveAction={handleArchiveAction}
         onRestoreAction={handleRestoreAction}
+        // ✅ Infinite scroll props
+        hasNextPage={hasNextPage}
+        isFetchingNextPage={isFetchingNextPage}
+        loadMore={loadMore}
+        totalCount={totalCount}
       />
+
+      {/* ✅ ДОБАВЛЕНО: Пустое состояние когда данные не загружены */}
+      {!shouldFetchData && !isLoading && (
+        <div className="rounded-md border border-dashed border-muted-foreground/25 p-12">
+          <div className="text-center">
+            <h3 className="text-lg font-medium text-muted-foreground mb-2">
+              Используйте поиск или фильтры
+            </h3>
+            <p className="text-sm text-muted-foreground/75 mb-4">
+              Введите запрос в поиске (мин. 2 символа), выберите статус или нажмите &quot;Показать все&quot;
+            </p>
+            <Button 
+              variant="outline"
+              onClick={handleShowAll}
+              disabled={isMutating}
+            >
+              Показать все шаблоны
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Диалог создания/редактирования */}
       {isDialogOpen && (

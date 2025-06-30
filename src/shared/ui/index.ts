@@ -57,6 +57,9 @@ export {
 export { EntitySearch } from './entity-search';
 export { StatusFilter } from './status-filter';
 export { ErrorBoundary } from './error-boundary';
+export { PaginationControls } from './pagination-controls';
+
+// 🎯 Универсальная виртуализация доступна через хук: useMaybeVirtualizer из '@/shared/hooks'
 
 // Layout компоненты
 export { default as GlobalHeader } from './layout/global-header';

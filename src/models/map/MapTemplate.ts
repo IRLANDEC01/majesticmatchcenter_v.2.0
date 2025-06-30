@@ -90,9 +90,39 @@ mapTemplateSchema.virtual('isArchived').get(function (this: IMapTemplate) {
 });
 
 // Индексы
-mapTemplateSchema.index({ name: 1 }, { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } });
-mapTemplateSchema.index({ slug: 1 }, { unique: true, partialFilterExpression: { archivedAt: { $eq: null } } });
-mapTemplateSchema.index({ schemaVersion: 1 });
+mapTemplateSchema.index({ name: 1 }, { 
+  name: 'name_unique_active',
+  unique: true, 
+  partialFilterExpression: { archivedAt: { $eq: null } } 
+});
+mapTemplateSchema.index({ slug: 1 }, { 
+  name: 'slug_unique_active',
+  unique: true, 
+  partialFilterExpression: { archivedAt: { $eq: null } } 
+});
+mapTemplateSchema.index({ schemaVersion: 1 }, { name: 'schema_version' });
+
+// ✅ ПРОИЗВОДИТЕЛЬНОСТЬ: Compound индексы для серверной пагинации и сортировки
+mapTemplateSchema.index({ archivedAt: 1, name: 1 }, { 
+  name: 'archived_name_compound',
+  collation: { locale: 'ru', strength: 1 }, // ✅ Русская коллация для регистр-независимой сортировки
+  comment: 'Оптимизация алфавитной сортировки с фильтрацией по статусу'
+});
+
+mapTemplateSchema.index({ archivedAt: 1, createdAt: -1 }, { 
+  name: 'archived_created_compound',
+  comment: 'Оптимизация сортировки "новые сначала" с фильтрацией по статусу'
+});
+
+mapTemplateSchema.index({ archivedAt: 1, updatedAt: -1 }, { 
+  name: 'archived_updated_compound',
+  comment: 'Оптимизация сортировки "недавно измененные" с фильтрацией по статусу'
+});
+
+mapTemplateSchema.index({ createdAt: -1 }, { 
+  name: 'created_desc',
+  comment: 'Оптимизация сортировки по дате создания для режима "все записи"'
+});
 
 // Хук для генерации slug
 mapTemplateSchema.pre('save', function (this: IMapTemplate, next: CallbackWithoutResultAndOptionalError) {

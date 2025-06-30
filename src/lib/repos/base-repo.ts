@@ -18,6 +18,7 @@ export interface IFindParams<T> {
   page?: number;
   limit?: number;
   status?: 'active' | 'archived' | 'all';
+  collation?: { locale: string; strength: number }; // ✅ Поддержка коллации для международной сортировки
 }
 
 // Определяем интерфейс для результата метода find
@@ -96,6 +97,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     page = 1,
     limit = 10,
     status = 'active',
+    collation,
   }: IFindParams<T> = {}): Promise<IFindResult<T>> {
     const pageNum = page || 1;
     const limitNum = limit || 10;
@@ -110,9 +112,18 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     }
     // Если status === 'all', не добавляем никаких условий по archivedAt
 
+    // ✅ Создаем query с коллацией, если она указана
+    let dataQuery = this.model.find(finalQuery).sort(sort).skip(skip).limit(limitNum);
+    let countQuery = this.model.countDocuments(finalQuery);
+    
+    if (collation) {
+      dataQuery = dataQuery.collation(collation);
+      countQuery = countQuery.collation(collation);
+    }
+
     const [data, total] = await Promise.all([
-      this.model.find(finalQuery).sort(sort).skip(skip).limit(limitNum).exec(),
-      this.model.countDocuments(finalQuery),
+      dataQuery.exec(),
+      countQuery.exec(),
     ]);
 
     const totalPages = Math.ceil(total / limitNum);

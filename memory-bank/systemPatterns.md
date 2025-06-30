@@ -201,6 +201,49 @@ export function useCreateMapTemplateMutation() {
 }
 ```
 
+### Универсальный хук виртуализации — ВНЕДРЕН ✅
+**Статус:** Создан переиспользуемый хук для ЛЮБЫХ таблиц проекта
+
+**Принцип "Умной" виртуализации:**
+```typescript
+// shared/hooks/use-maybe-virtualizer.ts  
+export function useMaybeVirtualizer<T>(rows: T[], config: VirtualizerConfig = {}) {
+  const enableVirtual = !config.disabled && rows.length > (config.threshold || 100);
+  
+  return {
+    enableVirtual,
+    virtualizer: enableVirtual ? useVirtualizer({...}) : null,
+    containerRef
+  };
+}
+```
+
+**Готовые пресеты:**
+```typescript
+VirtualizerPresets.admin         // threshold: 100, для админ-таблиц
+VirtualizerPresets.publicRatings // threshold: 50, для публичных рейтингов  
+VirtualizerPresets.withImages    // threshold: 30, для тяжелых строк
+VirtualizerPresets.mobile        // threshold: 50, оптимизация для мобильных
+VirtualizerPresets.always        // threshold: 1, принудительно
+VirtualizerPresets.never         // disabled: true, отключено
+```
+
+**Переиспользование между сущностями:**
+```typescript
+// Любая таблица автоматически получает виртуализацию
+const { enableVirtual, virtualizer } = useMaybeVirtualizer(players);     // Player[]
+const { enableVirtual, virtualizer } = useMaybeVirtualizer(tournaments); // Tournament[] 
+const { enableVirtual, virtualizer } = useMaybeVirtualizer(families);    // Family[]
+const { enableVirtual, virtualizer } = useMaybeVirtualizer(templates);   // MapTemplate[]
+```
+
+**Преимущества:**
+- Автоматическое включение/выключение по порогу
+- 100% переиспользуемость между сущностями
+- TypeScript типизация для любых данных
+- Готовые пресеты под разные сценарии
+- Устранение дублирования компонентов
+
 **Двойная инвалидация для гарантированного обновления:**
 ```typescript
 // features/ui/page-content.tsx

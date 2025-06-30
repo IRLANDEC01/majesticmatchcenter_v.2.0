@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IMAGE_UPLOAD_CONFIG } from '@/lib/constants';
+import { IMAGE_UPLOAD_CONFIG, MAX_PAGE_SIZE } from '@/lib/constants';
 
 // =================================
 // Константы для валидации файлов
@@ -7,6 +7,15 @@ import { IMAGE_UPLOAD_CONFIG } from '@/lib/constants';
 
 const MAX_FILE_SIZE = IMAGE_UPLOAD_CONFIG.MAX_FILE_SIZE_MB * 1024 * 1024;
 const { ACCEPTED_IMAGE_TYPES } = IMAGE_UPLOAD_CONFIG;
+
+// =================================
+// Константы для безопасной сортировки
+// =================================
+
+/**
+ * Whitelist допустимых полей для сортировки (предотвращает атаки через __proto__ и т.д.)
+ */
+const ALLOWED_SORT_FIELDS = ['name', 'createdAt', 'updatedAt'] as const;
 
 // =================================
 // Базовая схема для формы шаблона карты
@@ -95,12 +104,15 @@ export type UpdateMapTemplateApiDto = z.infer<typeof updateMapTemplateApiSchema>
 
 /**
  * @desc Схема для валидации query-параметров при получении списка шаблонов карт.
+ * Поддерживает infinite scroll с пагинацией по 50 записей, MeiliSearch поиск и server-side сортировку.
  */
 export const getMapTemplatesSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().default(10),
+  limit: z.coerce.number().int().positive().max(MAX_PAGE_SIZE, `Максимальный размер страницы ${MAX_PAGE_SIZE}`).default(50), // ✅ Увеличен лимит для infinite scroll
   q: z.string().optional(),
   status: z.enum(['active', 'archived', 'all']).default('active'),
+  sort: z.enum(ALLOWED_SORT_FIELDS).default('createdAt'), // ✅ Безопасный whitelist полей сортировки
+  order: z.enum(['asc', 'desc']).default('desc'), // ✅ Направление сортировки (новые сначала по умолчанию)
 });
 
 export type GetMapTemplatesDto = z.infer<typeof getMapTemplatesSchema>;

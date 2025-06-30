@@ -7,6 +7,7 @@ import {
   createTestMapTemplate,
 } from '@/lib/test-helpers.js';
 import { clearMemoryCache } from '@/lib/cache';
+import { MAX_PAGE_SIZE, MIN_SEARCH_LENGTH } from '@/lib/constants';
 
 vi.mock('next/cache');
 
@@ -108,6 +109,101 @@ describe('/api/admin/map-templates', () => {
       expect(response1.status).toBe(200);
       expect(body1.data.length).toBe(1);
       expect(body1.data[0].name).toBe('Cached Template Test');
+    });
+
+    // ✅ НОВЫЕ ТЕСТЫ: Серверная пагинация + защита от DoS
+    it(`должен защищать от DoS атак limit > ${MAX_PAGE_SIZE}`, async () => {
+      const req = new Request(`http://localhost/api/admin/map-templates?limit=${MAX_PAGE_SIZE + 1}`);
+      const response = await GET(req as any);
+      
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.errors).toBeDefined();
+      expect(body.errors.limit).toBeDefined();
+    });
+
+    it('должен правильно вычислять totalPages', async () => {
+      // Создаем 25 шаблонов
+      for (let i = 1; i <= 25; i++) {
+        await createTestMapTemplate({ name: `TotalPages Test ${i}` });
+      }
+
+      // limit=10 → totalPages = Math.ceil(25/10) = 3
+      const req = new Request('http://localhost/api/admin/map-templates?page=1&limit=10');
+      const response = await GET(req as any);
+      const body = await response.json();
+      
+      expect(response.status).toBe(200);
+      expect(body.data.length).toBe(10);
+      expect(body.total).toBe(25);
+      expect(body.totalPages).toBe(3); // ✅ Math.ceil(25/10) = 3
+      expect(body.page).toBe(1);
+      expect(body.limit).toBe(10);
+    });
+
+    it('должен корректно обрабатывать пустой поиск', async () => {
+      await createTestMapTemplate({ name: 'Empty Search Test' });
+
+      // Пустой q не должен добавлять regex в MongoDB query
+      const req = new Request('http://localhost/api/admin/map-templates?q=');
+      const response = await GET(req as any);
+      const body = await response.json();
+      
+      expect(response.status).toBe(200);
+      expect(body.data.length).toBe(1);
+    });
+
+    it('должен правильно считать страницы на границах', async () => {
+      // Ровно 10 элементов = 1 страница
+      for (let i = 1; i <= 10; i++) {
+        await createTestMapTemplate({ name: `Boundary Test ${i}` });
+      }
+
+      const req = new Request('http://localhost/api/admin/map-templates?limit=10');
+      const response = await GET(req as any);
+      const body = await response.json();
+      
+      expect(response.status).toBe(200);
+      expect(body.totalPages).toBe(1); // ✅ Math.ceil(10/10) = 1
+      expect(body.data.length).toBe(10);
+    });
+
+    // ✅ НОВЫЕ ТЕСТЫ: Сортировка и безопасность
+    it('должен поддерживать сортировку по разным полям', async () => {
+      await createTestMapTemplate({ name: 'Alpha Sort Test' });
+      await createTestMapTemplate({ name: 'Beta Sort Test' });
+      
+      // Проверяем алфавитную сортировку по возрастанию
+      const req = new Request('http://localhost/api/admin/map-templates?sort=name&order=asc');
+      const response = await GET(req as any);
+      const body = await response.json();
+      
+      expect(response.status).toBe(200);
+      expect(body.data[0].name).toBe('Alpha Sort Test');
+      expect(body.data[1].name).toBe('Beta Sort Test');
+    });
+
+    it('должен отклонять небезопасные поля сортировки', async () => {
+      const req = new Request('http://localhost/api/admin/map-templates?sort=__proto__');
+      const response = await GET(req as any);
+      
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.errors).toBeDefined();
+      expect(body.errors.sort).toBeDefined();
+    });
+
+    it('должен обрабатывать fallback при недоступности MeiliSearch', async () => {
+      await createTestMapTemplate({ name: 'Fallback Test Search' });
+      
+      // Поиск с q >= ${MIN_SEARCH_LENGTH} должен работать даже при падении MeiliSearch
+      const req = new Request('http://localhost/api/admin/map-templates?q=Fallback');
+      const response = await GET(req as any);
+      const body = await response.json();
+      
+      expect(response.status).toBe(200);
+      expect(body.data.length).toBe(1);
+      expect(body.data[0].name).toContain('Fallback');
     });
   });
 }); 

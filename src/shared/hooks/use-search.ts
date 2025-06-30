@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { useDebounce } from 'use-debounce';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
-import { SEARCH_DEBOUNCE_DELAY_MS, MIN_SEARCH_LENGTH } from '@/lib/constants';
+import { SEARCH_DEBOUNCE_DELAY_MS, MIN_SEARCH_LENGTH } from '../../lib/constants';
+import { usePacerDebounce } from './use-pacer-debounce';
 
 // Типы для поиска
 export type SearchEntity = 'mapTemplates' | 'players' | 'families' | 'tournaments' | 'tournamentTemplates';
@@ -33,6 +33,8 @@ export interface UseSearchReturn<T extends SearchEntity | SearchEntity[]> {
   clearSearch: () => void;
   hasSearch: boolean;
   canSearch: boolean;
+  /** ✅ НОВОЕ: Индикатор состояния debounce (улучшение UX) */
+  isPending: boolean;
 }
 
 /**
@@ -47,7 +49,14 @@ export function useSearch<T extends SearchEntity | SearchEntity[]>({
   status = 'active',
 }: SearchParams): UseSearchReturn<T> {
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [debouncedSearch] = useDebounce<string>(searchTerm, debounceMs);
+  const [debouncedSearch, isPending, cancelDebounce] = usePacerDebounce<string>(searchTerm, debounceMs);
+
+  // Cleanup debounce при размонтировании компонента
+  useEffect(() => {
+    return () => {
+      cancelDebounce();
+    };
+  }, [cancelDebounce]);
 
   // Определяем, должен ли выполняться запрос
   const shouldSearch = Boolean(enabled && 
@@ -103,5 +112,7 @@ export function useSearch<T extends SearchEntity | SearchEntity[]>({
     // Дополнительные полезные поля
     hasSearch: Boolean(debouncedSearch),
     canSearch: shouldSearch,
+    // ✅ НОВОЕ: Состояние debounce для улучшенного UX
+    isPending,
   };
 } 

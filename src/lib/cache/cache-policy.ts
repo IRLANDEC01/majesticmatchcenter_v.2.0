@@ -51,10 +51,12 @@ export const cacheTtls = {
 export const cacheKeys = {
   // Ключи для MapTemplate
   mapTemplate: (id: string) => `map-template:${id}`,
-  mapTemplatesList: (page: number, limit: number, rev: number, q?: string, status?: string) => {
+  mapTemplatesList: (page: number, limit: number, rev: number, q?: string, status?: string, sort?: string, order?: string) => {
     const queryPart = q ? `:q${btoa(q)}` : '';
     const statusPart = status ? `:s${status}` : '';
-    return `map-templates:list:p${page}:l${limit}:rev${rev}${queryPart}${statusPart}`;
+    const sortPart = sort ? `:sort${sort}` : '';
+    const orderPart = order ? `:ord${order}` : '';
+    return `map-templates:list:p${page}:l${limit}:rev${rev}${queryPart}${statusPart}${sortPart}${orderPart}`;
   },
   mapTemplatesRev: () => 'rev:map-templates:list',
 

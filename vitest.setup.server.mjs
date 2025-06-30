@@ -1,5 +1,4 @@
 import { vi, beforeAll, afterAll } from 'vitest';
-import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import dotenv from 'dotenv';
 import path from 'path';
 // Загружаем модели Mongoose для серверного окружения
@@ -18,28 +17,21 @@ vi.mock('next/cache', () => ({
   revalidateTag: vi.fn(),
 }));
 
-// --- Настройка Testcontainers для Redis ---
+// --- Redis отключен для тестов (используется memory cache) ---
 
-let redisContainer;
+// ✅ ИСПРАВЛЕНО: Убираем testcontainers для Redis
+// Тесты используют CACHE_DRIVER=memory, поэтому Redis контейнер не нужен
 
 beforeAll(async () => {
-  console.log('🚀 Запуск Redis контейнера для тестов...');
-  redisContainer = await new GenericContainer('redis:7-alpine').withExposedPorts(6379).start();
-  const redisPort = redisContainer.getMappedPort(6379);
-  const redisHost = redisContainer.getHost();
-  
-  // Устанавливаем глобальную переменную, а не process.env
-  globalThis.__REDIS_URL__ = `redis://${redisHost}:${redisPort}`;
-  
-  console.log(`✅ Redis контейнер запущен. URL установлен в глобальную переменную.`);
+  console.log('🧪 Инициализация тестовой среды (memory cache)...');
+  // Никаких контейнеров не запускаем - используем memory cache
+  console.log('✅ Тестовая среда готова.');
 });
 
 afterAll(async () => {
-  console.log('🛑 Остановка Redis контейнера...');
-  if (redisContainer) {
-    await redisContainer.stop();
-  }
-  console.log('👍 Redis контейнер успешно остановлен.');
+  console.log('🧹 Очистка тестовой среды...');
+  // Ничего не нужно останавливать для memory cache  
+  console.log('👍 Тестовая среда очищена.');
 });
 
 // --- Настройка переменных окружения ---
@@ -50,11 +42,9 @@ console.log('Запуск файла настройки для СЕРВЕРНЫ�
 // Это гарантирует, что тесты всегда используют свою конфигурацию.
 dotenv.config({ path: path.resolve(process.cwd(), '.env.test') });
 
-// Этот блок оставлен для обратной совместимости, если .env.test не будет найден.
-// Но "золотой стандарт" - это использование .env.test.
-if (!process.env.REDIS_URL) {
-  process.env.REDIS_URL = 'redis://mock-redis:6379';
-}
+// ✅ ИСПРАВЛЕНО: Принудительно используем memory cache в тестах
+process.env.CACHE_DRIVER = 'memory';
+process.env.REDIS_URL = 'redis://127.0.0.1:6379'; // Fallback для клиентов
 if (!process.env.MEILISEARCH_HOST) {
   process.env.MEILISEARCH_HOST = 'http://dummy-host.com';
 }

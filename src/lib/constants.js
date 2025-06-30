@@ -108,6 +108,23 @@ export const SEARCH_DEBOUNCE_DELAY_MS = 300;
  */
 export const ADMIN_SEARCH_RESULTS_LIMIT = 15;
 
+/**
+ * Фиксированный размер страницы для админских таблиц с результатами поиска сущностей.
+ * Используется в TanStack Table для серверной пагинации в админ-панели.
+ * @constant {number}
+ */
+export const ADMIN_TABLE_PAGE_SIZE = 15;
+
+/**
+ * Максимальный размер страницы для защиты от DoS атак.
+ * Предотвращает запросы с огромными limit значениями, которые могут перегрузить сервер.
+ * @constant {number}
+ */
+export const MAX_PAGE_SIZE = 100;
+
+// Для будущего использования на публичных страницах
+// export const PUBLIC_TABLE_PAGE_SIZE = 25;
+
 export const ROLES = {
   OWNER: 'owner',
   MEMBER: 'member',
@@ -126,6 +143,16 @@ export const APP_VERSION = '2.0';
 
 // Константы для поиска
 export const MIN_SEARCH_LENGTH = 2;
+
+// Circuit Breaker для MeiliSearch
+export const CIRCUIT_BREAKER_CONFIG = {
+  /** Количество последовательных ошибок перед блокировкой MeiliSearch */
+  FAILURE_THRESHOLD: 5,
+  /** Время блокировки в секундах */
+  TIMEOUT_SECONDS: 60,
+  /** Redis ключ для хранения состояния circuit breaker */
+  REDIS_KEY: 'search:circuit_breaker',
+};
 
 /**
  * @description Конфигурация для валидации загружаемых изображений.

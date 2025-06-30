@@ -1,11 +1,11 @@
 ﻿'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useDebounce } from 'use-debounce';
-import { useMemo } from 'react';
-import { SEARCH_DEBOUNCE_DELAY_MS, MIN_SEARCH_LENGTH } from '@/lib/constants';
-import { queryKeys } from '@/shared/types/queries';
-import type { EntityStatus } from '@/shared/types/admin';
+import { useMemo, useEffect } from 'react';
+import { SEARCH_DEBOUNCE_DELAY_MS, MIN_SEARCH_LENGTH } from '../../../lib/constants';
+import { usePacerDebounce } from '../../../shared/hooks';
+import { queryKeys } from '../../../shared/types/queries';
+import type { EntityStatus } from '../../../shared/types/admin';
 
 export interface MapTemplateSearchParams {
   searchTerm: string;
@@ -25,8 +25,15 @@ export function useMapTemplatesQuery({
   status,
   enabled = true,
 }: MapTemplateQueryParams) {
-  // Debounce для предотвращения лишних запросов
-  const [debouncedSearchTerm] = useDebounce(searchTerm.trim(), SEARCH_DEBOUNCE_DELAY_MS);
+  // Debounce для предотвращения лишних запросов (TanStack Pacer)
+  const [debouncedSearchTerm, isDebouncing, cancelDebounce] = usePacerDebounce(searchTerm.trim(), SEARCH_DEBOUNCE_DELAY_MS);
+
+  // Cleanup debounce при размонтировании компонента
+  useEffect(() => {
+    return () => {
+      cancelDebounce();
+    };
+  }, [cancelDebounce]);
 
   // ✅ ИСПРАВЛЕНО: Мемоизированные params для стабильного query key
   const params = useMemo(() => ({ 

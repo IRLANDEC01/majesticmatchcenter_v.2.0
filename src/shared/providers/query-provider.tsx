@@ -14,12 +14,11 @@ const defaultQueryFn = async ({ queryKey, meta }: { queryKey: readonly unknown[]
                 : null);
                 
   if (!url) {
-    // Если URL не определен, можно вернуть пустой объект или ошибку
-    // В данном случае, возвращаем Promise с null, чтобы не ломать типы
-    return Promise.resolve(null);
+    // Если URL не определен, бросаем ошибку
+    throw new Error(`Query key ${JSON.stringify(queryKey)} does not contain a valid URL`);
   }
 
-  const response = await fetch(url);
+  const response = await fetch(url as string);
   
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
