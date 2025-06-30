@@ -9,6 +9,7 @@ export const revalidate = 0;
 const searchSchema = z.object({
   q: z.string().min(1, 'Поисковый запрос должен содержать хотя бы 1 символ.'),
   entities: z.string().min(1, 'Необходимо указать хотя бы одну сущность для поиска.'),
+  status: z.enum(['active', 'archived', 'all']).optional().default('active'),
 });
 
 export async function GET(request: NextRequest) {
@@ -19,17 +20,18 @@ export async function GET(request: NextRequest) {
     const validation = searchSchema.safeParse({
       q: searchParams.get('q'),
       entities: searchParams.get('entities'),
+      status: searchParams.get('status'),
     });
 
     if (!validation.success) {
       return NextResponse.json({ error: validation.error.format() }, { status: 400 });
     }
 
-    const { q, entities } = validation.data;
+    const { q, entities, status } = validation.data;
     const entityList = entities.split(',');
 
-    // Делегируем поиск нашему сервису
-    const results = await searchService.search(q, entityList);
+    // ✅ Передаем фильтры в сервис поиска
+    const results = await searchService.search(q, entityList, { status });
 
     return NextResponse.json({ data: results });
   } catch (error) {

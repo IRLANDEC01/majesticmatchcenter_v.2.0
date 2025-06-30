@@ -62,4 +62,24 @@ if (!process.env.MEILISEARCH_MASTER_KEY) {
   process.env.MEILISEARCH_MASTER_KEY = 'dummy-key';
 }
 
+// ✅ ДОБАВЛЕНО: S3 переменные для тестов
+if (!process.env.S3_ENDPOINT) {
+  process.env.S3_ENDPOINT = 'https://test-s3.example.com';
+}
+if (!process.env.S3_BUCKET) {
+  process.env.S3_BUCKET = 'test-bucket';
+}
+if (!process.env.S3_REGION) {
+  process.env.S3_REGION = 'us-east-1';
+}
+if (!process.env.S3_ACCESS_KEY_ID) {
+  process.env.S3_ACCESS_KEY_ID = 'test-access-key';
+}
+if (!process.env.S3_SECRET_ACCESS_KEY) {
+  process.env.S3_SECRET_ACCESS_KEY = 'test-secret-key';
+}
+if (!process.env.NEXT_PUBLIC_S3_PUBLIC_URL) {
+  process.env.NEXT_PUBLIC_S3_PUBLIC_URL = 'https://test-cdn.example.com';
+}
+
 console.log('Серверные переменные окружения успешно сконфигурированы.'); 

@@ -1,26 +1,21 @@
-// Базовые типы для сущности MapTemplate
+/**
+ * @file Типы данных для сущности "Шаблоны карт", используемые в UI слое.
+ */
+
+import type { IImageSet } from "@/models/shared/image-set-schema";
+
+/**
+ * @description Представление шаблона карты в UI.
+ * Отличается от IMapTemplate (Mongoose model) тем, что может содержать
+ * только необходимые для отображения поля.
+ */
 export interface MapTemplate {
   id: string;
   name: string;
-  slug: string;
-  description?: string;
-  mapTemplateImage: string;
-  archivedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  description?: string | null;
+  /** Набор публичных URL для отображения изображений. */
+  imageUrls: IImageSet;
   isArchived: boolean;
-}
-
-// DTO для создания
-export interface CreateMapTemplateDto {
-  name: string;
-  mapTemplateImage: string;
-  description?: string;
-}
-
-// DTO для обновления
-export interface UpdateMapTemplateDto {
-  name?: string;
-  mapTemplateImage?: string;
-  description?: string;
+  createdAt: string; // Даты обычно форматируются в строки для UI
+  updatedAt: string;
 } 

@@ -1,26 +1,24 @@
-import { IMapTemplate } from '@/models/map/MapTemplate';
-import { MapTemplate } from './types';
+import type { IMapTemplate } from '@/models/map/MapTemplate';
+import type { MapTemplate } from './types';
 
 /**
- * Преобразует Mongoose документ в frontend тип
+ * Преобразует Mongoose документ в UI тип
  */
-export function mapTemplateToDto(doc: IMapTemplate): MapTemplate {
+export function mapTemplateToUI(doc: IMapTemplate): MapTemplate {
   return {
-    id: (doc._id as any).toString(),
+    id: String(doc._id),
     name: doc.name,
-    slug: doc.slug,
-    description: doc.description,
-    mapTemplateImage: doc.mapTemplateImage,
-    archivedAt: doc.archivedAt,
-    createdAt: doc.createdAt,
-    updatedAt: doc.updatedAt,
-    isArchived: Boolean(doc.archivedAt), // вычисляем из archivedAt
+    description: doc.description ?? null,
+    imageUrls: doc.imageUrls,
+    isArchived: doc.archivedAt != null,
+    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : String(doc.createdAt),
+    updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : String(doc.updatedAt),
   };
 }
 
 /**
- * Преобразует массив Mongoose документов в frontend типы
+ * Преобразует массив Mongoose документов в UI типы
  */
-export function mapTemplatesToDto(docs: IMapTemplate[]): MapTemplate[] {
-  return docs.map(mapTemplateToDto);
+export function mapTemplatesToUI(docs: IMapTemplate[]): MapTemplate[] {
+  return docs.map(mapTemplateToUI);
 } 

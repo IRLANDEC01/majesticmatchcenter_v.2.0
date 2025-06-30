@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { handleApiError } from '@/lib/api/handle-api-error';
 import searchService from '@/lib/domain/search/search-service';
+import { connectToDatabase } from '@/lib/db';
 
 /**
  * @swagger
@@ -37,6 +38,9 @@ import searchService from '@/lib/domain/search/search-service';
 export async function POST() {
   try {
     // TODO: Добавить проверку прав администратора (когда будет готова система аутентификации)
+
+    // Убеждаемся, что подключение к MongoDB установлено
+    await connectToDatabase();
 
     const { totalJobs } = await searchService.reindexAll();
 

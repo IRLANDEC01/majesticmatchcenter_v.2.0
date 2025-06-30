@@ -2,7 +2,7 @@ import 'server-only';
 import mongoose from 'mongoose';
 // Удаляем импорты фоновых процессов. Их инициализация не должна быть здесь.
 // import '@/queues/search-worker';
-// import searchService from './domain/search/search-service';
+import searchService from './domain/search/search-service';
 
 // Используем глобальную переменную для кэширования соединения
 // Это предотвращает многократные подключения в средах без сервера (serverless)
@@ -38,14 +38,14 @@ export async function connectToDatabase() {
   mongoose.set('strictQuery', true);
   cachedConnection = await mongoose.connect(MONGODB_URI, connectOptions);
   
-  // // Инициализируем сервис MeiliSearch после успешного подключения к БД.
-  // // Мы не ждем (await), чтобы не блокировать старт приложения.
-  // // Инициализация будет проходить в фоне.
-  // if (process.env.NODE_ENV !== 'test') {
-  //   searchService.init().catch(err => {
-  //     console.error("Фоновая инициализация MeiliSearch провалилась.", err);
-  //   });
-  // }
+  // Инициализируем сервис MeiliSearch после успешного подключения к БД.
+  // Мы не ждем (await), чтобы не блокировать старт приложения.
+  // Инициализация будет проходить в фоне.
+  if (process.env.NODE_ENV !== 'test') {
+    searchService.init().catch(err => {
+      console.error("Фоновая инициализация MeiliSearch провалилась.", err);
+    });
+  }
 
   return cachedConnection;
 }

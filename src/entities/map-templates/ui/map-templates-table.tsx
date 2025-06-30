@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React from 'react';
 import Image from 'next/image';
 import { 
   Table,
@@ -10,32 +10,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/ui/table";
-import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
 import { 
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
 } from "@/shared/ui/tooltip";
 import { 
-  Edit, 
-  Archive, 
-  ArchiveRestore, 
-  RefreshCw,
-  AlertCircle
+  RefreshCw, 
+  AlertCircle,
 } from "lucide-react";
-import { toast } from "sonner";
-import { MapTemplate } from '../model';
+import { EntityTableActions } from "@/shared/admin/entity-table-actions";
+import type { MapTemplate } from '../model/types';
 
 interface MapTemplatesTableProps {
   templates: MapTemplate[];
   isLoading: boolean;
-  error?: Error | null;
+  error: any;
   onEditAction: (template: MapTemplate) => void;
-  onRefreshAction: () => void;
   searchTerm: string;
-  // FSD: Колбэки вместо прямых импортов из features слоя
   onArchiveAction: (template: MapTemplate) => Promise<void>;
   onRestoreAction: (template: MapTemplate) => Promise<void>;
 }
@@ -50,59 +41,11 @@ export function MapTemplatesTable({
   isLoading,
   error,
   onEditAction,
-  onRefreshAction,
   searchTerm,
   onArchiveAction,
-  onRestoreAction
+  onRestoreAction,
 }: MapTemplatesTableProps) {
-  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
-  const [isPending, startTransition] = useTransition();
-
-  // FSD: Используем колбэк из features слоя
-  const handleArchive = async (template: MapTemplate) => {
-    if (processingIds.has(template.id) || isPending) return;
-    
-    setProcessingIds(prev => new Set([...prev, template.id]));
-    
-    startTransition(async () => {
-      try {
-        await onArchiveAction(template);
-        toast.success('Шаблон карты успешно архивирован');
-        onRefreshAction();
-      } catch (error) {
-        toast.error(`Ошибка архивации: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
-      } finally {
-        setProcessingIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(template.id);
-          return newSet;
-        });
-      }
-    });
-  };
-
-  // FSD: Используем колбэк из features слоя
-  const handleRestore = async (template: MapTemplate) => {
-    if (processingIds.has(template.id) || isPending) return;
-    
-    setProcessingIds(prev => new Set([...prev, template.id]));
-    
-    startTransition(async () => {
-      try {
-        await onRestoreAction(template);
-        toast.success('Шаблон карты успешно восстановлен');
-        onRefreshAction();
-      } catch (error) {
-        toast.error(`Ошибка восстановления: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
-      } finally {
-        setProcessingIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(template.id);
-          return newSet;
-        });
-      }
-    });
-  };
+  // ✅ EntityTableActions использует собственное состояние isPending
 
   // Состояние загрузки
   if (isLoading) {
@@ -120,15 +63,11 @@ export function MapTemplatesTable({
       <div className="text-center py-8">
         <AlertCircle className="h-8 w-8 mx-auto mb-4 text-destructive" />
         <p className="text-destructive mb-4">Ошибка загрузки данных</p>
-        <Button variant="outline" size="default" onClick={onRefreshAction}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Попробовать еще раз
-        </Button>
       </div>
     );
   }
 
-  // Пустое состояние - показываем кнопку обновить только если нет поискового запроса
+  // Пустое состояние
   if (!templates || templates.length === 0) {
     return (
       <div className="text-center py-8">
@@ -138,12 +77,6 @@ export function MapTemplatesTable({
             : 'Введите запрос для поиска шаблонов карт'
           }
         </p>
-        {!searchTerm && (
-          <Button variant="outline" size="default" onClick={onRefreshAction}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Обновить
-          </Button>
-        )}
       </div>
     );
   }
@@ -162,24 +95,26 @@ export function MapTemplatesTable({
           </TableHeader>
           <TableBody>
             {templates.map((template) => {
-              const isProcessing = processingIds.has(template.id);
-              
               return (
                 <TableRow key={template.id}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-3">
-                      {template.mapTemplateImage && (
+                      {template.imageUrls?.icon && (
                         <Image
-                          src={template.mapTemplateImage}
+                          src={template.imageUrls.icon}
                           alt={template.name}
-                          width={40}
-                          height={40}
-                          className="w-10 h-10 rounded object-cover"
-                          unoptimized={template.mapTemplateImage.startsWith('http')}
+                          width={32}
+                          height={32}
+                          className="h-8 w-8 object-cover rounded border border-border"
                         />
                       )}
                       <div>
                         <div className="font-medium">{template.name}</div>
+                        {template.description && (
+                          <div className="text-sm text-muted-foreground truncate max-w-[200px]">
+                            {template.description}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </TableCell>
@@ -192,64 +127,18 @@ export function MapTemplatesTable({
                     {new Date(template.createdAt).toLocaleDateString('ru-RU')}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onEditAction(template)}
-                            disabled={isProcessing || isPending}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Редактировать</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      
-                      {template.isArchived ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleRestore(template)}
-                              disabled={isProcessing || isPending}
-                            >
-                              {isProcessing ? (
-                                <RefreshCw className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <ArchiveRestore className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Восстановить</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleArchive(template)}
-                              disabled={isProcessing || isPending}
-                            >
-                              {isProcessing ? (
-                                <RefreshCw className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Archive className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Архивировать</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
+                    <div className="flex justify-end">
+                      <EntityTableActions
+                        entity={{
+                          id: template.id,
+                          name: template.name,
+                          isArchived: template.isArchived
+                        }}
+                        entityType="шаблон карты"
+                        onEdit={() => onEditAction(template)}
+                        onArchive={() => onArchiveAction(template)}
+                        onRestore={() => onRestoreAction(template)}
+                      />
                     </div>
                   </TableCell>
                 </TableRow>

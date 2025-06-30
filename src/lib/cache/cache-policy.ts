@@ -51,8 +51,11 @@ export const cacheTtls = {
 export const cacheKeys = {
   // Ключи для MapTemplate
   mapTemplate: (id: string) => `map-template:${id}`,
-  mapTemplatesList: (page: number, limit: number, rev: number) =>
-    `map-templates:list:p${page}:l${limit}:rev${rev}`,
+  mapTemplatesList: (page: number, limit: number, rev: number, q?: string, status?: string) => {
+    const queryPart = q ? `:q${btoa(q)}` : '';
+    const statusPart = status ? `:s${status}` : '';
+    return `map-templates:list:p${page}:l${limit}:rev${rev}${queryPart}${statusPart}`;
+  },
   mapTemplatesRev: () => 'rev:map-templates:list',
 
   // Добавьте другие сущности по аналогии...

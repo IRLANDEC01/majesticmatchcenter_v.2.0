@@ -100,7 +100,7 @@ export const RESULT_TIERS = Object.freeze({
  * Задержка в миллисекундах для функции debounce при поиске.
  * Используется для оптимизации запросов к API, чтобы они не отправлялись на каждое нажатие клавиши.
  */
-export const SEARCH_DEBOUNCE_DELAY_MS = 200;
+export const SEARCH_DEBOUNCE_DELAY_MS = 300;
 
 /**
  * Ограничение на количество результатов, возвращаемых при поиске в админ-панели.
@@ -125,4 +125,16 @@ export const APP_NAME = 'MajesticMatchCenter';
 export const APP_VERSION = '2.0';
 
 // Константы для поиска
-export const MIN_SEARCH_LENGTH = 2; 
+export const MIN_SEARCH_LENGTH = 2;
+
+/**
+ * @description Конфигурация для валидации загружаемых изображений.
+ */
+export const IMAGE_UPLOAD_CONFIG = {
+  /** Допустимые MIME-типы изображений. */
+  ACCEPTED_IMAGE_TYPES: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
+  /** Допустимые расширения файлов (для UI). */
+  ACCEPTED_IMAGE_EXTENSIONS: ['.jpeg', '.jpg', '.png', '.webp'],
+  /** Максимальный размер файла в MB (централизованная константа) */
+  MAX_FILE_SIZE_MB: 5,
+}; 

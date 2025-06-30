@@ -55,8 +55,14 @@ export {
 
 // Переиспользуемые компоненты
 export { EntitySearch } from './entity-search';
+export { StatusFilter } from './status-filter';
 export { ErrorBoundary } from './error-boundary';
 
 // Layout компоненты
 export { default as GlobalHeader } from './layout/global-header';
-export { default as AdminSidebar } from './layout/admin-sidebar'; 
+export { default as AdminSidebar } from './layout/admin-sidebar';
+export { AspectRatio } from './aspect-ratio';
+
+// Новый экспорт
+export { Toaster } from './sonner';
+export { FileDropzone } from './file-dropzone'; 

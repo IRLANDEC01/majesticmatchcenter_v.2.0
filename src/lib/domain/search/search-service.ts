@@ -126,11 +126,33 @@ class SearchService {
   }
 
   /**
-   * Выполняет поиск по нескольким индексам.
+   * Выполняет поиск по нескольким индексам с поддержкой фильтрации.
    * @param query - Поисковый запрос.
    * @param entities - Массив сущностей для поиска (e.g., ['players', 'families']).
+   * @param filters - Опциональные фильтры для поиска.
    */
-  public async search(query: string, entities: string[]): Promise<any> {
+  public async search(
+    query: string, 
+    entities: string[], 
+    filters?: { status?: 'active' | 'archived' | 'all' }
+  ): Promise<any> {
+    // Формируем фильтр для Meilisearch на основе статуса
+    let meilisearchFilter: string | undefined;
+    if (filters?.status) {
+      switch (filters.status) {
+        case 'active':
+          meilisearchFilter = 'isArchived = false';
+          break;
+        case 'archived':
+          meilisearchFilter = 'isArchived = true';
+          break;
+        case 'all':
+          // Без фильтра - показываем все
+          meilisearchFilter = undefined;
+          break;
+      }
+    }
+
     const searchQueries = entities
       .map(entityKey => {
         const config = meilisearchConfig[entityKey];
@@ -138,9 +160,20 @@ class SearchService {
           console.warn(`[SearchService] No search config found for entity key: ${entityKey}`);
           return null;
         }
-        return { indexUid: config.indexName, q: query };
+        
+        const searchQuery: any = { 
+          indexUid: config.indexName, 
+          q: query 
+        };
+        
+        // Добавляем фильтр если он есть
+        if (meilisearchFilter) {
+          searchQuery.filter = meilisearchFilter;
+        }
+        
+        return searchQuery;
       })
-      .filter((q): q is { indexUid: string; q: string } => q !== null);
+      .filter((q): q is { indexUid: string; q: string; filter?: string } => q !== null);
 
     if (searchQueries.length === 0) {
       return { query, entities, results: {} };
@@ -181,7 +214,8 @@ class SearchService {
       throw new Error(`Конфигурация поиска или функция buildSearchEntry для модели "${entityName}" не найдена.`);
     }
 
-    const doc = await model.findById(entityId).lean<LeanDocument>();
+    // ✅ ИСПРАВЛЕНИЕ: Включаем архивные документы для поиска
+    const doc = await model.findById(entityId, null, { includeArchived: true }).lean<LeanDocument>();
     if (!doc) {
       return null;
     }

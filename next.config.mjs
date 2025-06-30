@@ -14,6 +14,12 @@ const nextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 's3.regru.cloud',
+        port: '',
+        pathname: '/majesticmatchcenter/**', // Ограничиваем только нашим bucket
+      },
     ],
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',

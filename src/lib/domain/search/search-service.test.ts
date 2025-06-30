@@ -74,10 +74,12 @@ describe('SearchService', () => {
   });
   
   it('syncDocument() - [update] должен добавить документ в правильный индекс, если он существует в БД', async () => {
-    const mapTemplate = await MapTemplate.create({ 
-      name: 'Test Map', 
-      mapTemplateImage: 'https://example.com/test.jpg' 
-    });
+    const testTemplate = {
+      name: 'Test',
+      imageUrls: { medium: 'https://example.com/test.jpg', icon: '', original: '' },
+      // ... остальные поля ...
+    };
+    const mapTemplate = await MapTemplate.create(testTemplate);
     
     await searchService.syncDocument('update', 'MapTemplate', mapTemplate.id.toString());
 
@@ -86,7 +88,7 @@ describe('SearchService', () => {
 
     const sentDocument = mockMapTemplatesIndex.addDocuments.mock.calls[0][0][0];
     expect(sentDocument.id).toBe(mapTemplate.id.toString());
-    expect(sentDocument.name).toBe('Test Map');
+    expect(sentDocument.name).toBe('Test');
   });
 
   it('syncDocument() - [update] должен удалить документ из индекса, если он не найден в БД', async () => {

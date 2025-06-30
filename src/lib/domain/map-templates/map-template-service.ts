@@ -6,17 +6,19 @@ import tournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-
 import { IMapTemplate } from '@/models/map/MapTemplate';
 import { NotFoundError, ConflictError } from '@/lib/errors';
 import { IFindParams, IFindResult } from '@/lib/repos/base-repo';
-import { GetMapTemplatesDto, CreateMapTemplateDto, UpdateMapTemplateDto } from '@/lib/api/schemas/map-templates/map-template-schemas';
+import { GetMapTemplatesDto, CreateMapTemplateApiDto, UpdateMapTemplateApiDto } from '@/lib/api/schemas/map-templates/map-template-schemas';
 import * as cache from '@/lib/cache';
 import { cacheKeys, cacheTags, cacheTtls } from '@/lib/cache/cache-policy';
 import { getApiRedisClient } from '@/lib/redis-clients';
 import { revalidateTag } from 'next/cache';
+import { uploadImageVariants, deleteImageVariants } from '@/lib/s3/upload';
+import { IImageSet, IImageKeys } from '@/models/shared/image-set-schema';
 
 export interface IMapTemplateService {
-  createMapTemplate(data: CreateMapTemplateDto): Promise<HydratedDocument<IMapTemplate>>;
+  createMapTemplate(data: CreateMapTemplateApiDto): Promise<HydratedDocument<IMapTemplate>>;
   getMapTemplates(options: GetMapTemplatesDto): Promise<IFindResult<IMapTemplate>>;
   getMapTemplateById(id: string): Promise<HydratedDocument<IMapTemplate>>;
-  updateMapTemplate(id: string, data: UpdateMapTemplateDto): Promise<HydratedDocument<IMapTemplate>>;
+  updateMapTemplate(id: string, data: UpdateMapTemplateApiDto): Promise<HydratedDocument<IMapTemplate>>;
   archiveMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>>;
   restoreMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>>;
 }
@@ -29,34 +31,29 @@ class MapTemplateService implements IMapTemplateService {
 
   /**
    * Создает новый шаблон карты.
-   * @param {CreateMapTemplateDto} data - Данные для создания шаблона.
+   * @param {CreateMapTemplateApiDto} data - Данные для создания шаблона.
    * @returns {Promise<HydratedDocument<IMapTemplate>>} - Созданный объект шаблона карты.
    */
-  async createMapTemplate(data: CreateMapTemplateDto): Promise<HydratedDocument<IMapTemplate>> {
+  async createMapTemplate(data: CreateMapTemplateApiDto): Promise<HydratedDocument<IMapTemplate>> {
     const existingTemplate = await this.repo.findOne({ name: data.name });
     if (existingTemplate) {
       throw new ConflictError(`Шаблон карты с именем "${data.name}" уже существует.`);
     }
 
-    // Преобразуем File в placeholder URL (временное решение до S3 интеграции)
-    const processedData: Omit<CreateMapTemplateDto, 'mapTemplateImage'> & { mapTemplateImage: string } = { 
-      ...data,
-      mapTemplateImage: typeof data.mapTemplateImage === 'string' ? data.mapTemplateImage : ''
-    };
-    
-    if (data.mapTemplateImage instanceof File) {
-      const placeholders = [
-        'https://placehold.co/600x400/F4A261/E9C46A?text=Map+1',
-        'https://placehold.co/600x400/2A9D8F/E9C46A?text=Map+2',
-        'https://placehold.co/600x400/E76F51/E9C46A?text=Map+3',
-        'https://placehold.co/600x400/264653/E9C46A?text=Map+4',
-        'https://placehold.co/600x400/A8DADC/1D3557?text=Map+5',
-      ];
-      const randomIndex = Math.floor(Math.random() * placeholders.length);
-      processedData.mapTemplateImage = placeholders[randomIndex];
+    let imagePayload: { imageUrls?: IImageSet; imageKeys?: IImageKeys } = {};
+
+    if (data.image instanceof File) {
+      const uploadResult = await uploadImageVariants(data.image, 'map-template');
+      imagePayload = {
+        imageUrls: uploadResult.urls as unknown as IImageSet,
+        imageKeys: uploadResult.keys as unknown as IImageKeys,
+      };
     }
 
-    const newTemplate = await this.repo.create(processedData);
+    const newTemplate = await this.repo.create({
+      ...data,
+      ...imagePayload,
+    });
 
     // Инвалидация кэша списков
     await cache.incrementListRevision(cacheKeys.mapTemplatesRev());
@@ -75,14 +72,14 @@ class MapTemplateService implements IMapTemplateService {
 
     // Дублирующая асинхронная задача для надежности (если что-то пошло не так с синхронной)
     const jobId = `map-template:${newTemplate.id}:v1`;
-    await searchQueue.add('update', { entity: 'map-template', entityId: newTemplate.id }, { jobId });
+    await searchQueue.add('update', { entity: 'MapTemplate', entityId: newTemplate.id }, { jobId });
     
     return newTemplate;
   }
 
   /**
-   * Возвращает все шаблоны карт с кэшированием.
-   * @param {GetMapTemplatesDto} options - Опции для фильтрации и пагинации.
+   * Получает список шаблонов карт с пагинацией, фильтрацией и кэшированием.
+   * @param {GetMapTemplatesDto} options - Параметры запроса.
    * @returns {Promise<IFindResult<IMapTemplate>>}
    */
   async getMapTemplates(options: GetMapTemplatesDto): Promise<IFindResult<IMapTemplate>> {
@@ -91,7 +88,7 @@ class MapTemplateService implements IMapTemplateService {
 
     // 1. Получаем текущую ревизию списка
     const rev = await redis.get(cacheKeys.mapTemplatesRev()).then(Number).catch(() => 0) || 0;
-    const key = cacheKeys.mapTemplatesList(page, limit, rev);
+    const key = cacheKeys.mapTemplatesList(page, limit, rev, q, status);
     const tags = [cacheTags.mapTemplatesList()];
 
     return cache.getOrSet(
@@ -99,9 +96,13 @@ class MapTemplateService implements IMapTemplateService {
       () => {
         // 2. Fetcher: эта функция выполнится только при промахе кэша
     const query: UpdateQuery<IMapTemplate> = {};
+    
+    // ✅ ИСПРАВЛЕНО: Убираем дублирующую фильтрацию - BaseRepo уже обрабатывает status
     if (q) {
       query.name = { $regex: q, $options: 'i' };
     }
+    
+        // ✅ ИСПРАВЛЕНО: Передаем status в BaseRepo, который правильно обработает фильтрацию
         return this.repo.find({ query, page, limit, status });
       },
       cacheTtls.listShort,
@@ -135,10 +136,10 @@ class MapTemplateService implements IMapTemplateService {
   /**
    * Обновляет шаблон карты и инвалидирует кэш.
    * @param {string} id - ID шаблона.
-   * @param {UpdateMapTemplateDto} data - Данные для обновления.
+   * @param {UpdateMapTemplateApiDto} data - Данные для обновления.
    * @returns {Promise<HydratedDocument<IMapTemplate>>} - Обновленный объект.
    */
-  async updateMapTemplate(id: string, data: UpdateMapTemplateDto): Promise<HydratedDocument<IMapTemplate>> {
+  async updateMapTemplate(id: string, data: UpdateMapTemplateApiDto): Promise<HydratedDocument<IMapTemplate>> {
     const templateToUpdate = await this.getMapTemplateById(id);
 
     if (data.name && data.name !== templateToUpdate.name) {
@@ -147,10 +148,27 @@ class MapTemplateService implements IMapTemplateService {
         throw new ConflictError(`Шаблон карты с именем "${data.name}" уже существует.`);
       }
     }
-    
-    Object.assign(templateToUpdate, data);
+
+    const { image, ...restData } = data;
+    Object.assign(templateToUpdate, restData);
+
+    if (image instanceof File) {
+      const oldKeys = Object.values(templateToUpdate.imageKeys || {}).filter(Boolean) as string[];
+
+      const uploadResult = await uploadImageVariants(image, 'map-template', id);
+      templateToUpdate.imageUrls = uploadResult.urls as unknown as IImageSet;
+      templateToUpdate.imageKeys = uploadResult.keys as unknown as IImageKeys;
+      
+      if (oldKeys.length > 0) {
+        await deleteImageVariants(oldKeys);
+      }
+    }
     
     const updatedTemplate = await this.repo.save(templateToUpdate);
+
+    if (!updatedTemplate) {
+      throw new ConflictError('Не удалось обновить шаблон карты.');
+    }
 
     // Инвалидация кэша
     await cache.invalidateByTags([cacheTags.mapTemplate(id), cacheTags.mapTemplatesList()]);
@@ -160,8 +178,18 @@ class MapTemplateService implements IMapTemplateService {
     revalidateTag('map-templates:public');
     revalidateTag(`map-template:${id}:public`);
     
+    // ✅ ИСПРАВЛЕНО: Немедленная синхронная индексация для критических операций
+    try {
+      await searchService.syncDocument('update', 'MapTemplate', updatedTemplate.id);
+      console.log(`🔍 [Search] Шаблон карты ${updatedTemplate.id} немедленно обновлен в поиске (обновление)`);
+    } catch (error) {
+      console.error(`⚠️ [Search] Ошибка немедленной индексации при обновлении шаблона ${updatedTemplate.id}:`, error);
+      // Не прерываем выполнение, если индексация упала
+    }
+
+    // Дублирующая асинхронная задача для надежности
     const jobId = `map-template:${updatedTemplate.id}:v1`;
-    await searchQueue.add('update', { entity: 'map-template', entityId: updatedTemplate.id }, { jobId });
+    await searchQueue.add('update', { entity: 'MapTemplate', entityId: updatedTemplate.id }, { jobId });
     return updatedTemplate;
   }
 
@@ -190,8 +218,18 @@ class MapTemplateService implements IMapTemplateService {
     revalidateTag('map-templates:public');
     revalidateTag(`map-template:${id}:public`);
 
+    // ✅ ИСПРАВЛЕНО: Немедленная синхронная индексация для критических операций
+    try {
+      await searchService.syncDocument('update', 'MapTemplate', archivedTemplate.id);
+      console.log(`🔍 [Search] Шаблон карты ${archivedTemplate.id} немедленно обновлен в поиске (архивация)`);
+    } catch (error) {
+      console.error(`⚠️ [Search] Ошибка немедленной индексации при архивации шаблона ${archivedTemplate.id}:`, error);
+      // Не прерываем выполнение, если индексация упала
+    }
+
+    // Дублирующая асинхронная задача для надежности
     const jobId = `map-template:${archivedTemplate.id}:v1`;
-    await searchQueue.add('update', { entity: 'map-template', entityId: archivedTemplate.id }, { jobId });
+    await searchQueue.add('update', { entity: 'MapTemplate', entityId: archivedTemplate.id }, { jobId });
     return archivedTemplate;
   }
 
@@ -220,8 +258,18 @@ class MapTemplateService implements IMapTemplateService {
     revalidateTag('map-templates:public');
     revalidateTag(`map-template:${id}:public`);
 
+    // ✅ ИСПРАВЛЕНО: Немедленная синхронная индексация для критических операций
+    try {
+      await searchService.syncDocument('update', 'MapTemplate', restoredTemplate.id);
+      console.log(`🔍 [Search] Шаблон карты ${restoredTemplate.id} немедленно обновлен в поиске (восстановление)`);
+    } catch (error) {
+      console.error(`⚠️ [Search] Ошибка немедленной индексации при восстановлении шаблона ${restoredTemplate.id}:`, error);
+      // Не прерываем выполнение, если индексация упала
+    }
+
+    // Дублирующая асинхронная задача для надежности
     const jobId = `map-template:${restoredTemplate.id}:v1`;
-    await searchQueue.add('update', { entity: 'map-template', entityId: restoredTemplate.id }, { jobId });
+    await searchQueue.add('update', { entity: 'MapTemplate', entityId: restoredTemplate.id }, { jobId });
     return restoredTemplate;
   }
 }

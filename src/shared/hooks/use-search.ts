@@ -19,6 +19,8 @@ export interface SearchParams {
   debounceMs?: number;
   /** Включен ли поиск */
   enabled?: boolean;
+  /** Статус сущностей для фильтрации */
+  status?: 'active' | 'archived' | 'all';
 }
 
 export interface UseSearchReturn<T extends SearchEntity | SearchEntity[]> {
@@ -42,6 +44,7 @@ export function useSearch<T extends SearchEntity | SearchEntity[]>({
   minLength = MIN_SEARCH_LENGTH,
   debounceMs = SEARCH_DEBOUNCE_DELAY_MS,
   enabled = true,
+  status = 'active',
 }: SearchParams): UseSearchReturn<T> {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [debouncedSearch] = useDebounce<string>(searchTerm, debounceMs);
@@ -54,14 +57,15 @@ export function useSearch<T extends SearchEntity | SearchEntity[]>({
   // Формируем ключ SWR
   const entitiesParam = Array.isArray(entities) ? entities.join(',') : entities;
   const searchKey = shouldSearch
-    ? `/api/admin/search?q=${encodeURIComponent(debouncedSearch)}&entities=${entitiesParam}`
+    ? `/api/admin/search?q=${encodeURIComponent(debouncedSearch)}&entities=${entitiesParam}&status=${status}`
     : null;
 
   // SWR запрос
   const { data: rawData, error, isLoading, mutate } = useSWR(
     searchKey,
     {
-      keepPreviousData: true,
+      // ✅ Убираем keepPreviousData для корректной очистки
+      // keepPreviousData: true, 
       // Добавляем обработку ошибок
       onError: (error) => {
         console.error('Search error:', error);

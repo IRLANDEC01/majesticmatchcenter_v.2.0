@@ -1,173 +1,226 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Button } from "@/shared/ui/button";
-import { Plus } from "lucide-react";
-import { EntityStatusToggle, type EntityStatus } from "@/shared/admin";
-import { EntitySearch } from "@/shared/ui/entity-search";
-import { 
-  MapTemplatesTable, 
-  MapTemplateDialog, 
-  useMapTemplatesData,
-  useMapTemplateForm,
+import { Input } from "@/shared/ui/input";
+import { Plus, Search, X } from "lucide-react";
+import { StatusFilter } from "@/shared/ui/status-filter";
+import { usePermissions } from "@/shared/hooks/use-permissions";
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  MapTemplatesTable,
+  MapTemplateDialog,
+  useMapTemplatesQuery,
+  useCreateMapTemplateMutation,
+  useUpdateMapTemplateMutation,
+  useArchiveMapTemplateMutation,
+  useRestoreMapTemplateMutation,
   type MapTemplate,
-  type MapTemplateFormData
 } from "@/entities/map-templates";
-import { 
-  archiveMapTemplateAction, 
-  restoreMapTemplateAction,
-  createMapTemplateAction,
-  updateMapTemplateAction
-} from "../api/actions.server";
+import type { AdminRole, EntityStatus } from "@/shared/types/admin";
+import type { MapTemplateFormValues } from '@/lib/api/schemas/map-templates/map-template-schemas';
 
-/**
- * Клиентский компонент с данными (только SWR)
- */
-function MapTemplatesDataProvider({ 
-  onEdit,
-  onArchive,
-  onRestore
-}: {
-  onEdit: (template: MapTemplate) => void;
-  onArchive: (template: MapTemplate) => Promise<void>;
-  onRestore: (template: MapTemplate) => Promise<void>;
-}) {
-  const {
-    optimisticTemplates,
-    isLoading,
-    error,
-    searchTerm,
-    setSearchTerm,
-    refreshData,
-  } = useMapTemplatesData();
-
-  return (
-    <>
-      {/* Поиск - интегрирован с хуком данных */}
-      <div className="w-full sm:w-96">
-        <EntitySearch
-          entities="mapTemplates"
-          placeholder="Поиск шаблонов карт..."
-          onSearchChange={setSearchTerm}
-        />
-      </div>
-
-      {/* Таблица с данными и колбэками из features слоя */}
-      <MapTemplatesTable
-        templates={optimisticTemplates}
-        isLoading={isLoading}
-        error={error}
-        onEditAction={onEdit}
-        onRefreshAction={refreshData}
-        searchTerm={searchTerm}
-        onArchiveAction={onArchive}
-        onRestoreAction={onRestore}
-      />
-    </>
-  );
+interface MapTemplatesPageContentProps {
+  userRole: AdminRole;
 }
 
-/**
- * Основной контент страницы управления шаблонами карт.
- * 
- * Упрощенная React 19 архитектура:
- * - Только SWR для данных (нет дублирования запросов)
- * - useOptimistic для оптимистичных обновлений
- * - useTransition для pending состояний
- */
-export function MapTemplatesPageContent() {
-  // Состояние UI (только локальное)
+export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentProps) {
+  const permissions = usePermissions(userRole);
+  const queryClient = useQueryClient();
+  
+  // ✅ УПРОЩЕНО: Убираем дублированный debounce (он уже в useMapTemplatesQuery)
+  const [searchTerm, setSearchTerm] = useState('');
   const [status, setStatus] = useState<EntityStatus>('active');
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<MapTemplate | undefined>(undefined);
+  
+  // Состояние диалога
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<MapTemplate | undefined>(undefined);
+  
+  // ✅ ДОБАВЛЕНО: Состояние для ошибок валидации
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Обработчики UI (определяем перед хуком)
-  const handleDialogClose = () => {
-    setIsCreateDialogOpen(false);
-    setEditingTemplate(undefined);
-  };
+  // ✅ РЕФАКТОРИНГ: Используем TanStack Query хуки вместо Server Actions
+  const createMutation = useCreateMapTemplateMutation();
+  const updateMutation = useUpdateMapTemplateMutation();
+  const archiveMutation = useArchiveMapTemplateMutation();
+  const restoreMutation = useRestoreMapTemplateMutation();
 
-  const handleSuccess = () => {
-    handleDialogClose();
-    // Данные обновятся автоматически через optimistic updates
-  };
+  // ✅ РЕФАКТОРИНГ: Колбэки для диалога
+  const handleCreateAction = useCallback(async (data: MapTemplateFormValues) => {
+    try {
+      setFormErrors({}); // Очищаем предыдущие ошибки
+      console.log('🔍 Отправляем данные:', data); // Отладка
+      const result = await createMutation.mutateAsync(data);
+      console.log('🔍 Результат мутации:', result); // Отладка
+      if (result.success) {
+        setIsDialogOpen(false);
+        setFormErrors({}); // Очищаем ошибки при успехе
+      } else {
+        // Устанавливаем ошибки валидации
+        console.log('🚨 Ошибки валидации:', result.errors); // Отладка
+        setFormErrors(result.errors || {});
+      }
+      return result;
+    } catch (error) {
+      // Обрабатываем ошибки сети/сервера
+      console.error('🚨 Ошибка в handleCreateAction:', error); // Отладка
+      setFormErrors({ general: error instanceof Error ? error.message : 'Неизвестная ошибка' });
+      throw error;
+    }
+  }, [createMutation]);
 
-  // Гибридный подход: useActionState в features слое
-  const formManager = useMapTemplateForm({
-    createAction: createMapTemplateAction,
-    updateAction: updateMapTemplateAction,
-    onSuccess: handleSuccess,
+  const handleUpdateAction = useCallback(async (id: string, data: MapTemplateFormValues) => {
+    try {
+      setFormErrors({}); // Очищаем предыдущие ошибки
+      const result = await updateMutation.mutateAsync({ id, data });
+      if (result.success) {
+        setIsDialogOpen(false);
+        setSelectedTemplate(undefined);
+        setFormErrors({}); // Очищаем ошибки при успехе
+      } else {
+        // Устанавливаем ошибки валидации
+        setFormErrors(result.errors || {});
+      }
+      return result;
+    } catch (error) {
+      // Обрабатываем ошибки сети/сервера
+      setFormErrors({ general: error instanceof Error ? error.message : 'Неизвестная ошибка' });
+      throw error;
+    }
+  }, [updateMutation]);
+
+  const handleArchiveAction = useCallback(async (template: MapTemplate) => {
+    await archiveMutation.mutateAsync(template.id);
+    queryClient.invalidateQueries({
+      predicate: (query) => query.queryKey[0] === 'mapTemplates'
+    });
+  }, [archiveMutation, queryClient]);
+
+  const handleRestoreAction = useCallback(async (template: MapTemplate) => {
+    await restoreMutation.mutateAsync(template.id);
+    queryClient.invalidateQueries({
+      predicate: (query) => query.queryKey[0] === 'mapTemplates'
+    });
+  }, [restoreMutation, queryClient]);
+
+  // ✅ ОБНОВЛЕНО: Получение данных через TanStack Query (debounce внутри хука)
+  const { 
+    data: templates = [], 
+    isLoading, 
+    error,
+  } = useMapTemplatesQuery({
+    searchTerm, // Без debounce - он внутри хука
+    status,
+    enabled: true,
   });
 
-  // FSD: Простые wrapper функции для архивации (без useActionState)
-  const handleArchive = async (template: MapTemplate) => {
-    const result = await archiveMapTemplateAction(template.id);
-    if (!result.success) {
-      throw new Error(result.error);
-    }
+  // Обработчики UI
+  const handleCreateClick = () => {
+    setSelectedTemplate(undefined);
+    setFormErrors({}); // Очищаем ошибки при открытии
+    setIsDialogOpen(true);
   };
 
-  const handleRestore = async (template: MapTemplate) => {
-    const result = await restoreMapTemplateAction(template.id);
-    if (!result.success) {
-      throw new Error(result.error);
-    }
+  const handleEditClick = (template: MapTemplate) => {
+    setSelectedTemplate(template);
+    setFormErrors({}); // Очищаем ошибки при открытии
+    setIsDialogOpen(true);
   };
 
-  // Обработчики действий UI
-  const handleCreateNew = () => {
-    setEditingTemplate(undefined);
-    setIsCreateDialogOpen(true);
+  const handleSearchClear = () => {
+    setSearchTerm('');
   };
 
-  const handleEdit = (template: MapTemplate) => {
-    setEditingTemplate(template);
-    setIsCreateDialogOpen(true);
-  };
+  // ✅ Вычисляем общее состояние загрузки из всех мутаций
+  const isMutating = createMutation.isPending || 
+                   updateMutation.isPending || 
+                   archiveMutation.isPending || 
+                   restoreMutation.isPending;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Панель управления */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4">
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-          {/* Переключатель статуса */}
-          <EntityStatusToggle
-            value={status}
-            onValueChange={setStatus}
-          />
+    <div className="container mx-auto py-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-bold">Шаблоны карт</h1>
+          <p className="text-muted-foreground mt-1">
+            Управление шаблонами карт для турниров
+          </p>
         </div>
+      </div>
+
+      {/* Панель управления */}
+      <div className="flex items-center justify-between gap-4 mb-6">
+        {/* Поиск */}
+        <div className="relative flex-1 max-w-md">
+          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+            <Search className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <Input
+            placeholder="Поиск шаблонов карт..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 pr-10"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={handleSearchClear}
+              className="absolute inset-y-0 right-0 flex cursor-pointer items-center rounded-r-md px-3 text-muted-foreground transition-colors hover:text-primary"
+              aria-label="Очистить поиск"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Фильтр статуса */}
+        <StatusFilter 
+          value={status} 
+          onChange={setStatus}
+          canViewArchived={permissions.canViewArchived}
+        />
 
         {/* Кнопка создания */}
         <Button 
-          onClick={handleCreateNew}
-          variant="default"
-          size="default"
-          className="flex items-center gap-2"
+          onClick={handleCreateClick}
+          disabled={isMutating}
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="mr-2 h-4 w-4" />
           Создать шаблон
         </Button>
       </div>
 
-      {/* SWR данные с FSD колбэками */}
-      <MapTemplatesDataProvider 
-        onEdit={handleEdit} 
-        onArchive={handleArchive}
-        onRestore={handleRestore}
+      {/* ✅ РЕФАКТОРИНГ: Таблица использует мутации вместо Server Actions */}
+      <MapTemplatesTable
+        templates={templates}
+        isLoading={isLoading || isMutating}
+        error={error}
+        onEditAction={handleEditClick}
+        searchTerm={searchTerm} // Передаем оригинальный searchTerm для подсветки
+        onArchiveAction={handleArchiveAction}
+        onRestoreAction={handleRestoreAction}
       />
 
-      {/* Диалог с гибридным подходом: useActionState + FSD колбэки */}
-      <MapTemplateDialog
-        isOpen={isCreateDialogOpen}
-        onCloseAction={handleDialogClose}
-        onSuccessAction={handleSuccess}
-        template={editingTemplate}
-        onCreateAction={formManager.handleCreate}
-        onUpdateAction={formManager.handleUpdate}
-        isCreating={formManager.isCreating}
-        isUpdating={formManager.isUpdating}
-        errors={formManager.errors}
-      />
+      {/* Диалог создания/редактирования */}
+      {isDialogOpen && (
+        <MapTemplateDialog
+          isOpen={isDialogOpen}
+          onClose={() => setIsDialogOpen(false)}
+          onSubmit={async (data) => {
+            const action = selectedTemplate
+              ? () => handleUpdateAction(selectedTemplate.id, data)
+              : () => handleCreateAction(data);
+            
+            const result = await action();
+            
+            if (result.success) {
+              setIsDialogOpen(false);
+            }
+          }}
+          template={selectedTemplate}
+          isPending={isMutating}
+        />
+      )}
     </div>
   );
 } 

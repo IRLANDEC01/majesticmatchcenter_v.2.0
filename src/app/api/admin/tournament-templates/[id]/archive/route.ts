@@ -1,30 +1,45 @@
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { revalidatePath } from 'next/cache';
-import { handleApiError } from '@/lib/api/handle-api-error.js';
+import { handleApiError } from '@/lib/api/handle-api-error';
 import tournamentTemplateService from '@/lib/domain/tournament-templates/tournament-template-service';
-
-type RouteContext = {
-  params: Promise<{
-    id: string;
-  }>;
-};
+import type { NextRequest } from 'next/server';
+import { connectToDatabase } from '@/lib/db';
 
 /**
- * Архивирует шаблон турнира.
+ * @swagger
+ * /api/admin/tournament-templates/{id}/archive:
+ *   patch:
+ *     summary: Archives a tournament template
+ *     tags: [Tournament Templates]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: The ID of the tournament template to archive.
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Tournament template archived successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Tournament template archived
+ *       404:
+ *         description: Tournament template not found.
  */
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const archivedTemplate = await tournamentTemplateService.archiveTournamentTemplate(id);
-    revalidatePath('/admin/tournament-templates');
-    revalidatePath(`/admin/tournament-templates/${id}`);
-    return NextResponse.json({ data: archivedTemplate });
+    await connectToDatabase();
+    await tournamentTemplateService.archiveTournamentTemplate(params.id);
+    return NextResponse.json({ message: 'Tournament template archived' });
   } catch (error) {
     if (error instanceof Error) {
       return handleApiError(error);
     }
-    return handleApiError(new Error(String(error)));
+    return handleApiError(new Error('An unknown error occurred during archiving'));
   }
 } 

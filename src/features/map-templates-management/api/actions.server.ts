@@ -1,36 +1,50 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
-import { z } from 'zod';
+import { connectToDatabase } from '@/lib/db';
 import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
-import { createMapTemplateSchema, updateMapTemplateSchema } from '@/lib/api/schemas/map-templates/map-template-schemas';
+import { createMapTemplateApiSchema, updateMapTemplateApiSchema } from '@/lib/api/schemas/map-templates/map-template-schemas';
+import { hasPermission, getCurrentAdminRole } from '@/shared/lib/permissions';
 
-// Типы для состояния действий
-export interface ActionState {
-  errors: Record<string, string>;
+// ✅ УНИФИЦИРОВАНО: Единый тип для всех действий
+export interface ActionResult {
   success: boolean;
+  errors?: Record<string, string>;
 }
 
 /**
  * Server Action для создания шаблона карты
  */
 export async function createMapTemplateAction(
-  prevState: ActionState,
+  prevState: ActionResult,
   formData: FormData
-): Promise<ActionState> {
+): Promise<ActionResult> {
   try {
+    // ✅ ДОБАВЛЕНО: Проверка прав (пока через env, потом через сессию)
+    const currentRole = getCurrentAdminRole();
+    if (!currentRole) {
+      return {
+        success: false,
+        errors: { auth: 'Требуется аутентификация' }
+      };
+    }
+
+    // Примечание: Создание доступно всем админам, дополнительная проверка не нужна
+
+    // ✅ ОБЯЗАТЕЛЬНО: подключение к БД
+    await connectToDatabase();
+
     // Валидация данных формы с Zod
-    const validatedFields = createMapTemplateSchema.safeParse({
+    const validatedFields = createMapTemplateApiSchema.safeParse({
       name: formData.get('name'),
-      mapTemplateImage: formData.get('mapTemplateImage'),
+      image: formData.get('image'),
       description: formData.get('description'),
     });
 
     if (!validatedFields.success) {
       return {
-        errors: validatedFields.error.flatten().fieldErrors as Record<string, string>,
         success: false,
+        errors: validatedFields.error.flatten().fieldErrors as Record<string, string>,
       };
     }
 
@@ -41,13 +55,12 @@ export async function createMapTemplateAction(
     revalidatePath('/admin/map-templates');
 
     return {
-      errors: {},
       success: true,
     };
   } catch (error: any) {
     return {
-      errors: { general: error.message || 'Ошибка создания шаблона' },
       success: false,
+      errors: { general: error.message || 'Ошибка создания шаблона' },
     };
   }
 }
@@ -57,21 +70,35 @@ export async function createMapTemplateAction(
  */
 export async function updateMapTemplateAction(
   id: string,
-  prevState: ActionState,
+  prevState: ActionResult,
   formData: FormData
-): Promise<ActionState> {
+): Promise<ActionResult> {
   try {
+    // ✅ ДОБАВЛЕНО: Проверка прав (пока через env, потом через сессию)
+    const currentRole = getCurrentAdminRole();
+    if (!currentRole) {
+      return {
+        success: false,
+        errors: { auth: 'Требуется аутентификация' }
+      };
+    }
+
+    // Примечание: Редактирование доступно всем админам, дополнительная проверка не нужна
+
+    // ✅ ОБЯЗАТЕЛЬНО: подключение к БД
+    await connectToDatabase();
+
     // Валидация данных формы с Zod
-    const validatedFields = updateMapTemplateSchema.safeParse({
+    const validatedFields = updateMapTemplateApiSchema.safeParse({
       name: formData.get('name'),
-      mapTemplateImage: formData.get('mapTemplateImage'),
+      image: formData.get('image'),
       description: formData.get('description'),
     });
 
     if (!validatedFields.success) {
       return {
-        errors: validatedFields.error.flatten().fieldErrors as Record<string, string>,
         success: false,
+        errors: validatedFields.error.flatten().fieldErrors as Record<string, string>,
       };
     }
 
@@ -83,13 +110,12 @@ export async function updateMapTemplateAction(
     revalidatePath(`/admin/map-templates/${id}`);
 
     return {
-      errors: {},
       success: true,
     };
   } catch (error: any) {
     return {
-      errors: { general: error.message || 'Ошибка обновления шаблона' },
       success: false,
+      errors: { general: error.message || 'Ошибка обновления шаблона' },
     };
   }
 }
@@ -98,8 +124,19 @@ export async function updateMapTemplateAction(
  * Server Action для архивации шаблона карты
  * React 19: Заменяет fetch запрос на серверную логику
  */
-export async function archiveMapTemplateAction(id: string): Promise<{ success: boolean; error?: string }> {
+export async function archiveMapTemplateAction(id: string): Promise<ActionResult> {
   try {
+    // ✅ ИСПРАВЛЕНО: Серверная валидация прав доступа
+    if (!hasPermission('archive')) {
+      return { 
+        success: false, 
+        errors: { permission: 'Недостаточно прав для архивации шаблона' }
+      };
+    }
+
+    // ✅ ОБЯЗАТЕЛЬНО: подключение к БД
+    await connectToDatabase();
+
     await mapTemplateService.archiveMapTemplate(id);
     
     // Инвалидация кэша
@@ -110,7 +147,7 @@ export async function archiveMapTemplateAction(id: string): Promise<{ success: b
   } catch (error: any) {
     return { 
       success: false, 
-      error: error.message || 'Ошибка архивации шаблона' 
+      errors: { general: error.message || 'Ошибка архивации шаблона' }
     };
   }
 }
@@ -119,8 +156,19 @@ export async function archiveMapTemplateAction(id: string): Promise<{ success: b
  * Server Action для восстановления шаблона карты
  * React 19: Заменяет fetch запрос на серверную логику
  */
-export async function restoreMapTemplateAction(id: string): Promise<{ success: boolean; error?: string }> {
+export async function restoreMapTemplateAction(id: string): Promise<ActionResult> {
   try {
+    // ✅ ИСПРАВЛЕНО: Серверная валидация прав доступа
+    if (!hasPermission('restore')) {
+      return { 
+        success: false, 
+        errors: { permission: 'Недостаточно прав для восстановления шаблона' }
+      };
+    }
+
+    // ✅ ОБЯЗАТЕЛЬНО: подключение к БД
+    await connectToDatabase();
+
     await mapTemplateService.restoreMapTemplate(id);
     
     // Инвалидация кэша
@@ -131,7 +179,7 @@ export async function restoreMapTemplateAction(id: string): Promise<{ success: b
   } catch (error: any) {
     return { 
       success: false, 
-      error: error.message || 'Ошибка восстановления шаблона' 
+      errors: { general: error.message || 'Ошибка восстановления шаблона' }
     };
   }
 } 

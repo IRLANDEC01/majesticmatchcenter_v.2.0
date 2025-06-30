@@ -11,16 +11,18 @@
 ### **🎨 Frontend стек**
 - **UI Library:** shadcn/ui + Radix UI (accessible компоненты)
 - **Styling:** Tailwind CSS v3 + CSS Custom Properties
-- **Forms:** Гибридный подход - контролируемые формы + React 19 Server Actions
+- **Forms:** React Hook Form + Zod validation + FileDropzone для файлов
 - **Validation:** Zod схемы (сервер + клиент)
-- **State Management:** SWR для server state + useState для local state
+- **State Management:** TanStack Query v5 для server state + useState для local state
 - **Icons:** Lucide React (легковесная альтернатива Font Awesome)
+- **File Upload:** react-dropzone + S3 интеграция для изображений
 
 ### **🔧 Backend стек**
 - **Database:** MongoDB 7+ через Mongoose 8+ (ESM)
 - **Cache:** Redis 7+ (кэш + очереди + pub/sub)
 - **Queue:** BullMQ для фоновых задач
 - **Search:** Meilisearch для полнотекстового поиска
+- **Storage:** S3-совместимое хранилище (Рег.ру) для файлов и изображений
 - **Migrations:** migrate-mongo для схем MongoDB
 - **Auth:** NextAuth.js v5 (готовимся к миграции)
 

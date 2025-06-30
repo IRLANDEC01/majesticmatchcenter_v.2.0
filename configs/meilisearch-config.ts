@@ -26,6 +26,7 @@ export const meilisearchConfig: Record<string, MeiliIndexConfig> = {
       id: doc._id.toString(),
       name: doc.name,
       description: doc.description,
+      imageUrls: doc.imageUrls || null,
       isArchived: doc.archivedAt != null,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,

@@ -94,18 +94,26 @@ export const disconnectFromTestDB = async () => {
  * Использует репозиторий для корректной работы с кэшем.
  */
 export const createTestMapTemplate = async (overrides = {}) => {
+  const uniqueId = new mongoose.Types.ObjectId().toString();
   const defaults = {
-    name: new mongoose.Types.ObjectId().toString(),
-    mapTemplateImage: 'https://example.com/default-map.png',
-    isArchived: false,
-    isActive: true,
+    name: uniqueId,
+    // ✅ ИСПРАВЛЕНО: Добавлены обязательные поля для новой схемы S3
+    imageUrls: {
+      icon: `https://test-cdn.example.com/maps/${uniqueId}/icon.webp`,
+      medium: `https://test-cdn.example.com/maps/${uniqueId}/medium.webp`,
+      original: `https://test-cdn.example.com/maps/${uniqueId}/original.jpg`,
+    },
+    imageKeys: {
+      icon: `maps/${uniqueId}/icon.webp`,
+      medium: `maps/${uniqueId}/medium.webp`,
+      original: `maps/${uniqueId}/original.jpg`,
+    },
   };
 
   const templateData = { ...defaults, ...overrides };
   
-  // Обрабатываем флаг архивации для тестов
+  // ✅ ИСПРАВЛЕНО: Обрабатываем флаг архивации для тестов (как в createTestTournamentTemplate)
   if (templateData.isArchived) {
-    // @ts-ignore - динамически добавляем поле archivedAt
     templateData.archivedAt = new Date();
     delete templateData.isArchived;
   }
@@ -122,16 +130,27 @@ export const createTestTournamentTemplate = async (overrides = {}) => {
   let mapTemplates = overrides.mapTemplates;
   if (!mapTemplates || mapTemplates.length === 0) {
     // Каждый раз создаем уникальный шаблон карты с уникальным именем
+    const uniqueId = new mongoose.Types.ObjectId().toString().slice(-8);
     const uniqueMapTemplate = await mapTemplateRepo.create({
-      name: `Map Template ${new mongoose.Types.ObjectId().toString().slice(-8)}`,
-      mapTemplateImage: 'https://example.com/unique-map.png',
+      name: `Map Template ${uniqueId}`,
+      // ✅ ИСПРАВЛЕНО: Добавлены обязательные поля для новой схемы S3
+      imageUrls: {
+        icon: `https://test-cdn.example.com/maps/${uniqueId}/icon.webp`,
+        medium: `https://test-cdn.example.com/maps/${uniqueId}/medium.webp`,
+        original: `https://test-cdn.example.com/maps/${uniqueId}/original.jpg`,
+      },
+      imageKeys: {
+        icon: `maps/${uniqueId}/icon.webp`,
+        medium: `maps/${uniqueId}/medium.webp`,
+        original: `maps/${uniqueId}/original.jpg`,
+      },
     });
     mapTemplates = [uniqueMapTemplate._id];
   }
 
   const defaults = {
     name: new mongoose.Types.ObjectId().toString(),
-    tournamentTemplateImage: 'https://example.com/default-tournament.png',
+    imageUrls: { medium: 'https://example.com/default-tournament.png', icon: '', original: '' },
     description: 'Test tournament template description',
     maxParticipants: 8,
     gameRules: 'Test game rules',

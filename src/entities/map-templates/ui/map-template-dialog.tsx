@@ -1,205 +1,165 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { toast } from 'sonner';
+
 import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
+import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
-import { toast } from "sonner";
-import { MapTemplate } from '../model';
-
-// Типы для формы
-export interface MapTemplateFormData {
-  name: string;
-  mapTemplateImage: string;
-  description?: string;
-}
-
-// Тип состояния для Server Action (из React 19)
-export interface FormActionState {
-  errors: Record<string, string>;
-  success: boolean;
-  pending?: boolean;
-}
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/ui/form';
+import { FileDropzone } from "@/shared/ui/file-dropzone";
+import {
+  mapTemplateFormSchema,
+  createMapTemplateFormSchema,
+  type MapTemplateFormValues
+} from '@/lib/api/schemas/map-templates/map-template-schemas';
+import type { MapTemplate } from '../model/types';
 
 interface MapTemplateDialogProps {
   isOpen: boolean;
-  onCloseAction: () => void;
-  onSuccessAction: () => void;
-  template?: MapTemplate; // Для редактирования
-  // FSD: Правильный тип возвращаемого значения для Server Action
-  onCreateAction: (data: MapTemplateFormData) => Promise<FormActionState>;
-  onUpdateAction: (id: string, data: MapTemplateFormData) => Promise<FormActionState>;
-  // Состояние из features слоя (useActionState)
-  isCreating?: boolean;
-  isUpdating?: boolean;
-  errors?: Record<string, string>;
+  onClose: () => void;
+  onSubmit: (data: MapTemplateFormValues) => Promise<void>;
+  template?: MapTemplate | null;
+  isPending: boolean;
 }
 
-/**
- * Кнопка отправки с состоянием из useTransition (FSD совместимая)
- */
-function SubmitButton({ template, isPending }: { template?: MapTemplate; isPending: boolean }) {
-  return (
-    <button 
-      type="submit" 
-      className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
-      disabled={isPending}
-    >
-      {isPending ? 'Сохранение...' : (template ? 'Сохранить' : 'Создать')}
-    </button>
-  );
-}
-
-/**
- * Компонент диалога с FSD архитектурой.
- * Использует колбэки из features слоя вместо прямых импортов.
- */
 export function MapTemplateDialog({
   isOpen,
-  onCloseAction,
-  onSuccessAction,
+  onClose,
+  onSubmit,
   template,
-  onCreateAction,
-  onUpdateAction,
-  isCreating = false,
-  isUpdating = false,
-  errors = {}
+  isPending,
 }: MapTemplateDialogProps) {
-  
-  // Простое состояние формы (только данные)
-  const [formData, setFormData] = useState<MapTemplateFormData>({
-    name: template?.name || '',
-    mapTemplateImage: template?.mapTemplateImage || '',
-    description: template?.description || '',
+
+  const isEditMode = !!template;
+  const validationSchema = isEditMode ? mapTemplateFormSchema : createMapTemplateFormSchema;
+
+  const form = useForm<MapTemplateFormValues>({
+    resolver: zodResolver(validationSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      image: null,
+    },
   });
 
-  // Сброс формы при успехе
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      mapTemplateImage: '',
-      description: '',
-    });
-  };
-  
-  // Вычисляемое состояние загрузки
-  const isPending = isCreating || isUpdating;
-
-  // Упрощенный обработчик отправки (вся логика в features слое)
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Базовая HTML валидация уже сработала
-    // Бизнес-валидация будет в Server Action
-    
-    try {
-      const result = template 
-        ? await onUpdateAction(template.id, formData)
-        : await onCreateAction(formData);
-        
-      if (result.success) {
-        toast.success(template ? 'Шаблон обновлен' : 'Шаблон создан');
-        
-        // Сбрасываем форму только при создании нового шаблона
-        if (!template) {
-          resetForm();
-        }
-        
-        onSuccessAction();
+  useEffect(() => {
+    if (isOpen) {
+      if (template) {
+        form.reset({
+          name: template.name,
+          description: template.description || '',
+          image: template.imageUrls?.medium || null,
+        });
+      } else {
+        form.reset({
+          name: '',
+          description: '',
+          image: null,
+        });
       }
-      // Ошибки показываются через errors из features слоя
+    }
+  }, [isOpen, template, form]);
+
+  const handleFormSubmit = async (data: MapTemplateFormValues) => {
+    try {
+      await onSubmit(data);
     } catch (error) {
-      // Критические ошибки (сетевые и т.д.)
-      const errorMessage = error instanceof Error ? error.message : 'Произошла ошибка';
-      toast.error(errorMessage);
+      const errorMessage = error instanceof Error ? error.message : 'Произошла неизвестная ошибка';
+      toast.error('Ошибка сохранения', { description: errorMessage });
     }
   };
 
-  // Простой обработчик изменения полей
-  const handleFieldChange = (field: keyof MapTemplateFormData) => (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    setFormData(prev => ({ ...prev, [field]: e.target.value }));
-  };
-
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onCloseAction()}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {template ? 'Редактировать шаблон' : 'Создать шаблон карты'}
           </DialogTitle>
         </DialogHeader>
         
-        {/* FSD: контролируемая форма с колбэками */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Название */}
-          <div className="space-y-2">
-            <Label htmlFor="name">Название *</Label>
-            <Input
-              id="name"
-              value={formData.name}
-              onChange={handleFieldChange('name')}
-              placeholder="Например: de_dust2"
-              required
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
+            
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Название шаблона <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input placeholder="Введите название шаблона карты..." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            {errors.name && (
-              <p className="text-sm text-destructive">{errors.name}</p>
-            )}
-          </div>
 
-          {/* Изображение */}
-          <div className="space-y-2">
-            <Label htmlFor="mapTemplateImage">URL изображения *</Label>
-            <Input
-              id="mapTemplateImage"
-              value={formData.mapTemplateImage}
-              onChange={handleFieldChange('mapTemplateImage')}
-              placeholder="https://example.com/image.jpg"
-              required
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Описание</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Краткое описание карты..."
+                      rows={3}
+                      {...field}
+                      value={field.value ?? ''}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            {errors.mapTemplateImage && (
-              <p className="text-sm text-destructive">{errors.mapTemplateImage}</p>
-            )}
-          </div>
 
-          {/* Описание */}
-          <div className="space-y-2">
-            <Label htmlFor="description">Описание</Label>
-            <Textarea
-              id="description"
-              value={formData.description || ''}
-              onChange={handleFieldChange('description')}
-              placeholder="Краткое описание карты..."
-              rows={3}
+            <FormField
+              control={form.control}
+              name="image"
+              render={({ field }) => (
+                <FormItem>
+                   <FormLabel>
+                    Изображение карты <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <FileDropzone
+                      value={field.value}
+                      onChange={field.onChange}
+                      disabled={isPending}
+                      placeholder="Загрузить изображение"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            {errors.description && (
-              <p className="text-sm text-destructive">{errors.description}</p>
-            )}
-          </div>
 
-          {/* Общие ошибки */}
-          {errors.general && (
-            <div className="rounded-md bg-destructive/15 p-3">
-              <p className="text-sm text-destructive">{errors.general}</p>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button 
+                type="button" 
+                variant="outline"
+                onClick={onClose}
+                disabled={isPending}
+              >
+                Отмена
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={isPending}
+              >
+                {isPending ? 'Сохранение...' : (template ? 'Сохранить' : 'Создать')}
+              </Button>
             </div>
-          )}
-
-          {/* Кнопки */}
-          <div className="flex justify-end gap-2 pt-4">
-            <button 
-              type="button" 
-              onClick={onCloseAction}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
-              disabled={isPending}
-            >
-              Отмена
-            </button>
-            <SubmitButton template={template} isPending={isPending} />
-          </div>
-        </form>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
-} 
+}

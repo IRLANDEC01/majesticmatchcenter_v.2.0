@@ -1,24 +1,21 @@
-// Model
-export * from './model';
+// Model exports
+export type { MapTemplate } from './model/types';
+export { mapTemplateToUI, mapTemplatesToUI } from './model/mappers';
 
-// UI Components
-export { 
-  MapTemplateDialog, 
-  type MapTemplateFormData,
-  type FormActionState 
-} from './ui/map-template-dialog';
+// UI Components  
+export { MapTemplateDialog } from './ui/map-template-dialog';
 export { MapTemplatesTable } from './ui/map-templates-table';
 
-// Lib (data hooks)
-export { useMapTemplatesData } from './lib/use-map-templates-data';
-export { useMapTemplateForm } from './lib/use-map-template-form';
+// Data hooks
+export { useMapTemplatesQuery } from './lib/use-map-templates-query';
 
-// Types
-export type { 
-  MapTemplate, 
-  CreateMapTemplateDto, 
-  UpdateMapTemplateDto 
-} from './model';
+// Mutation hooks
+export { 
+  useCreateMapTemplateMutation,
+  useUpdateMapTemplateMutation,
+  useArchiveMapTemplateMutation,
+  useRestoreMapTemplateMutation
+} from './lib/use-map-template-mutations';
 
-// Mappers
-export { mapTemplateToDto, mapTemplatesToDto } from './model'; 
+// Form utilities
+export { buildMapTemplateFormData } from './lib/form-utils';

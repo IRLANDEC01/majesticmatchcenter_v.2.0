@@ -1,45 +1,97 @@
 import { z } from 'zod';
+import { IMAGE_UPLOAD_CONFIG } from '@/lib/constants';
 
-const idSchema = z.string().regex(/^[a-f\d]{24}$/i, 'Невалидный ID');
+// =================================
+// Константы для валидации файлов
+// =================================
+
+const MAX_FILE_SIZE = IMAGE_UPLOAD_CONFIG.MAX_FILE_SIZE_MB * 1024 * 1024;
+const { ACCEPTED_IMAGE_TYPES } = IMAGE_UPLOAD_CONFIG;
+
+// =================================
+// Базовая схема для формы шаблона карты
+// =================================
 
 /**
- * @desc Схема для создания нового шаблона карты.
- * Используется для валидации данных формы на клиенте и на сервере.
+ * @description Схема для валидации формы создания и редактирования шаблона карты.
+ * Используется react-hook-form с zodResolver для мгновенной обратной связи на клиенте.
  */
-export const createMapTemplateSchema = z.object({
+export const mapTemplateFormSchema = z.object({
   name: z
-    .string({
-      required_error: 'Название обязательно.',
-    })
-    .min(3, 'Название должно содержать минимум 3 символа')
-    .max(50, 'Название не должно превышать 50 символов'),
-  mapTemplateImage: z.union([
-    z.string().url('Некорректный URL изображения.'),
-    z.instanceof(File, { message: 'Файл изображения обязателен.' }),
-    z.string().min(1, 'Изображение обязательно.')
-  ]),
-  description: z.string().max(500, 'Описание не может превышать 500 символов').optional(),
-});
+    .string({ required_error: 'Название обязательно для заполнения.' })
+    .trim()
+    .min(3, 'Название должно содержать минимум 3 символа.')
+    .max(50, 'Название не должно превышать 50 символов.'),
+  
+  description: z
+    .string()
+    .max(1000, 'Описание не должно превышать 1000 символов.')
+    .optional()
+    .or(z.literal('')), // Позволяет форме отправлять пустую строку
 
-// Выводим тип из схемы для использования в коде
-export type CreateMapTemplateDto = z.infer<typeof createMapTemplateSchema>;
+  // Поле для изображения. Может быть либо уже существующим URL (при редактировании),
+  // либо новым файлом (File) при создании/замене.
+  image: z
+    .any()
+    .refine(
+      (value) => (typeof value === 'string' && value.length > 0) || (value instanceof File),
+      { message: 'Загрузите изображение.' }
+    )
+    .refine(
+      (file) => (file instanceof File ? file.size <= MAX_FILE_SIZE : true),
+      `Максимальный размер файла — ${IMAGE_UPLOAD_CONFIG.MAX_FILE_SIZE_MB}MB.`
+    )
+    .refine(
+      (file) => (file instanceof File ? ACCEPTED_IMAGE_TYPES.includes(file.type) : true),
+      'Поддерживаются только .jpg, .jpeg, .png и .webp форматы.'
+    ),
+});
 
 /**
- * @desc Схема для обновления существующего шаблона карты.
- * Все поля опциональны, так как можно обновлять только часть данных.
+ * @description Схема для формы СОЗДАНИЯ шаблона карты.
+ * Требует, чтобы изображение было файлом.
  */
-export const updateMapTemplateSchema = z.object({
-  name: z.string().min(3).max(50).optional(),
-  mapTemplateImage: z.union([
-    z.string().url('Некорректный URL изображения'),
-    z.instanceof(File),
-    z.string().min(1)
-  ]).optional(),
-  description: z.string().max(500).optional(),
+export const createMapTemplateFormSchema = mapTemplateFormSchema.extend({
+    image: z
+    .instanceof(File, { message: 'Загрузите изображение.' })
+    .refine(
+      (file) => file.size <= MAX_FILE_SIZE,
+      `Максимальный размер файла — ${IMAGE_UPLOAD_CONFIG.MAX_FILE_SIZE_MB}MB.`
+    )
+    .refine(
+      (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
+      'Поддерживаются только .jpg, .jpeg, .png и .webp форматы.'
+    ),
 });
 
-// Выводим тип из схемы для использования в коде
-export type UpdateMapTemplateDto = z.infer<typeof updateMapTemplateSchema>;
+export type MapTemplateFormValues = z.infer<typeof mapTemplateFormSchema>;
+
+// =================================
+// Схемы для API (серверная валидация)
+// =================================
+
+/**
+ * @desc Схема для создания нового шаблона карты (используется в Server Action).
+ */
+export const createMapTemplateApiSchema = mapTemplateFormSchema.extend({
+  image: z.instanceof(File, { message: 'Для создания требуется файл изображения.' }),
+});
+export type CreateMapTemplateApiDto = z.infer<typeof createMapTemplateApiSchema>;
+
+/**
+ * @desc Схема для обновления шаблона карты (используется в Server Action).
+ * Все поля опциональны.
+ */
+export const updateMapTemplateApiSchema = mapTemplateFormSchema.partial().extend({
+  // Убеждаемся, что если изображение передано, оно валидно
+  image: mapTemplateFormSchema.shape.image.optional(),
+});
+export type UpdateMapTemplateApiDto = z.infer<typeof updateMapTemplateApiSchema>;
+
+
+// =================================
+// Схемы для GET-запросов
+// =================================
 
 /**
  * @desc Схема для валидации query-параметров при получении списка шаблонов карт.
@@ -51,5 +103,4 @@ export const getMapTemplatesSchema = z.object({
   status: z.enum(['active', 'archived', 'all']).default('active'),
 });
 
-// Выводим тип из схемы для использования в коде
-export type GetMapTemplatesDto = z.infer<typeof getMapTemplatesSchema>; 
+export type GetMapTemplatesDto = z.infer<typeof getMapTemplatesSchema>;

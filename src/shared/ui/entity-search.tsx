@@ -29,11 +29,16 @@ interface EntitySearchProps {
   minLength?: number;
   /** Включен ли поиск */
   enabled?: boolean;
+  /** Статус сущностей для фильтрации */
+  status?: 'active' | 'archived' | 'all';
 }
 
 /**
  * Полностью интегрированный компонент поиска сущностей.
  * Объединяет UI компонент и логику поиска через Meilisearch.
+ * 
+ * ⚠️ DEPRECATED: Этот компонент не используется в Map Templates вертикали.
+ * Map Templates используют специализированный useMapTemplatesQuery хук.
  */
 export function EntitySearch({
   entities,
@@ -43,6 +48,7 @@ export function EntitySearch({
   className = '',
   minLength = MIN_SEARCH_LENGTH,
   enabled = true,
+  status = 'active',
 }: EntitySearchProps) {
   // Используем useRef для стабильных ссылок и предотвращения лишних вызовов
   const onResultsRef = useRef(onResults);
@@ -54,12 +60,16 @@ export function EntitySearch({
   onResultsRef.current = onResults;
   onSearchChangeRef.current = onSearchChange;
 
-  // Автоматически генерируем placeholder на основе типа сущностей
+  // Автоматически генерируем placeholder на основе типа сущностей и статуса
   const defaultPlaceholder = React.useMemo(() => {
     if (placeholder) return placeholder;
     
+    // Определяем префикс статуса
+    const statusPrefix = status === 'active' ? 'активным' : 
+                        status === 'archived' ? 'архивным' : 'всем';
+    
     if (Array.isArray(entities)) {
-      return `Поиск по ${entities.length} типам...`;
+      return `Поиск по ${statusPrefix} сущностям...`;
     }
     
     const entityNames: Record<SearchEntity, string> = {
@@ -70,10 +80,10 @@ export function EntitySearch({
       tournaments: 'турнирам',
     };
     
-    return `Поиск по ${entityNames[entities] || entities}...`;
-  }, [entities, placeholder]);
+    return `Поиск по ${statusPrefix} ${entityNames[entities] || entities}...`;
+  }, [entities, placeholder, status]);
 
-  // Используем универсальный хук поиска
+  // Используем универсальный хук поиска (старый SWR)
   const {
     searchTerm,
     setSearchTerm,
@@ -88,6 +98,7 @@ export function EntitySearch({
     entities,
     minLength,
     enabled,
+    status,
   });
 
   // Вызываем коллбеки только при реальном изменении данных
@@ -116,8 +127,8 @@ export function EntitySearch({
 
   const handleClear = useCallback(() => {
     clearSearch();
-    // Вызываем коллбек для очистки только если есть активные результаты
-    if (onResultsRef.current && (hasSearch || previousResultsRef.current)) {
+    // ✅ Немедленно вызываем коллбек с пустыми результатами при очистке
+    if (onResultsRef.current) {
       const emptyResults = Array.isArray(entities) ? {} : [];
       const emptyMeta: SearchMeta = { 
         isLoading: false, 
@@ -130,7 +141,12 @@ export function EntitySearch({
       previousResultsRef.current = emptyResults;
       previousMetaRef.current = emptyMeta;
     }
-  }, [clearSearch, entities, hasSearch, mutate]);
+    
+    // ✅ Также вызываем onSearchChange для немедленного обновления UI
+    if (onSearchChangeRef.current) {
+      onSearchChangeRef.current('', { hasSearch: false, canSearch: false });
+    }
+  }, [clearSearch, entities, mutate]);
 
   return (
     <div className={`relative ${className}`}>
@@ -159,6 +175,4 @@ export function EntitySearch({
 }
 
 // Дополнительный упрощенный хук для тех, кто хочет использовать только логику без UI
-export { useSearch } from '@/shared/hooks/use-search';
-
-export default EntitySearch; 
+export { useSearch } from '@/shared/hooks/use-search'; 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import mongoose from 'mongoose';
+// import mongoose from 'mongoose';
 import { PATCH } from './route';
 import {
   connectToTestDB,
@@ -44,7 +44,7 @@ describe('PATCH /api/admin/tournament-templates/[id]/archive', () => {
   });
 
   it('должен возвращать 404 для несуществующего ID', async () => {
-    const nonExistentId = new mongoose.Types.ObjectId();
+    const nonExistentId = '605c72ef9f1b2c001f7b8b17';
     const req = new Request(`http://localhost/api/admin/tournament-templates/${nonExistentId}/archive`, {
       method: 'PATCH',
     });

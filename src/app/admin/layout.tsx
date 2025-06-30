@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import AdminSidebar from '@/shared/ui/layout/admin-sidebar';
+import { QueryProvider } from '@/shared/providers';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -11,13 +12,15 @@ interface AdminLayoutProps {
  */
 export default function AdminLayout({ children }: AdminLayoutProps) {
   return (
-    <div className="container mx-auto px-4 flex gap-12">
-      <AdminSidebar />
-      <main className="flex-1 py-8">
-        <div className="max-w-7xl">
-          {children}
-        </div>
-      </main>
-    </div>
+    <QueryProvider>
+      <div className="container mx-auto px-4 flex gap-12">
+        <AdminSidebar />
+        <main className="flex-1 py-8">
+          <div className="max-w-7xl">
+            {children}
+          </div>
+        </main>
+      </div>
+    </QueryProvider>
   );
 } 
