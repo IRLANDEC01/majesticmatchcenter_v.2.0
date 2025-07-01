@@ -46,474 +46,451 @@
 
 # Системные паттерны и архитектурные решения
 
-> Этот файл содержит ключевые архитектурные паттерны и принципы, используемые в проекте MajesticMatchCenter.
+> Версия 2.3 — обновлено 01.07.2025
 
-## 🏗️ Архитектурные основы
+---
 
-### Feature-Sliced Design (FSD) — ВНЕДРЕНО ✅
-**Статус:** Полностью внедрена современная FSD архитектура (Январь 2025)
+## 1. Data Access Layer (Repositories)
 
-**Структура слоев:**
-- `app/` — Next.js приложение, роутинг, провайдеры
-- `features/` — Бизнес-фичи и пользовательские сценарии  
-- `entities/` — Бизнес-сущности и их представления
-- `shared/` — Переиспользуемые ресурсы без бизнес-логики
+### Базовые принципы
+- Все репозитории наследуют от `BaseRepo`
+- Методы `find*`, `create`, `update`, `archive` стандартизированы
+- Audit trail через `_logAction(entity, entityId, action, adminId, changes)`
+- Soft deletion через `{ isArchived: true }`
 
-**Правила зависимостей:** 
-- app → features → entities → shared
-- Каждый слой зависит только от нижележащих
-
-**Преимущества:**
-- Четкое разделение ответственности
-- Максимальное переиспользование кода
-- Контролируемое масштабирование
-- Улучшенная тестируемость
-
-### Repository Pattern с синглтонами
+### Паттерн использования
 ```typescript
-// Репозитории как синглтоны для централизации логики
-class MapTemplateRepository extends BaseRepo<IMapTemplate> {
-  constructor() {
-    super(MapTemplate, 'map-template');
+// Всегда передаем adminId для audit trail
+await mapTemplateRepo.archive(templateId, adminId);
+// База автоматически создаст запись в audit_logs
+```
+
+---
+
+## 2. Service Layer Business Logic
+
+### Принципы
+- Сервисы инкапсулируют бизнес-логику и валидацию
+- Один сервис на доменную область (families, players, tournaments)
+- Композиция через dependency injection репозиториев
+- Транзакционность через session parameter
+
+### RBAC в сервисах
+```typescript
+// Сервисы получают adminId для audit trail
+async archiveMapTemplate(templateId: string, adminId: ObjectId) {
+  const template = await this.mapTemplateRepo.findById(templateId);
+  if (!template) throw new NotFoundError('MapTemplate not found');
+  
+  return await this.mapTemplateRepo.archive(templateId, adminId);
+}
+```
+
+---
+
+## 3. API Layer & Error Handling
+
+### Стандартные коды ответов
+- `200 OK` — успешная операция
+- `201 Created` — создание ресурса
+- `400 Bad Request` — валидация не прошла
+- `401 Unauthorized` — не авторизован
+- `403 Forbidden` — нет прав доступа
+- `404 Not Found` — ресурс не найден
+- `500 Internal Server Error` — серверная ошибка
+
+### Паттерн защищенного API route
+```typescript
+export async function POST(request: Request, { params }: { params: { id: string }}) {
+  try {
+    // 1. Authorization check
+    const authCheck = await authorize(request, 'unarchive');
+    if ('error' in authCheck) return authCheck;
+    
+    // 2. Business logic
+    await mapTemplateService.restoreMapTemplate(params.id, authCheck.adminId);
+    
+    // 3. Success response
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
-
-const mapTemplateRepo = new MapTemplateRepository();
-export default mapTemplateRepo;
 ```
 
-### Service Layer с бизнес-логикой
+---
+
+## 4. TanStack Query Patterns
+
+### Стандартные хуки
 ```typescript
-// Сервисы инкапсулируют бизнес-правила
-class MapTemplateService {
-  async archiveMapTemplate(id: string) {
-    const template = await mapTemplateRepo.findById(id);
-    if (template.isArchived) {
-      throw new ConflictError('Шаблон уже архивирован');
-    }
-    return mapTemplateRepo.archive(id);
-  }
-}
-```
-
-## 🎯 Паттерны валидации
-
-### Defense in Depth (Защита в глубину)
-1. **Клиентская валидация** - React Hook Form + Zod
-2. **API валидация** - Zod схемы в route handlers (первая линия обороны)
-3. **Mongoose валидация** - схемы на уровне БД
-4. **Бизнес-правила** - проверки в сервисах
-5. **Репозиторная валидация** - проверки ObjectId и базовых параметров
-
-### Fail Fast принцип
-- Невалидные запросы отклоняются на границе API
-- ConflictError для бизнес-правил
-- Подробные сообщения об ошибках
-
-## 🔄 Паттерны данных
-
-### Find-and-Save для обновлений
-```typescript
-// "Золотой стандарт" для PATCH операций
-async updateMapTemplate(id: string, data: UpdateData) {
-  const template = await repo.findById(id);  // 1. Найти
-  template.name = data.name;                 // 2. Изменить
-  return template.save();                    // 3. Сохранить (запускает хуки!)
-}
-```
-
-### Двухслойная архитектура статистики
-- **Сырые данные** - детальные записи событий (PlayerMapParticipation)
-- **Витрины данных** - агрегированная статистика (PlayerStats)
-- **Асинхронное обновление** - через BullMQ очереди
-
-### Explicit Index Naming
-```typescript
-// Явные имена индексов предотвращают конфликты
-mapTemplateSchema.index(
-  { name: 1 },
-  { 
-    name: 'name_unique_active',
-    unique: true,
-    partialFilterExpression: { archivedAt: { $eq: null } }
-  }
-);
-```
-
-## 🎨 UI паттерны (FSD)
-
-### Shared слой
-- **UI компоненты** - Button, Input, Table, Dialog, ErrorBoundary
-- **Хуки** - useSearch, useDebounce
-- **Провайдеры** - SWRProvider, ThemeProvider
-- **Правило** - не знает о бизнес-сущностях
-
-### Entities слой  
-- **Model** - типы, мапперы (Mongoose → Frontend)
-- **UI** - "глупые" компоненты принимающие props и колбэки
-- **Lib** - хуки данных (useMapTemplatesData) и форм (useMapTemplateForm)
-- **Правило** - представляет одну бизнес-сущность, НЕ знает о Server Actions
-
-### Features слой
-- **UI** - "умные" контейнеры управляющие состоянием и бизнес-логикой
-- **API** - Server Actions для мутаций
-- **Правило** - реализует пользовательские сценарии, импортирует Server Actions
-
-### App слой
-- **Pages** - композиция фич с ErrorBoundary
-- **Layouts** - макеты и провайдеры
-- **Routing** - Next.js App Router
-
-## 🔥 **НОВЫЕ ПАТТЕРНЫ v2.5 (Январь 2025)**
-
-### TanStack Query v5 Migration — ЭТАЛОН ✅
-**Статус:** Map Templates полностью мигрированы, готовы как reference implementation
-
-**Архитектура Query хуков:**
-```typescript
-// entities/lib/use-map-templates-query.ts
-export function useMapTemplatesQuery(searchTerm: string) {
-  return useQuery({
-    queryKey: ['admin-search', 'mapTemplates', searchTerm],
-    queryFn: () => searchMapTemplates(searchTerm),
-    enabled: searchTerm.length >= MIN_SEARCH_LENGTH,
-    staleTime: 0, // Мгновенное обновление для админки
-    retry: 1,
-    refetchOnWindowFocus: false,
-  });
-}
-```
-
-**Архитектура Mutation хуков:**
-```typescript
-// entities/lib/use-map-template-mutations.ts
-export function useCreateMapTemplateMutation() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: createMapTemplateAction,
-    onSuccess: () => {
-      queryClient.refetchQueries({ 
-        queryKey: ['admin-search', 'mapTemplates'] 
-      });
-    }
-  });
-}
-```
-
-### Универсальный хук виртуализации — ВНЕДРЕН ✅
-**Статус:** Создан переиспользуемый хук для ЛЮБЫХ таблиц проекта
-
-**Принцип "Умной" виртуализации:**
-```typescript
-// shared/hooks/use-maybe-virtualizer.ts  
-export function useMaybeVirtualizer<T>(rows: T[], config: VirtualizerConfig = {}) {
-  const enableVirtual = !config.disabled && rows.length > (config.threshold || 100);
-  
-  return {
-    enableVirtual,
-    virtualizer: enableVirtual ? useVirtualizer({...}) : null,
-    containerRef
-  };
-}
-```
-
-**Готовые пресеты:**
-```typescript
-VirtualizerPresets.admin         // threshold: 100, для админ-таблиц
-VirtualizerPresets.publicRatings // threshold: 50, для публичных рейтингов  
-VirtualizerPresets.withImages    // threshold: 30, для тяжелых строк
-VirtualizerPresets.mobile        // threshold: 50, оптимизация для мобильных
-VirtualizerPresets.always        // threshold: 1, принудительно
-VirtualizerPresets.never         // disabled: true, отключено
-```
-
-**Переиспользование между сущностями:**
-```typescript
-// Любая таблица автоматически получает виртуализацию
-const { enableVirtual, virtualizer } = useMaybeVirtualizer(players);     // Player[]
-const { enableVirtual, virtualizer } = useMaybeVirtualizer(tournaments); // Tournament[] 
-const { enableVirtual, virtualizer } = useMaybeVirtualizer(families);    // Family[]
-const { enableVirtual, virtualizer } = useMaybeVirtualizer(templates);   // MapTemplate[]
-```
-
-**Преимущества:**
-- Автоматическое включение/выключение по порогу
-- 100% переиспользуемость между сущностями
-- TypeScript типизация для любых данных
-- Готовые пресеты под разные сценарии
-- Устранение дублирования компонентов
-
-**Двойная инвалидация для гарантированного обновления:**
-```typescript
-// features/ui/page-content.tsx
-const { mutateAsync } = useCreateMapTemplateMutation();
-const { refetch } = useMapTemplatesQuery(searchTerm);
-
-const handleCreate = async (formData) => {
-  await mutateAsync(formData);
-  await refetch(); // Дублируем для гарантии
-};
-```
-
-**Преимущества TanStack Query v5:**
-- ✅ Лучший DevTools для отладки
-- ✅ Меньше boilerplate кода
-- ✅ Встроенная поддержка Server Actions
-- ✅ Более предсказуемое поведение cache invalidation
-
-### S3 File Storage Integration — ГОТОВО ✅
-**Статус:** Полная интеграция S3 для изображений завершена
-
-**Архитектура загрузки файлов:**
-```typescript
-// lib/s3/upload.ts
-export async function uploadImageVariants(
-  file: File,
-  entityType: string,
-  entityId?: string
-): Promise<UploadResult> {
-  // 1. Валидация файла
-  const inputBuffer = await validateAndPrepareImage(file, MAX_SIZE);
-  
-  // 2. Создание вариантов (icon, medium, original)
-  const variants = await makeVariants(inputBuffer, getVariantSpecs(entityType));
-  
-  // 3. Параллельная загрузка с public-read ACL
-  await Promise.all(variants.map(variant => 
-    s3Client.send(new PutObjectCommand({
-      Bucket: env.S3_BUCKET,
-      Key: generateS3Key(entityType, variant.name, uuid),
-      Body: variant.buffer,
-      ContentType: 'image/webp',
-      ACL: 'public-read', // Критично для публичного доступа
-    }))
-  ));
-  
-  return { keys, urls, metadata };
-}
-```
-
-**ImageSet Schema для унификации:**
-```typescript
-// models/shared/image-set-schema.ts
-export interface IImageSet {
-  icon: string;     // 64x64px для таблиц
-  medium: string;   // 640px для карточек  
-  original: string; // 1920px для детального просмотра
-}
-
-// Использование в моделях
-const mapTemplateSchema = new Schema({
-  imageUrls: { type: imageSetSchema, required: false },
-  imageKeys: { type: imageKeysSchema, required: false }, // Для удаления
+// Query для списка с поиском
+const { data: templates, isLoading } = useMapTemplatesQuery({
+  searchTerm: debouncedSearch,
+  status: selectedStatus,
 });
+
+// Мутации с оптимистичными обновлениями
+const archiveMutation = useArchiveMapTemplateMutation();
 ```
-
-**React Hook Form + FileDropzone интеграция:**
-```typescript
-// shared/ui/file-dropzone.tsx
-export function FileDropzone({ value, onChange, onRemove }) {
-  const handleDrop = useCallback((acceptedFiles) => {
-    const file = acceptedFiles[0];
-    if (file) onChange(file);
-  }, [onChange]);
-  
-  // Адаптивный preview с правильными размерами
-  return (
-    <div className="border-2 border-dashed rounded-lg p-6">
-      {value ? (
-        <div className="relative w-full max-w-[280px] h-[200px]">
-          <Image 
-            src={URL.createObjectURL(value)}
-            alt="Preview"
-            fill
-            className="object-contain rounded"
-          />
-        </div>
-      ) : (
-        <DropzoneArea onDrop={handleDrop} />
-      )}
-    </div>
-  );
-}
-```
-
-**Next.js Image Configuration:**
-```javascript
-// next.config.mjs
-const nextConfig = {
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 's3.regru.cloud',
-        pathname: '/majesticmatchcenter/**',
-      },
-    ],
-  },
-};
-```
-
-### Map Templates как Reference Implementation
-**Что копировать в другие сущности:**
-
-1. **Query хуки** - паттерн `useEntityQuery` с правильными настройками
-2. **Mutation хуки** - паттерн `useEntityMutations` с инвалидацией
-3. **Form интеграция** - React Hook Form + FileDropzone для файлов
-4. **Table UI** - отображение иконок через `imageUrls.icon`
-5. **Dialog UI** - универсальный create/edit паттерн
-6. **Server Actions** - типизированные с S3 интеграцией
-
-**Миграционный чеклист для других сущностей:**
-- [ ] Создать TanStack Query хуки по образцу map-templates
-- [ ] Добавить S3 поля в схему (если нужны изображения)
-- [ ] Мигрировать UI компоненты на новые хуки
-- [ ] Обновить Server Actions для работы с S3
-- [ ] Добавить тесты по образцу map-templates
-
-## 🧪 Паттерны тестирования
-
-### Тестовый Трофей v2.2
-- **Интеграционные тесты API** (90%) - основа уверенности
-- **Unit тесты** (5%) - только для сложной логики
-- **E2E тесты** (5%) - критические пути
-- **Статический анализ** - ESLint, TypeScript
-
-### Самодостаточные тесты
-```typescript
-// Каждый тест управляет своим lifecycle
-describe('API Route', () => {
-  beforeAll(async () => {
-    await connectToTestDB();
-  });
-  
-  beforeEach(async () => {
-    await clearTestDB();        // Чистое состояние
-    vi.clearAllMocks();
-  });
-  
-  afterAll(async () => {
-    await disconnectFromTestDB();
-  });
-});
-```
-
-### Селективное мокирование
-- ✅ Мокируем внешние сервисы (Meilisearch, S3)
-- ❌ НЕ мокируем внутренние сервисы/репозитории
-- ✅ Используем реальную тестовую БД
-
-## ⚡ Кэширование
-
-### Многослойная стратегия
-1. **SWR** - клиентское кэширование
-2. **Next.js Cache** - серверное кэширование с тегами
-3. **Redis** - распределенное кэширование
-4. **Memory** - in-memory для тестов
 
 ### Cache Invalidation
 ```typescript
-// Инвалидация через теги
-await revalidateTag('map-templates');
-// + инвалидация SWR на клиенте
-mutate('/api/admin/map-templates');
+// После мутации инвалидируем связанные запросы
+queryClient.invalidateQueries(['mapTemplates']);
+queryClient.invalidateQueries(['mapTemplate', templateId]);
 ```
 
-## 🔍 Поиск и индексирование
+---
 
-### Meilisearch интеграция
-- **Синхронная индексация** - немедленное появление в поиске
-- **Асинхронная оптимизация** - через BullMQ очереди
-- **Универсальный API** - `/api/search?entities=mapTemplates,players`
+## 5. Form Patterns (React Hook Form + Zod)
 
-### Селективная индексация
+### Стандартная схема формы
 ```typescript
-// Индексируем только активные документы
-if (!document.isArchived) {
-  await searchService.syncDocument('update', 'MapTemplate', document.id);
+const MapTemplateSchema = z.object({
+  name: z.string().min(1, 'Название обязательно'),
+  description: z.string().optional(),
+  // ... другие поля
+});
+
+type MapTemplateFormData = z.infer<typeof MapTemplateSchema>;
+```
+
+### Универсальный useServerErrors хук
+```typescript
+// ✅ ПАТТЕРН: Установка server-side ошибок
+const { setServerErrors } = useServerErrors<MapTemplateFormData>(form);
+
+// В обработчике мутации
+if (!result.success && result.errors) {
+  setServerErrors(result.errors, ['general']); // исключаем 'general'
 }
 ```
 
-## 🔧 TypeScript паттерны
+---
 
-### Строгая типизация
-- **Интерфейсы** - для структур данных
-- **Types** - для union types
-- **DTO мапперы** - разделение Mongoose и Frontend типов
+## 6. Caching Strategy (Redis + Next.js)
 
-### Path mapping
-```json
-{
-  "paths": {
-    "@/shared/*": ["src/shared/*"],
-    "@/entities/*": ["src/entities/*"], 
-    "@/features/*": ["src/features/*"]
+### Слоистый кэш
+1. **Browser Cache** (TanStack Query v5) — 30s stale-while-revalidate
+2. **Next.js Cache** — ISR + on-demand revalidation
+3. **Redis Cache** — 5min hot data, 1h warm data
+4. **MongoDB** — источник правды
+
+### Паттерн инвалидации
+```typescript
+// После изменения данных
+await cache.invalidateByTags(['map-templates', 'map-template:123']);
+revalidatePath('/admin/map-templates');
+```
+
+---
+
+## 7. Testing Patterns
+
+### Интеграционные тесты API
+```typescript
+describe('POST /api/admin/map-templates', () => {
+  beforeEach(async () => {
+    await clearTestDB();
+    vi.clearAllMocks();
+  });
+
+  it('должен создать новый шаблон карты', async () => {
+    const payload = { name: 'Test Template' };
+    const { req, res } = createMocks({ method: 'POST', body: payload });
+    
+    await handler(req, res);
+    
+    expect(res._getStatusCode()).toBe(201);
+    // ... проверки
+  });
+});
+```
+
+### Настройка изоляции
+```bash
+# Обязательно для стабильности
+cross-env CACHE_DRIVER=memory node node_modules/jest/bin/jest.js --runInBand
+```
+
+---
+
+## 8. ✅ NEW: Auth.js v5 Patterns
+
+### 8.1 OAuth Configuration Pattern
+```typescript
+// auth.ts - централизованная конфигурация
+export const { handlers, auth } = NextAuth({
+  adapter: createRedisAdapter(redis, { 
+    database: 2,  // отдельная БД для сессий
+    keyPrefix: 'auth:',
+  }),
+  providers: [
+    Yandex({
+      clientId: process.env.YANDEX_CLIENT_ID!,
+      clientSecret: process.env.YANDEX_CLIENT_SECRET!,
+    }),
+  ],
+  session: {
+    strategy: 'database',
+    maxAge: 48 * 60 * 60, // 48 часов
+    updateAge: 30 * 60,   // обновление каждые 30 мин
+  },
+  callbacks: {
+    async jwt({ token, profile }) {
+      // Получаем роль из БД при авторизации
+      if (profile) {
+        const admin = await adminUserRepo.findOne({ yandexId: profile.sub });
+        token.role = admin?.role ?? 'pending';
+        token.adminId = admin?._id?.toString();
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      session.user.role = token.role as Role;
+      session.user.adminId = token.adminId as string;
+      return session;
+    },
+  },
+});
+```
+
+### 8.2 RBAC Authorization Pattern
+```typescript
+// shared/lib/permissions.ts - матрица прав
+export type Role = 'super' | 'admin' | 'moderator' | 'pending';
+export type Permission = 'viewArchived' | 'unarchive' | 'viewAudit' | 'manageEntities' | 'manageNews';
+
+const RBAC_MATRIX: Record<Role, Record<Permission, boolean>> = {
+  super:     { viewArchived: true,  unarchive: true,  viewAudit: true,  manageEntities: true,  manageNews: true },
+  admin:     { viewArchived: false, unarchive: false, viewAudit: false, manageEntities: true,  manageNews: false },
+  moderator: { viewArchived: false, unarchive: false, viewAudit: false, manageEntities: false, manageNews: true },
+  pending:   { viewArchived: false, unarchive: false, viewAudit: false, manageEntities: false, manageNews: false },
+};
+
+export const can = (role: Role, permission: Permission): boolean => 
+  RBAC_MATRIX[role]?.[permission] ?? false;
+```
+
+### 8.3 Server-side Authorization Guard
+```typescript
+// shared/lib/authorize.ts - серверная авторизация
+export async function authorize(
+  request: Request, 
+  requiredPermission: Permission
+): Promise<{ adminId: string; role: Role } | NextResponse> {
+  const session = await auth(); // server-side session
+  
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-}
-```
-
-## 📈 Производительность
-
-### Server Components приоритет
-- Максимальное использование RSC
-- Минимальная клиентская гидратация
-- Оптимизация bundle size
-
-### Lazy loading
-- Динамические импорты для тяжелых компонентов
-- Code splitting по route-уровню
-
-## 🛡️ **БУДУЩИЕ УЛУЧШЕНИЯ СИСТЕМЫ ПРАВ ДОСТУПА**
-
-> Планы развития текущей архитектуры permissions для повышения безопасности и гибкости
-
-### Эволюция авторизации (Приоритет: СРЕДНИЙ)
-
-#### 🎯 **От env к сессиям**
-- **NextAuth.js интеграция** - замена `process.env.ADMIN_ROLE` на сессии пользователей
-- **Middleware защита** - автоматическая проверка доступа ко всем admin routes
-- **Серверные компоненты** - получение роли из сессии в layout компонентах
-
-#### 🗄️ **Централизация в БД**
-- **RolePermissions модель** - вынос конфигурации прав из кода в базу данных
-- **Динамическое управление** - создание/редактирование ролей через админ-панель  
-- **Redis кэширование** - быстрый доступ к правам с инвалидацией при изменениях
-
-#### 🔒 **Middleware автоматизация**
-```typescript
-// withAuth wrapper для автоматической проверки
-export function withAuth(requiredPermissions: Permission[]) {
-  return async (handler) => {
-    const hasAccess = await checkPermissions(req, requiredPermissions);
-    if (!hasAccess) return res.status(403).json({error: 'Forbidden'});
-    return handler(req, res);
+  
+  if (!can(session.user.role, requiredPermission)) {
+    return NextResponse.json({ 
+      error: 'Forbidden', 
+      required: requiredPermission,
+      userRole: session.user.role 
+    }, { status: 403 });
+  }
+  
+  return { 
+    adminId: session.user.adminId, 
+    role: session.user.role 
   };
 }
 ```
 
-#### 👥 **Расширенная ролевая модель**
-- **Новые роли:** `moderator`, `viewer`, `operator` для детального управления
-- **Гранулярные права:** разделение по сущностям (canEditPlayers, canViewTournaments)
-- **Временные права:** роли с ограниченным сроком действия  
-- **Контекстные права:** права в рамках конкретного турнира/семьи
+### 8.4 Client-side Permission Hook
+```typescript
+// shared/hooks/use-permissions.ts - клиентские права
+export function usePermissions() {
+  const { data: session, status } = useSession();
+  
+  return {
+    role: session?.user?.role ?? 'pending',
+    isAuthenticated: status === 'authenticated',
+    isLoading: status === 'loading',
+    can: (permission: Permission) => 
+      session?.user?.role ? can(session.user.role, permission) : false,
+  };
+}
 
-### Технические улучшения
+// Использование в компонентах
+const { can, isAuthenticated } = usePermissions();
 
-#### ⚡ **Производительность**
-- **Мемоизация прав** - кэширование результатов проверки
-- **Batch проверки** - групповая проверка множественных прав
-- **Prefetch ролей** - предзагрузка для улучшения UX
+return (
+  <>
+    {can('viewArchived') && <ArchiveToggle />}
+    {can('unarchive') && <RestoreButton />}
+    {isAuthenticated && <AdminPanel />}
+  </>
+);
+```
 
-#### 🧪 **Тестирование**  
-- **Mock ролей** - удобная подмена ролей в unit-тестах
-- **E2E тесты прав** - автоматическая проверка доступа по ролям
-- **Матрица прав** - документация всех комбинаций ролей и прав
+### 8.5 Redis Session Storage Pattern
+```typescript
+// lib/auth/redis-adapter.ts - custom adapter
+export function createRedisAdapter(redis: Redis, options: RedisAdapterOptions = {}) {
+  const keyPrefix = options.keyPrefix ?? 'auth:';
+  const database = options.database ?? 2;
+  
+  return {
+    async createSession(session: AdapterSession) {
+      const pipeline = redis.pipeline();
+      pipeline.select(database);
+      pipeline.setex(
+        `${keyPrefix}session:${session.sessionToken}`,
+        session.expires.getTime() / 1000,
+        JSON.stringify(session)
+      );
+      await pipeline.exec();
+      return session;
+    },
+    
+    async getSessionAndUser(sessionToken: string) {
+      const pipeline = redis.pipeline();
+      pipeline.select(database);
+      pipeline.get(`${keyPrefix}session:${sessionToken}`);
+      pipeline.get(`${keyPrefix}user:${userId}`);
+      const results = await pipeline.exec();
+      
+      // Parsing и validation...
+      return { session, user };
+    },
+    
+    // ... другие методы
+  };
+}
+```
 
-#### 🔍 **Мониторинг**
-- **Dashboard прав** - визуализация использования ролей
-- **Алерты безопасности** - уведомления о подозрительной активности
-- **Аудит доступа** - отчеты по использованию прав администраторами
+### 8.6 Audit Trail Pattern
+```typescript
+// models/audit/AuditLog.js - расширенная схема
+const auditLogSchema = new Schema({
+  entity: { type: String, required: true, enum: ['MapTemplate', 'Player', 'Family', 'Tournament'] },
+  entityId: { type: Schema.Types.ObjectId, required: true },
+  action: { 
+    type: String, 
+    required: true, 
+    enum: ['create', 'update', 'archive', 'restore', 'role_change', 'login', 'permission_grant'] 
+  },
+  adminId: { type: Schema.Types.ObjectId, ref: 'AdminUser', required: true },
+  changes: { type: Schema.Types.Mixed, default: {} },
+  ipAddress: { type: String },
+  userAgent: { type: String },
+  timestamp: { type: Date, default: Date.now },
+});
 
-**Обновлено:** Январь 2025  
-**Статус:** Production Ready с FSD архитектурой ✅
+// Использование в сервисах
+async archiveMapTemplate(templateId: string, adminId: ObjectId, context?: AuditContext) {
+  const template = await this.mapTemplateRepo.archive(templateId, adminId);
+  
+  // Автоматическое логирование через BaseRepo._logAction
+  await this.auditLogRepo.create({
+    entity: 'MapTemplate',
+    entityId: templateId,
+    action: 'archive',
+    adminId,
+    changes: {},
+    ipAddress: context?.ipAddress,
+    userAgent: context?.userAgent,
+  });
+  
+  return template;
+}
+```
+
+### 8.7 Middleware Protection Pattern
+```typescript
+// middleware.ts - route protection
+export { auth as middleware } from '@/auth';
+
+export const config = {
+  matcher: [
+    '/admin/:path*',           // защищаем админку
+    '/api/admin/:path*',       // защищаем admin API
+    '/((?!api/auth|_next/static|_next/image|favicon.ico).*)', // исключения
+  ],
+};
+
+// Дополнительная логика в middleware (опционально)
+export async function middleware(request: NextRequest) {
+  const session = await auth();
+  
+  if (request.nextUrl.pathname.startsWith('/admin')) {
+    if (!session) {
+      return NextResponse.redirect(new URL('/api/auth/signin', request.url));
+    }
+    
+    if (session.user.role === 'pending') {
+      return NextResponse.redirect(new URL('/access-denied', request.url));
+    }
+  }
+  
+  return NextResponse.next();
+}
+```
+
+---
+
+## 9. Component Patterns & UI
+
+### Reusable UI Components
+```typescript
+// shared/ui/confirmation-dialog.tsx - переиспользуемый диалог
+interface ConfirmationDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  description: string;
+  variant?: 'default' | 'destructive';
+  isPending?: boolean;
+}
+```
+
+### Feature-Sliced Design Structure
+```
+entities/
+  map-templates/
+    model/     # типы, маппинг, бизнес-логика
+    lib/       # хуки, утилиты
+    ui/        # компоненты представления
+
+features/
+  map-templates-management/
+    ui/        # страницы, сложные компоненты
+    api/       # server actions
+
+shared/
+  ui/        # переиспользуемые UI компоненты
+  hooks/     # универсальные хуки
+  lib/       # утилиты, конфигурации
+```
+
+---
+
+## 10. Performance & Security
+
+### Performance Optimizations
+- TanStack Query cache с `refetchOnMount: false` для админки
+- TanStack Virtual для таблиц >100 записей
+- Redis pipeline для batch операций
+- Debounced search с TanStack Pacer
+
+### Security Patterns
+- **Session Security**: httpOnly cookies, secure=true в production
+- **RBAC Enforcement**: проверки как на сервере, так и в UI
+- **Audit Trail**: полное логирование административных действий
+- **Input Validation**: Zod схемы на клиенте и сервере
+- **Error Handling**: никаких sensitive данных в error responses
+
+---
+
+> **Принципы проекта:**
+> 1. **Максимальная переиспользуемость** — извлекаем общие паттерны
+> 2. **Типобезопасность** — TypeScript везде, никаких `any`
+> 3. **Тестируемость** — изолированные компоненты и сервисы
+> 4. **Производительность** — ленивая загрузка, умное кэширование
+> 5. **Безопасность** — RBAC, audit trail, валидация на всех уровнях

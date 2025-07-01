@@ -31,9 +31,21 @@ const apiRedisOptions: RedisOptions = {
   connectTimeout: 2000, // Таймаут на первое подключение
 };
 
+/**
+ * Конфигурация для Auth.js сессий.
+ * Надежное соединение для критичной аутентификации.
+ */
+const sessionRedisOptions: RedisOptions = {
+  ...baseRedisOptions,
+  maxRetriesPerRequest: 5, // Больше попыток для сессий
+  connectTimeout: 3000, // Больше времени на подключение
+  db: 2, // Отдельная база данных для сессий
+};
+
 // --- Синглтоны для клиентов ---
 let apiRedisClient: Redis | null = null;
 let backgroundRedisClient: Redis | null = null;
+let sessionRedisClient: Redis | null = null;
 
 // Состояние "размыкателя цепи" для API клиента
 type CircuitState = 'CLOSED' | 'OPEN' | 'HALF-OPEN';
@@ -42,10 +54,15 @@ let consecutiveFailures = 0;
 const FAILURE_THRESHOLD = 5;
 const RESET_TIMEOUT = 60000; // 1 минута
 
-function createClient(options: RedisOptions, clientType: 'API' | 'Worker'): Redis {
+function createClient(options: RedisOptions, clientType: 'API' | 'Worker' | 'Session'): Redis {
   // Сначала пытаемся получить URL из глобальной переменной (для тестов),
   // затем из process.env (для продакшена).
-  const REDIS_URL = (globalThis as any).__REDIS_URL__ || process.env.REDIS_URL;
+  let REDIS_URL = (globalThis as any).__REDIS_URL__ || process.env.REDIS_URL;
+  
+  // ✅ НОВОЕ: Для сессий используем отдельный URL если есть
+  if (clientType === 'Session') {
+    REDIS_URL = process.env.REDIS_SESSION_URL || REDIS_URL;
+  }
 
   if (!REDIS_URL) {
     throw new Error(`[Redis:${clientType}] URL для подключения не найден ни в globalThis, ни в process.env.`);
@@ -53,7 +70,7 @@ function createClient(options: RedisOptions, clientType: 'API' | 'Worker'): Redi
   const client = new Redis(REDIS_URL, options);
 
   client.on('connect', () => {
-    console.log(`✅ [Redis:${clientType}] Клиент успешно подключен к ${client.options.host}`);
+    console.log(`✅ [Redis:${clientType}] Клиент успешно подключен к ${client.options.host}:${client.options.port} (db=${client.options.db || 0})`);
     if (clientType === 'API') {
       consecutiveFailures = 0;
       if (circuitState !== 'CLOSED') {
@@ -110,6 +127,17 @@ export function getBackgroundRedisClient(): Redis {
 }
 
 /**
+ * ✅ НОВАЯ: Функция для получения Redis клиента для сессий Auth.js
+ * Использует отдельную базу данных (db=2) для изоляции от основного кэша
+ */
+export function getSessionRedisClient(): Redis {
+  if (!sessionRedisClient) {
+    sessionRedisClient = createClient(sessionRedisOptions, 'Session');
+  }
+  return sessionRedisClient;
+}
+
+/**
  * Проверяет, активен ли "размыкатель цепи", что означает временное отключение кэша.
  * @returns {boolean} `true`, если кэш отключен, иначе `false`.
  */
@@ -118,4 +146,7 @@ export function isCacheDisabled(): boolean {
   // В режиме "HALF-OPEN" мы разрешаем одну пробную попытку,
   // которая либо закроет размыкатель, либо снова откроет его.
   return circuitState === 'OPEN';
-} 
+}
+
+// ✅ ЭКСПОРТ: Основной клиент для обратной совместимости
+export const redis = getApiRedisClient(); 

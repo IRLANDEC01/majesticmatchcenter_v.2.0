@@ -20,7 +20,7 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     setupFiles: ['./vitest.setup.server.mjs'],
-    include: ['src/**/*.test.ts', 'src/**/*.test.js'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.js', 'tests/**/*.test.ts', 'tests/**/*.test.js'],
     pool: 'forks',
     coverage: {
       provider: 'v8',

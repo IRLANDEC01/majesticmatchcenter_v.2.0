@@ -90,7 +90,7 @@ src/
     │   └── use-search.ts
     ├── providers/           # React провайдеры  
     │   ├── index.ts
-    │   └── swr-provider.tsx
+    │   └── query-provider.tsx
     └── admin/               # Админские компоненты
         ├── index.ts
         ├── delete-confirmation-dialog.jsx

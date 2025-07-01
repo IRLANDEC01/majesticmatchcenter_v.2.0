@@ -108,10 +108,6 @@ export const SEARCH_DEBOUNCE_DELAY_MS = 300;
  */
 export const ADMIN_SEARCH_RESULTS_LIMIT = 15;
 
-// @deprecated - больше не используется после миграции на infinite scroll
-// Оставлено для обратной совместимости. Удалить в версии 3.0
-export const ADMIN_TABLE_PAGE_SIZE = 15;
-
 /**
  * Максимальный размер страницы для защиты от DoS атак.
  * Предотвращает запросы с огромными limit значениями, которые могут перегрузить сервер.

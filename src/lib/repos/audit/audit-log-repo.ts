@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import AuditLog, { IAuditLog } from '@/models/audit/AuditLog';
+import AuditLog from '@/models/audit/AuditLog';
 
 /**
  * @interface IAuditLogData
@@ -8,10 +8,12 @@ import AuditLog, { IAuditLog } from '@/models/audit/AuditLog';
 export interface IAuditLogData {
   entity: string;
   entityId: string;
-  action: IAuditLog['action'];
-  actorId?: mongoose.Types.ObjectId;
+  action: 'create' | 'update' | 'archive' | 'restore' | 'delete' | 'complete' | 'rollback' | 'owner_change' | 'role_change' | 'login' | 'permission_grant' | 'permission_revoke' | 'ban' | 'unban' | 'password_reset' | 'session_terminate';
+  adminId?: mongoose.Types.ObjectId;
   changes?: Record<string, any>;
   context?: string;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 /**
@@ -23,9 +25,9 @@ class AuditLogRepository {
   /**
    * Создает запись в логе аудита.
    * @param {IAuditLogData} logData - Данные для лога.
-   * @returns {Promise<IAuditLog>}
+   * @returns {Promise<any>}
    */
-  async create(logData: IAuditLogData): Promise<IAuditLog> {
+  async create(logData: IAuditLogData): Promise<any> {
     const logEntry = new AuditLog(logData);
     await logEntry.save();
     return logEntry;

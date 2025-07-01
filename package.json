@@ -21,7 +21,10 @@
     "queue:clear:search": "tsx --tsconfig tsconfig.scripts.json -r dotenv/config scripts/clear-search-queue.ts",
     "start:dev": "npm run dev",
     "start:worker": "tsx --tsconfig tsconfig.scripts.json -r dotenv/config src/queues/search-worker.ts",
-    "start:queue-monitor": "tsx --tsconfig tsconfig.scripts.json -r dotenv/config scripts/run-queue-monitor.ts"
+    "start:queue-monitor": "tsx --tsconfig tsconfig.scripts.json -r dotenv/config scripts/run-queue-monitor.ts",
+    "seed:db": "tsx scripts/seed-db.ts",
+    "seed:superadmin": "tsx scripts/seed-superadmin.ts",
+    "seed:search": "tsx scripts/seed-meilisearch.ts"
   },
   "keywords": [],
   "dependencies": {
@@ -61,6 +64,7 @@
     "meilisearch": "^0.51.0",
     "mongoose": "^8.15.2",
     "next": "15.3.3",
+    "next-auth": "^5.0.0-beta.29",
     "next-themes": "^0.4.6",
     "postcss": "^8.5.6",
     "react": "^19.0.0",

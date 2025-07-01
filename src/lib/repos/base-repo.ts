@@ -70,7 +70,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     action: 'create' | 'update' | 'archive' | 'restore',
     entityId: string,
     changes: Record<string, any> = {},
-    actorId?: mongoose.Types.ObjectId,
+    adminId?: mongoose.Types.ObjectId,
   ) {
     try {
       await auditLogRepo.create({
@@ -78,7 +78,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
         entityId,
         action,
         changes,
-        actorId,
+        adminId,
       });
     } catch (error) {
       console.error('FATAL: Audit log write failed.', {
