@@ -23,3 +23,6 @@ export { useSearch } from './use-search';
 
 // TanStack Pacer хуки для debounce/throttle
 export { usePacerDebounce, usePacerDebouncedCallback } from './use-pacer-debounce';
+
+// Универсальный хук для server-side ошибок в формах
+export { useServerErrors, type ServerErrors } from './use-server-errors';

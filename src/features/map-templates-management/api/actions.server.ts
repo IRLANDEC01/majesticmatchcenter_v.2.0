@@ -58,6 +58,14 @@ export async function createMapTemplateAction(
       success: true,
     };
   } catch (error: any) {
+    // Специальная обработка ConflictError для дублирующихся имен
+    if (error.name === 'ConflictError') {
+      return {
+        success: false,
+        errors: { name: error.message },
+      };
+    }
+    
     return {
       success: false,
       errors: { general: error.message || 'Ошибка создания шаблона' },
@@ -113,6 +121,14 @@ export async function updateMapTemplateAction(
       success: true,
     };
   } catch (error: any) {
+    // Специальная обработка ConflictError для дублирующихся имен
+    if (error.name === 'ConflictError') {
+      return {
+        success: false,
+        errors: { name: error.message },
+      };
+    }
+    
     return {
       success: false,
       errors: { general: error.message || 'Ошибка обновления шаблона' },

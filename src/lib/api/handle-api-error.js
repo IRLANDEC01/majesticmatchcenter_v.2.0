@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
-import { DuplicateError, ValidationError, NotFoundError, AppError } from '@/lib/errors';
+import { DuplicateError, ValidationError, NotFoundError, ConflictError, AppError } from '@/lib/errors';
 
 const { ValidationError: MongooseValidationError } = mongoose.Error;
 
@@ -18,6 +18,7 @@ const errorHandlers = new Map([
   [ValidationError, (error) => NextResponse.json({ message: error.message, errors: error.details }, { status: 400 })],
   [NotFoundError, (error) => NextResponse.json({ message: error.message }, { status: 404 })],
   [DuplicateError, (error) => NextResponse.json({ message: error.message }, { status: 409 })],
+  [ConflictError, (error) => NextResponse.json({ message: error.message, errors: { name: error.message } }, { status: 409 })],
   [AppError, (error) => NextResponse.json({ message: error.message }, { status: error.statusCode })],
 ]);
 

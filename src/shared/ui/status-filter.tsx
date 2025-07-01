@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ToggleGroup, ToggleGroupItem } from '@/shared/ui/toggle-group';
-import type { EntityStatus } from '@/shared/types/admin';
+import type { EntityStatus, EntityStatusOptional } from '@/shared/types/admin';
 
 interface StatusFilterOption {
   value: EntityStatus;
@@ -10,8 +10,8 @@ interface StatusFilterOption {
 }
 
 interface StatusFilterProps {
-  /** Текущее выбранное значение */
-  value: EntityStatus;
+  /** Текущее выбранное значение (может быть undefined - ни один тоггл не активен) */
+  value: EntityStatusOptional;
   /** Коллбек при изменении значения */
   onChange: (value: EntityStatus) => void;
   /** Может ли пользователь просматривать архивные сущности */
@@ -24,6 +24,7 @@ interface StatusFilterProps {
 
 /**
  * Компонент для фильтрации сущностей по статусу (активные/архивные/все).
+ * Поддерживает пустое состояние когда ни один тоггл не активен.
  * Автоматически ограничивает доступные опции на основе прав пользователя.
  */
 export function StatusFilter({
@@ -46,7 +47,7 @@ export function StatusFilter({
 
   // Обработчик изменения с проверкой доступности
   const handleChange = (newValue: string) => {
-    if (!newValue) return;
+    if (!newValue) return; // ToggleGroup может передать пустую строку при deselect
     
     const selectedValue = newValue as EntityStatus;
     
@@ -75,10 +76,10 @@ export function StatusFilter({
 
   return (
     <div className={`flex items-center gap-2 ${className}`} data-testid="status-filter">
-      <span className="text-sm text-muted-foreground">Поиск:</span>
+      <span className="text-sm text-muted-foreground">Показать все:</span>
       <ToggleGroup
         type="single"
-        value={value}
+        value={value || ''} // ✅ Поддержка пустого состояния
         onValueChange={handleChange}
         size={size}
         data-testid="status-toggle-group"

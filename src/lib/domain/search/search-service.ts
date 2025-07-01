@@ -24,11 +24,13 @@ class SearchService {
   }
 
   /**
-   * Инициализирует индексы, настройки фильтров и сортировки.
+   * Инициализирует MeiliSearch индексы и их настройки.
    * Вызывается один раз при старте приложения.
    */
   public async init(): Promise<void> {
-    console.log('Инициализация SearchService...');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Инициализация SearchService...');
+    }
     try {
       const indexes = Object.values(meilisearchConfig) as MeiliIndexConfig[];
       for (const indexConfig of indexes) {
@@ -36,25 +38,35 @@ class SearchService {
 
         // Создаем индекс, если его нет. Указываем primaryKey при создании.
         await this.client.createIndex(indexName, { primaryKey });
-        console.log(`Индекс "${indexName}" готов.`);
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`Индекс "${indexName}" готов.`);
+        }
 
         const index = this.client.index(indexName);
 
         // Обновляем настройки. MeiliSearch игнорирует обновления, если настройки не изменились.
         if (filterableAttributes) {
           await index.updateFilterableAttributes(filterableAttributes);
-          console.log(`- Настроены фильтруемые атрибуты для "${indexName}"`);
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`- Настроены фильтруемые атрибуты для "${indexName}"`);
+          }
         }
         if (sortableAttributes) {
           await index.updateSortableAttributes(sortableAttributes);
-          console.log(`- Настроены сортируемые атрибуты для "${indexName}"`);
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`- Настроены сортируемые атрибуты для "${indexName}"`);
+          }
         }
         if (searchableAttributes) {
           await index.updateSearchableAttributes(searchableAttributes);
-          console.log(`- Настроены поисковые атрибуты для "${indexName}"`);
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`- Настроены поисковые атрибуты для "${indexName}"`);
+          }
         }
       }
-      console.log('Инициализация SearchService успешно завершена.');
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('Инициализация SearchService успешно завершена.');
+      }
     } catch (error) {
       console.error('Ошибка при инициализации SearchService:', error);
       // В dev-режиме можно пробросить ошибку, чтобы сразу ее увидеть.
@@ -70,7 +82,9 @@ class SearchService {
    * Проходится по всем моделям из meilisearchConfig и добавляет задачи на обновление в очередь.
    */
   public async reindexAll(): Promise<{ totalJobs: number }> {
-    console.log('🔄 [SearchService] Запуск полной переиндексации...');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔄 [SearchService] Запуск полной переиндексации...');
+    }
     let totalJobs = 0;
 
     const modelNames = Object.keys(meilisearchConfig);
@@ -86,7 +100,9 @@ class SearchService {
         continue;
       }
       
-      console.log(`- [SearchService] Индексация модели ${modelName}...`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`- [SearchService] Индексация модели ${modelName}...`);
+      }
       
       // Находим все документы, включая архивные
       const documents = await model.find({}).lean<LeanDocument[]>();
@@ -101,10 +117,14 @@ class SearchService {
 
       await Promise.all(promises);
       totalJobs += documents.length;
-      console.log(`- [SearchService] Поставлено в очередь ${documents.length} документов для модели ${modelName}.`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`- [SearchService] Поставлено в очередь ${documents.length} документов для модели ${modelName}.`);
+      }
     }
     
-    console.log(`✅ [SearchService] В очередь добавлено ${totalJobs} задач на переиндексацию.`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`✅ [SearchService] В очередь добавлено ${totalJobs} задач на переиндексацию.`);
+    }
     return { totalJobs };
   }
 
@@ -114,10 +134,14 @@ class SearchService {
    * @param indexName - Имя индекса для удаления (e.g., 'players').
    */
   public async deleteIndex(indexName: string): Promise<EnqueuedTask> {
-    console.log(`[SearchService] Запрос на удаление индекса "${indexName}"...`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[SearchService] Запрос на удаление индекса "${indexName}"...`);
+    }
     try {
       const task = await this.client.deleteIndex(indexName);
-      console.log(`[SearchService] Задача на удаление индекса "${indexName}" создана (Task UID: ${task.taskUid}).`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[SearchService] Задача на удаление индекса "${indexName}" создана (Task UID: ${task.taskUid}).`);
+      }
       return task;
     } catch (error) {
       console.error(`[SearchService] Ошибка при удалении индекса "${indexName}":`, error);
@@ -130,11 +154,13 @@ class SearchService {
    * @param query - Поисковый запрос.
    * @param entities - Массив сущностей для поиска (e.g., ['players', 'families']).
    * @param filters - Опциональные фильтры для поиска.
+   * @param pagination - Опциональные параметры пагинации для оптимизации payload.
    */
   public async search(
     query: string, 
     entities: string[], 
-    filters?: { status?: 'active' | 'archived' | 'all' }
+    filters?: { status?: 'active' | 'archived' | 'all' },
+    pagination?: { limit?: number; offset?: number }
   ): Promise<any> {
     // Формируем фильтр для Meilisearch на основе статуса
     let meilisearchFilter: string | undefined;
@@ -171,9 +197,19 @@ class SearchService {
           searchQuery.filter = meilisearchFilter;
         }
         
+        // ✅ ОПТИМИЗАЦИЯ: Добавляем пагинацию для уменьшения payload
+        if (pagination) {
+          if (pagination.limit !== undefined) {
+            searchQuery.limit = pagination.limit;
+          }
+          if (pagination.offset !== undefined) {
+            searchQuery.offset = pagination.offset;
+          }
+        }
+        
         return searchQuery;
       })
-      .filter((q): q is { indexUid: string; q: string; filter?: string } => q !== null);
+      .filter((q): q is { indexUid: string; q: string; filter?: string; limit?: number; offset?: number } => q !== null);
 
     if (searchQueries.length === 0) {
       return { query, entities, results: {} };
@@ -245,7 +281,9 @@ class SearchService {
 
     if (action === 'delete') {
       await index.deleteDocument(entityId);
-      console.log(`[SearchService] Документ ${entityId} удален из индекса ${modelConfigEntry.indexName}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[SearchService] Документ ${entityId} удален из индекса ${modelConfigEntry.indexName}`);
+      }
       return;
     }
 
@@ -253,7 +291,9 @@ class SearchService {
     const documentPayload = await this._buildDocument(entityName, entityId);
     if (documentPayload) {
       await index.addDocuments([documentPayload], { primaryKey: 'id' });
-      console.log(`[SearchService] Документ ${entityId} синхронизирован с индексом ${modelConfigEntry.indexName}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[SearchService] Документ ${entityId} синхронизирован с индексом ${modelConfigEntry.indexName}`);
+      }
     } else {
       // Если документ не найден в БД, возможно, его нужно удалить и из индекса
       await index.deleteDocument(entityId).catch(e => console.warn(`Не удалось удалить отсутствующий документ ${entityId} из индекса. Возможно, его там и не было.`));

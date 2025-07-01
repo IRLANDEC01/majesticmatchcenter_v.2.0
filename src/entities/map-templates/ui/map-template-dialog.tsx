@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
+import { useServerErrors, type ServerErrors } from '@/shared/hooks';
 
 import { Input } from "@/shared/ui/input";
 import { Textarea } from "@/shared/ui/textarea";
@@ -24,6 +25,7 @@ interface MapTemplateDialogProps {
   onSubmit: (data: MapTemplateFormValues) => Promise<void>;
   template?: MapTemplate | null;
   isPending: boolean;
+  errors?: Record<string, string>;
 }
 
 export function MapTemplateDialog({
@@ -32,6 +34,7 @@ export function MapTemplateDialog({
   onSubmit,
   template,
   isPending,
+  errors = {},
 }: MapTemplateDialogProps) {
 
   const isEditMode = !!template;
@@ -64,6 +67,9 @@ export function MapTemplateDialog({
     }
   }, [isOpen, template, form]);
 
+  // Универсальная установка server-side ошибок в форму  
+  const { setServerError, clearServerErrors } = useServerErrors(form, errors as ServerErrors<MapTemplateFormValues>);
+
   const handleFormSubmit = async (data: MapTemplateFormValues) => {
     try {
       await onSubmit(data);
@@ -84,6 +90,13 @@ export function MapTemplateDialog({
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
+            
+            {/* Глобальная ошибка */}
+            {errors.general && (
+              <div className="p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
+                {errors.general}
+              </div>
+            )}
             
             <FormField
               control={form.control}

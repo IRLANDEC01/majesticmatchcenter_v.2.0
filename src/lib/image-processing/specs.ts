@@ -25,7 +25,7 @@ const ENTITY_SPECS: Record<EntityType, VariantSpec[]> = {
   ],
   
   'map-template': [
-    { name: 'icon', width: 64, height: 64, fit: 'cover' },      // Квадратная иконка для списков
+    { name: 'icon', width: 64, height: 36, fit: 'cover' },      // Иконка 16:9 для списков
     { name: 'medium', width: 640, fit: 'contain' },             // Средний размер для карточек и форм
     { name: 'original', width: 1920, fit: 'contain' },          // Полный размер для детального просмотра
   ],

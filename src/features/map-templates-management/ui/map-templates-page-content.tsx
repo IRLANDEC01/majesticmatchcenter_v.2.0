@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { Button } from "@/shared/ui/button";
-import { Plus } from "lucide-react";
+import { toast } from 'sonner';
+import { Button, ConfirmationDialog, StatusFilter } from "@/shared/ui";
+import { Plus, X } from "lucide-react";
 import { usePermissions } from "@/shared/hooks/use-permissions";
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,7 +16,7 @@ import {
   useRestoreMapTemplateMutation,
   type MapTemplate,
 } from "@/entities/map-templates";
-import type { AdminRole, EntityStatus } from "@/shared/types/admin";
+import type { AdminRole, EntityStatus, EntityStatusOptional } from "@/shared/types/admin";
 import type { MapTemplateFormValues } from '@/lib/api/schemas/map-templates/map-template-schemas';
 
 interface MapTemplatesPageContentProps {
@@ -26,26 +27,33 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
   const permissions = usePermissions(userRole);
   const queryClient = useQueryClient();
   
-  // ✅ ИЗМЕНЕНИЕ: Переходим на infinite scroll - локальный state для фильтров
+  // ✅ ПОЛНАЯ ПУСТОТА: Никаких данных при заходе на страницу
   const [searchTerm, setSearchTerm] = useState('');
-  const [status, setStatus] = useState<EntityStatus>('active');
   
-  // ✅ ДОБАВЛЕНО: Состояние для явного управления загрузкой данных
-  const [shouldLoadData, setShouldLoadData] = useState(false);
+  // Визуальное состояние тогглов (undefined = ни один не выбран)
+  const [visualToggleStatus, setVisualToggleStatus] = useState<EntityStatusOptional>(undefined);
+  
+  // Логическое состояние для запросов (undefined = никаких запросов без действий пользователя)
+  const [queryStatus, setQueryStatus] = useState<EntityStatusOptional>(undefined);
   
   // Состояние диалога
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<MapTemplate | undefined>(undefined);
   
-  // ✅ ДОБАВЛЕНО: Состояние для ошибок валидации
+  // Состояние для ошибок валидации
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  
+  // Состояние для confirmation dialog
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    template?: MapTemplate;
+    action?: 'archive' | 'restore';
+  }>({ isOpen: false });
 
-  // ✅ ИСПРАВЛЕНО: Данные загружаются только при явном действии
-  const shouldFetchData = shouldLoadData || 
-    searchTerm.trim().length >= 2 || 
-    status !== 'active';
+  // ✅ ПОЛНАЯ ПУСТОТА: Данные загружаются только при действиях пользователя
+  const shouldFetchData = Boolean(searchTerm.trim()) || queryStatus !== undefined;
 
-  // ✅ НОВОЕ: Infinite scroll данные - НЕ загружаются автоматически
+  // ✅ НОВОЕ: Infinite scroll данные
   const {
     templates,
     isLoading,
@@ -58,8 +66,8 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
     refetch,
   } = useInfiniteMapTemplatesQuery({
     searchTerm,
-    status,
-    enabled: shouldFetchData, // ✅ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: enabled управляется явно
+    status: queryStatus || 'active', // ✅ Fallback для TypeScript (но enabled блокирует запрос)
+    enabled: shouldFetchData, // ✅ Данные загружаются только при действиях пользователя
   });
 
   // ✅ РЕФАКТОРИНГ: Используем TanStack Query хуки вместо Server Actions
@@ -68,50 +76,56 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
   const archiveMutation = useArchiveMapTemplateMutation();
   const restoreMutation = useRestoreMapTemplateMutation();
 
-  // ✅ ДОБАВЛЕНО: Обработчики для активации загрузки данных
+  // ✅ ПОИСК: Работает независимо от тогглов (автоматически выбирает 'active' при поиске)
   const handleSearchChange = useCallback((value: string) => {
     setSearchTerm(value);
-    // Активируем загрузку если есть поиск от 2 символов
-    if (value.trim().length >= 2) {
-      setShouldLoadData(true);
+    
+    if (value.trim()) {
+      // Если есть поиск и нет выбранного тогла - автоматически ищем среди активных
+      if (!queryStatus) {
+        setQueryStatus('active');
+      }
+    } else {
+      // Если поиск очищен и тоггл не был выбран пользователем - убираем queryStatus
+      if (!visualToggleStatus) {
+        setQueryStatus(undefined);
+      }
     }
-  }, []);
+  }, [queryStatus, visualToggleStatus]);
 
+  // ✅ ИСПРАВЛЕНО: Тоггл синхронизирует визуальное и логическое состояния
   const handleStatusChange = useCallback((newStatus: EntityStatus) => {
-    setStatus(newStatus);
-    // Активируем загрузку при изменении фильтра (кроме active)
-    if (newStatus !== 'active') {
-      setShouldLoadData(true);
-    }
-  }, []);
-
-  const handleShowAll = useCallback(() => {
-    setShouldLoadData(true);
-    setSearchTerm('');
-    setStatus('active');
+    setVisualToggleStatus(newStatus); // Активируем тоггл визуально
+    setQueryStatus(newStatus); // Переключаем запросы на новый статус
   }, []);
 
   // ✅ РЕФАКТОРИНГ: Колбэки для диалога
   const handleCreateAction = useCallback(async (data: MapTemplateFormValues) => {
     try {
       setFormErrors({}); // Очищаем предыдущие ошибки
-      console.log('🔍 Отправляем данные:', data); // Отладка
       const result = await createMutation.mutateAsync(data);
-      console.log('🔍 Результат мутации:', result); // Отладка
       if (result.success) {
         setIsDialogOpen(false);
         setFormErrors({}); // Очищаем ошибки при успехе
-        refetch(); // ✅ Перезагружаем infinite data
+        refetch(); // Перезагружаем infinite data
+        toast.success('Шаблон карты создан', { 
+          description: `Шаблон "${data.name}" успешно создан` 
+        });
       } else {
         // Устанавливаем ошибки валидации
-        console.log('🚨 Ошибки валидации:', result.errors); // Отладка
         setFormErrors(result.errors || {});
+        if (result.errors?.general) {
+          toast.error('Ошибка создания', { 
+            description: result.errors.general 
+          });
+        }
       }
       return result;
     } catch (error) {
       // Обрабатываем ошибки сети/сервера
-      console.error('🚨 Ошибка в handleCreateAction:', error); // Отладка
-      setFormErrors({ general: error instanceof Error ? error.message : 'Неизвестная ошибка' });
+      const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      setFormErrors({ general: errorMessage });
+      toast.error('Ошибка создания', { description: errorMessage });
       throw error;
     }
   }, [createMutation, refetch]);
@@ -124,38 +138,80 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
         setIsDialogOpen(false);
         setSelectedTemplate(undefined);
         setFormErrors({}); // Очищаем ошибки при успехе
-        refetch(); // ✅ Перезагружаем infinite data
+        refetch(); // Перезагружаем infinite data
+        toast.success('Шаблон карты обновлен', { 
+          description: `Шаблон "${data.name}" успешно обновлен` 
+        });
       } else {
         // Устанавливаем ошибки валидации
         setFormErrors(result.errors || {});
+        if (result.errors?.general) {
+          toast.error('Ошибка обновления', { 
+            description: result.errors.general 
+          });
+        }
       }
       return result;
     } catch (error) {
       // Обрабатываем ошибки сети/сервера
-      setFormErrors({ general: error instanceof Error ? error.message : 'Неизвестная ошибка' });
+      const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      setFormErrors({ general: errorMessage });
+      toast.error('Ошибка обновления', { description: errorMessage });
       throw error;
     }
   }, [updateMutation, refetch]);
 
-  const handleArchiveAction = useCallback(async (template: MapTemplate) => {
-    await archiveMutation.mutateAsync(template.id);
-    // ✅ ИЗМЕНЕНИЕ: Инвалидируем infinite queries
-    queryClient.invalidateQueries({
-      predicate: (query) => query.queryKey[0] === 'mapTemplates'
+  const handleArchiveAction = useCallback((template: MapTemplate) => {
+    setConfirmDialog({
+      isOpen: true,
+      template,
+      action: 'archive'
     });
-    refetch(); // ✅ Перезагружаем infinite data
-  }, [archiveMutation, queryClient, refetch]);
+  }, []);
 
-  const handleRestoreAction = useCallback(async (template: MapTemplate) => {
-    await restoreMutation.mutateAsync(template.id);
-    // ✅ ИЗМЕНЕНИЕ: Инвалидируем infinite queries
-    queryClient.invalidateQueries({
-      predicate: (query) => query.queryKey[0] === 'mapTemplates'
+  const handleRestoreAction = useCallback((template: MapTemplate) => {
+    setConfirmDialog({
+      isOpen: true,
+      template,
+      action: 'restore'
     });
-    refetch(); // ✅ Перезагружаем infinite data
-  }, [restoreMutation, queryClient, refetch]);
+  }, []);
 
-  // ✅ СЕРВЕРНАЯ ПАГИНАЦИЯ: Данные управляются серверной таблицей через URL
+  const handleConfirmAction = useCallback(async () => {
+    if (!confirmDialog.template || !confirmDialog.action) return;
+
+    try {
+      // ✅ ИСПРАВЛЕНО: Выполняем мутацию и ждем её завершения
+      if (confirmDialog.action === 'archive') {
+        await archiveMutation.mutateAsync(confirmDialog.template.id);
+        toast.success('Шаблон архивирован', {
+          description: `Шаблон "${confirmDialog.template.name}" помещен в архив`
+        });
+      } else {
+        await restoreMutation.mutateAsync(confirmDialog.template.id);
+        toast.success('Шаблон восстановлен', {
+          description: `Шаблон "${confirmDialog.template.name}" восстановлен из архива`
+        });
+      }
+
+      // ✅ ИСПРАВЛЕНО: Ждем завершения ВСЕХ операций обновления данных
+      await Promise.all([
+        // Инвалидируем infinite queries
+        queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] === 'mapTemplates'
+        }),
+        // Перезагружаем infinite data
+        refetch()
+      ]);
+      
+      // ✅ ИСПРАВЛЕНО: Закрываем диалог и полностью очищаем состояние после завершения ВСЕХ операций
+      setConfirmDialog({ isOpen: false, template: undefined, action: undefined });
+    } catch (error) {
+      // Ошибки уже обрабатываются в мутациях через toast
+      // Диалог остается открытым при ошибке
+      console.error('Ошибка при выполнении действия:', error);
+    }
+  }, [confirmDialog, archiveMutation, restoreMutation, queryClient, refetch]);
 
   // Обработчики UI
   const handleCreateClick = () => {
@@ -195,36 +251,29 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
           <div className="relative">
             <input
               type="text"
-              placeholder="Введите шаблона карты..."
+              placeholder="Введите название шаблона карты..."
               value={searchTerm}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="pl-4 pr-4 py-2 border rounded-md w-80"
+              className="pl-4 pr-10 py-2 border rounded-md w-80"
             />
+            {searchTerm && (
+              <button
+                onClick={() => handleSearchChange('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                type="button"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
           
           {/* Фильтр статуса */}
-          {permissions.canViewArchived && (
-            <select
-              value={status}
-              onChange={(e) => handleStatusChange(e.target.value as EntityStatus)}
-              className="px-3 py-2 border rounded-md"
-            >
-              <option value="active">Активные</option>
-              <option value="archived">Архивные</option>
-              <option value="all">Все</option>
-            </select>
-          )}
-
-          {/* ✅ ДОБАВЛЕНО: Кнопка "Показать все" */}
-          {!shouldLoadData && (
-            <Button 
-              variant="outline"
-              onClick={handleShowAll}
-              disabled={isMutating}
-            >
-              Показать все
-            </Button>
-          )}
+          <StatusFilter
+            value={visualToggleStatus} // ✅ ИСПРАВЛЕНО: Используем визуальное состояние
+            onChange={handleStatusChange}
+            canViewArchived={permissions.canViewArchived}
+            size="sm"
+          />
         </div>
         
         {/* Кнопка создания */}
@@ -253,23 +302,21 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
         totalCount={totalCount}
       />
 
-      {/* ✅ ДОБАВЛЕНО: Пустое состояние когда данные не загружены */}
+      {/* ✅ ПУСТОЕ СОСТОЯНИЕ: Показывается когда пользователь ничего не выбрал */}
       {!shouldFetchData && !isLoading && (
-        <div className="rounded-md border border-dashed border-muted-foreground/25 p-12">
+        <div className="rounded-md border border-dashed border-muted-foreground/25 p-12 mx-auto max-w-2xl">
           <div className="text-center">
+            <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+              <svg className="h-6 w-6 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
             <h3 className="text-lg font-medium text-muted-foreground mb-2">
-              Используйте поиск или фильтры
+              Начните с поиска или выберите категорию
             </h3>
-            <p className="text-sm text-muted-foreground/75 mb-4">
-              Введите запрос в поиске (мин. 2 символа), выберите статус или нажмите &quot;Показать все&quot;
+            <p className="text-sm text-muted-foreground">
+              Введите название шаблона в поиск или нажмите "Активные", "Архивные" или "Все"
             </p>
-            <Button 
-              variant="outline"
-              onClick={handleShowAll}
-              disabled={isMutating}
-            >
-              Показать все шаблоны
-            </Button>
           </div>
         </div>
       )}
@@ -292,8 +339,30 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
           }}
           template={selectedTemplate}
           isPending={isMutating}
+          errors={formErrors}
         />
       )}
+
+      {/* Диалог подтверждения архивации/восстановления */}
+      <ConfirmationDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ isOpen: false, template: undefined, action: undefined })} // ✅ ИСПРАВЛЕНО: Полная очистка состояния
+        onConfirm={handleConfirmAction}
+        title={
+          confirmDialog.action === 'archive' 
+            ? 'Архивировать шаблон' 
+            : 'Восстановить шаблон'
+        }
+        description={
+          confirmDialog.action === 'archive'
+            ? `Вы действительно хотите убрать шаблон "${confirmDialog.template?.name}" в архив?`
+            : `Вы действительно хотите сделать шаблон "${confirmDialog.template?.name}" снова активным?`
+        }
+        confirmText={confirmDialog.action === 'archive' ? 'Архивировать' : 'Восстановить'}
+        variant={confirmDialog.action === 'archive' ? 'destructive' : 'default'}
+        isPending={archiveMutation.isPending || restoreMutation.isPending}
+        allowBackdropClose={!archiveMutation.isPending && !restoreMutation.isPending} // ✅ UX: Блокируем backdrop во время выполнения
+      />
     </div>
   );
 } 

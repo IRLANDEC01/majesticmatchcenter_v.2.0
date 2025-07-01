@@ -17,10 +17,8 @@ export function buildMapTemplateFormData(data: MapTemplateFormValues): FormData 
     formData.append('image', data.image);
   }
   
-  // Опциональные поля
-  if (data.description?.trim()) {
-    formData.append('description', data.description.trim());
-  }
+  // Опциональные поля - всегда добавляем для валидации
+  formData.append('description', data.description?.trim() || '');
   
   return formData;
 } 

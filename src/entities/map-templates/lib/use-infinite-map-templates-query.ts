@@ -3,7 +3,8 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo, useEffect, useCallback } from 'react';
 import { usePacerDebounce } from '@/shared/hooks';
-import { MIN_SEARCH_LENGTH, SEARCH_DEBOUNCE_DELAY_MS } from '@/lib/constants';
+import { SEARCH_DEBOUNCE_DELAY_MS } from '@/lib/constants';
+import { shouldPerformSearch, shouldDebounceSearch, normalizeSearchTerm } from '@/shared/lib/search-utils';
 import type { EntityStatus } from '@/shared/types/admin';
 
 export interface InfiniteMapTemplateParams {
@@ -45,8 +46,10 @@ export function useInfiniteMapTemplatesQuery({
   enabled = true,
 }: InfiniteMapTemplateParams) {
   // ✅ Debounce поиска с TanStack Pacer
+  // ✅ ИСПРАВЛЕНО: Debounce только для непустого поиска
+  const shouldDebounce = shouldDebounceSearch(searchTerm);
   const [debouncedSearchTerm, isDebouncing, cancelDebounce] = usePacerDebounce(
-    searchTerm.trim(), 
+    shouldDebounce ? normalizeSearchTerm(searchTerm) : '', 
     SEARCH_DEBOUNCE_DELAY_MS
   );
 
@@ -57,19 +60,19 @@ export function useInfiniteMapTemplatesQuery({
     };
   }, [cancelDebounce]);
 
+  // ✅ ИСПРАВЛЕНО: Используем немедленное значение для пустого поиска
+  const finalSearchTerm = shouldDebounce ? debouncedSearchTerm : normalizeSearchTerm(searchTerm);
+
   // ✅ Мемоизированные параметры для стабильности queryKey
   const queryParams = useMemo(() => ({
-    q: debouncedSearchTerm,
+    q: finalSearchTerm, // ✅ ИСПРАВЛЕНО: Больше не блокируется debounce при пустом поиске
     status,
     sort,
     order,
-  }), [debouncedSearchTerm, status, sort, order]);
+  }), [finalSearchTerm, status, sort, order]);
 
   // ✅ ИСПРАВЛЕНО: enabled имеет строгий приоритет
-  const shouldFetch = enabled ? (
-    debouncedSearchTerm.length >= MIN_SEARCH_LENGTH || 
-    debouncedSearchTerm.length === 0  // Только если enabled === true
-  ) : false;
+  const shouldFetch = enabled ? shouldPerformSearch(finalSearchTerm) : false;
 
   // ✅ Основной infinite query
   const infiniteQuery = useInfiniteQuery<
@@ -91,8 +94,8 @@ export function useInfiniteMapTemplatesQuery({
       });
       
       // Добавляем поиск только если есть запрос
-      if (debouncedSearchTerm) {
-        params.set('q', debouncedSearchTerm);
+      if (finalSearchTerm) {
+        params.set('q', finalSearchTerm);
       }
 
       const response = await fetch(`/api/admin/map-templates?${params}`, {
@@ -156,7 +159,7 @@ export function useInfiniteMapTemplatesQuery({
     isError: infiniteQuery.isError,
     error: infiniteQuery.error,
     isFetchingNextPage: infiniteQuery.isFetchingNextPage,
-    isDebouncing,
+    isDebouncing: shouldDebounce ? isDebouncing : false, // ✅ ИСПРАВЛЕНО: debouncing только при реальном поиске
     
     // ✅ Пагинация
     hasNextPage: infiniteQuery.hasNextPage,

@@ -2,7 +2,6 @@ import { HydratedDocument, UpdateQuery } from 'mongoose';
 import mapTemplateRepo, { IMapTemplateRepo } from '@/lib/repos/map-templates/map-template-repo';
 import searchQueue from '@/queues/search-queue';
 import searchService from '@/lib/domain/search/search-service';
-import tournamentTemplateRepo from '@/lib/repos/tournament-templates/tournament-template-repo';
 import { IMapTemplate } from '@/models/map/MapTemplate';
 import { NotFoundError, ConflictError } from '@/lib/errors';
 import { IFindParams, IFindResult } from '@/lib/repos/base-repo';
@@ -18,7 +17,7 @@ import { IImageSet, IImageKeys } from '@/models/shared/image-set-schema';
 export interface IMapTemplateService {
   createMapTemplate(data: CreateMapTemplateApiDto): Promise<HydratedDocument<IMapTemplate>>;
   getMapTemplates(options: GetMapTemplatesDto): Promise<IFindResult<IMapTemplate>>;
-  getMapTemplatesByIds(ids: string[], options: { page: number; limit: number }): Promise<IFindResult<IMapTemplate>>;
+  getMapTemplatesByIds(ids: string[], options: { page: number; limit: number; status?: 'active' | 'archived' | 'all' }): Promise<IFindResult<IMapTemplate>>;
   getMapTemplateById(id: string): Promise<HydratedDocument<IMapTemplate>>;
   updateMapTemplate(id: string, data: UpdateMapTemplateApiDto): Promise<HydratedDocument<IMapTemplate>>;
   archiveMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>>;
@@ -66,7 +65,9 @@ class MapTemplateService implements IMapTemplateService {
     // Немедленная синхронная индексация для критических операций создания
     try {
       await searchService.syncDocument('update', 'MapTemplate', newTemplate.id);
-      console.log(`🔍 [Search] Шаблон карты ${newTemplate.id} немедленно проиндексирован`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`🔍 [Search] Шаблон карты ${newTemplate.id} немедленно проиндексирован`);
+      }
     } catch (error) {
       console.error(`⚠️ [Search] Ошибка немедленной индексации шаблона ${newTemplate.id}:`, error);
       // Не прерываем выполнение, если индексация упала
@@ -82,10 +83,10 @@ class MapTemplateService implements IMapTemplateService {
   /**
    * Получает шаблоны карт по массиву ID с сохранением порядка (для результатов MeiliSearch).
    * @param {string[]} ids - Массив ID шаблонов.
-   * @param {object} options - Параметры пагинации.
+   * @param {object} options - Параметры пагинации и статуса.
    * @returns {Promise<IFindResult<IMapTemplate>>}
    */
-  async getMapTemplatesByIds(ids: string[], options: { page: number; limit: number }): Promise<IFindResult<IMapTemplate>> {
+  async getMapTemplatesByIds(ids: string[], options: { page: number; limit: number; status?: 'active' | 'archived' | 'all' }): Promise<IFindResult<IMapTemplate>> {
     if (ids.length === 0) {
       return {
         data: [],
@@ -111,10 +112,27 @@ class MapTemplateService implements IMapTemplateService {
       };
     }
 
-    // Получаем документы параллельно по ID и сохраняем порядок из MeiliSearch
-    const documentPromises = pageIds.map(id => this.repo.findById(id));
-    const documents = await Promise.all(documentPromises);
-    const orderedData = documents.filter((doc): doc is HydratedDocument<IMapTemplate> => doc !== null);
+    // ✅ ИСПРАВЛЕНО: Учитываем статус при загрузке документов
+    const includeArchived = options.status !== 'active';
+    
+    // ✅ ОПТИМИЗАЦИЯ: Один запрос вместо N+1 (было 50 запросов → стал 1 запрос)
+    const docs = await this.repo.find({
+      query: { _id: { $in: pageIds } },
+      status: 'all', // Получаем все записи, фильтруем логически
+      sort: { _id: 1 }, // Базовая сортировка для стабильности
+      limit: pageIds.length,
+      page: 1,
+    });
+
+    // Восстанавливаем порядок из MeiliSearch и фильтруем по статусу
+    const orderedData = pageIds
+      .map(id => docs.data.find(doc => doc.id === id))
+      .filter((doc): doc is HydratedDocument<IMapTemplate> => {
+        if (!doc) return false;
+        // Применяем фильтр по статусу логически
+        if (!includeArchived && doc.archivedAt) return false;
+        return true;
+      });
 
     return {
       data: orderedData,
@@ -152,18 +170,27 @@ class MapTemplateService implements IMapTemplateService {
           if (!circuitBreakerStatus) {
             try {
               // MeiliSearch поиск с фильтром по статусу
-              const searchFilters = status !== 'all' 
-                ? { status: status } 
-                : undefined;
+              const searchFilters = { status };
 
-              const searchResults = await searchService.search(q, ['mapTemplates'], searchFilters);
+              // ✅ ОПТИМИЗАЦИЯ: Передаём limit/offset напрямую в MeiliSearch 
+              // Вместо получения всех результатов и их обрезания
+              const searchResults = await searchService.search(
+                q, 
+                ['mapTemplates'], 
+                searchFilters,
+                { limit, offset: (page - 1) * limit } // Серверная пагинация
+              );
               const hits = searchResults.results.mapTemplates || [];
               
-              // Берем ID всех результатов для правильной пагинации
-              const allIds = hits.map((hit: any) => hit.id);
+              // ✅ УЛУЧШЕНИЕ Circuit Breaker: сбрасываем счетчик ошибок при успешном запросе
+              const failureCountKey = `${circuitBreakerKey}:failures`;
+              await redis.del(failureCountKey);
+              
+              // Извлекаем ID найденных шаблонов (уже ограничено limit)
+              const pageIds = hits.map((hit: any) => hit.id);
 
               // Используем новый метод getMapTemplatesByIds для получения документов с сохранением порядка
-              return this.getMapTemplatesByIds(allIds, { page, limit });
+              return this.getMapTemplatesByIds(pageIds, { page, limit, status });
             } catch (error) {
               console.error('⚠️ [Search] Ошибка MeiliSearch, fallback на MongoDB:', error);
               
@@ -208,7 +235,9 @@ class MapTemplateService implements IMapTemplateService {
           ...(sort === 'name' && { collation: { locale: 'ru', strength: 1 } })
         };
 
-        return this.repo.find(findOptions);
+        const result = await this.repo.find(findOptions);
+        
+        return result;
       },
       cacheTtls.listShort,
       tags
@@ -286,7 +315,9 @@ class MapTemplateService implements IMapTemplateService {
     // ✅ ИСПРАВЛЕНО: Немедленная синхронная индексация для критических операций
     try {
       await searchService.syncDocument('update', 'MapTemplate', updatedTemplate.id);
-      console.log(`🔍 [Search] Шаблон карты ${updatedTemplate.id} немедленно обновлен в поиске (обновление)`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`🔍 [Search] Шаблон карты ${updatedTemplate.id} немедленно обновлен в поиске (обновление)`);
+      }
     } catch (error) {
       console.error(`⚠️ [Search] Ошибка немедленной индексации при обновлении шаблона ${updatedTemplate.id}:`, error);
       // Не прерываем выполнение, если индексация упала
@@ -326,7 +357,9 @@ class MapTemplateService implements IMapTemplateService {
     // ✅ ИСПРАВЛЕНО: Немедленная синхронная индексация для критических операций
     try {
       await searchService.syncDocument('update', 'MapTemplate', archivedTemplate.id);
-      console.log(`🔍 [Search] Шаблон карты ${archivedTemplate.id} немедленно обновлен в поиске (архивация)`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`🔍 [Search] Шаблон карты ${archivedTemplate.id} немедленно обновлен в поиске (архивация)`);
+      }
     } catch (error) {
       console.error(`⚠️ [Search] Ошибка немедленной индексации при архивации шаблона ${archivedTemplate.id}:`, error);
       // Не прерываем выполнение, если индексация упала
@@ -366,7 +399,9 @@ class MapTemplateService implements IMapTemplateService {
     // ✅ ИСПРАВЛЕНО: Немедленная синхронная индексация для критических операций
     try {
       await searchService.syncDocument('update', 'MapTemplate', restoredTemplate.id);
-      console.log(`🔍 [Search] Шаблон карты ${restoredTemplate.id} немедленно обновлен в поиске (восстановление)`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`🔍 [Search] Шаблон карты ${restoredTemplate.id} немедленно обновлен в поиске (восстановление)`);
+      }
     } catch (error) {
       console.error(`⚠️ [Search] Ошибка немедленной индексации при восстановлении шаблона ${restoredTemplate.id}:`, error);
       // Не прерываем выполнение, если индексация упала

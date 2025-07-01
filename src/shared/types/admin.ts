@@ -15,6 +15,9 @@ export type Permission =
 /** Статус сущности для фильтрации */
 export type EntityStatus = 'active' | 'archived' | 'all';
 
+/** Статус сущности для фильтрации с поддержкой пустого состояния */
+export type EntityStatusOptional = EntityStatus | undefined;
+
 /** Интерфейс для проверки прав доступа */
 export interface AdminPermissions {
   canViewArchived: boolean;

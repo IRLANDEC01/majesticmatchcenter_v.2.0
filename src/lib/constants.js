@@ -108,11 +108,8 @@ export const SEARCH_DEBOUNCE_DELAY_MS = 300;
  */
 export const ADMIN_SEARCH_RESULTS_LIMIT = 15;
 
-/**
- * Фиксированный размер страницы для админских таблиц с результатами поиска сущностей.
- * Используется в TanStack Table для серверной пагинации в админ-панели.
- * @constant {number}
- */
+// @deprecated - больше не используется после миграции на infinite scroll
+// Оставлено для обратной совместимости. Удалить в версии 3.0
 export const ADMIN_TABLE_PAGE_SIZE = 15;
 
 /**

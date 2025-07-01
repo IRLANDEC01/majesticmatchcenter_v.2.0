@@ -68,4 +68,5 @@ export { AspectRatio } from './aspect-ratio';
 
 // Новый экспорт
 export { Toaster } from './sonner';
-export { FileDropzone } from './file-dropzone'; 
+export { FileDropzone } from './file-dropzone';
+export { ConfirmationDialog, type ConfirmationDialogProps } from './confirmation-dialog'; 

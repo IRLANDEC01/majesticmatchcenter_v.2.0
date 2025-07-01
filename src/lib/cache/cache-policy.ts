@@ -52,7 +52,7 @@ export const cacheKeys = {
   // Ключи для MapTemplate
   mapTemplate: (id: string) => `map-template:${id}`,
   mapTemplatesList: (page: number, limit: number, rev: number, q?: string, status?: string, sort?: string, order?: string) => {
-    const queryPart = q ? `:q${btoa(q)}` : '';
+    const queryPart = q ? `:q${Buffer.from(q, 'utf8').toString('base64')}` : '';
     const statusPart = status ? `:s${status}` : '';
     const sortPart = sort ? `:sort${sort}` : '';
     const orderPart = order ? `:ord${order}` : '';

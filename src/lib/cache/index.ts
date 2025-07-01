@@ -84,7 +84,9 @@ export async function invalidateByTags(tags: string[]): Promise<void> {
     }
 
     await pipeline.exec();
-    console.log(`Cache invalidated for tags: [${tags.join(', ')}]. Keys deleted: ${keysToDelete.length}`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`Cache invalidated for tags: [${tags.join(', ')}]. Keys deleted: ${keysToDelete.length}`);
+    }
   } catch (error) {
     console.error(`Cache Error (invalidateByTags for tags: [${tags.join(', ')}]):`, error);
     // Не прерываем выполнение, просто логируем ошибку
@@ -121,7 +123,9 @@ export async function invalidate(key: string): Promise<void> {
   }
   try {
     await redis.del(key);
-    console.log(`🧹 [Cache] Инвалидирован ключ: ${key}`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`🧹 [Cache] Инвалидирован ключ: ${key}`);
+    }
   } catch (error) {
     console.error(`Ошибка при инвалидации ключа ${key}:`, error);
   }

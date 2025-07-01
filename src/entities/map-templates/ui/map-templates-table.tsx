@@ -28,13 +28,15 @@ interface MapTemplatesTableProps {
   error: any;
   onEditAction: (template: MapTemplate) => void;
   searchTerm: string;
-  onArchiveAction: (template: MapTemplate) => Promise<void>;
-  onRestoreAction: (template: MapTemplate) => Promise<void>;
+  onArchiveAction: (template: MapTemplate) => void;
+  onRestoreAction: (template: MapTemplate) => void;
   // ✅ Новые props для infinite scroll
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   loadMore?: () => void;
   totalCount?: number;
+  // ✅ Нумерация строк
+  startIndex?: number;
 }
 
 /**
@@ -53,9 +55,10 @@ export function MapTemplatesTable({
   isFetchingNextPage = false,
   loadMore,
   totalCount,
+  startIndex = 0,
 }: MapTemplatesTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const columns = useMemo(() => createMapTemplatesColumns(), []);
+  const columns = useMemo(() => createMapTemplatesColumns(startIndex), [startIndex]);
   
   // ✅ Умная виртуализация - включается при >100 записей
   const { enableVirtual, virtualizer, debugInfo, containerRef } = useMapTemplatesVirtualizer(templates);
@@ -71,9 +74,9 @@ export function MapTemplatesTable({
     }
   }, [hasNextPage, isFetchingNextPage, loadMore]);
 
-  // ✅ Настройка Intersection Observer для автозагрузки
+  // ✅ Настройка Intersection Observer для автозагрузки (работает независимо от виртуализации)
   useEffect(() => {
-    if (!sentinelRef.current || !enableVirtual || !loadMore) {
+    if (!sentinelRef.current || !loadMore) {
       return;
     }
 
@@ -97,7 +100,7 @@ export function MapTemplatesTable({
         observerRef.current.disconnect();
       }
     };
-  }, [enableVirtual, handleLoadMore, loadMore]);
+  }, [handleLoadMore, loadMore]);
 
   // ✅ Дополнительная проверка на виртуализации при скролле
   useEffect(() => {
@@ -173,23 +176,14 @@ export function MapTemplatesTable({
   return (
     <TooltipProvider>
       <div className="space-y-4">
-        {/* ✅ Информация о загруженных данных (только для infinite scroll) */}
+        {/* Информация о загруженных данных (только для infinite scroll) */}
         {loadMore && totalCount && (
           <div className="text-sm text-muted-foreground">
             Показано {templates.length} из {totalCount} записей
-            {process.env.NODE_ENV === 'development' && (
-              <span className="ml-2">• {debugInfo}</span>
-            )}
           </div>
         )}
 
         <div className="rounded-md border">
-          {/* Debug информация для разработки (если нет infinite scroll) */}
-          {process.env.NODE_ENV === 'development' && !loadMore && (
-            <div className="text-xs text-muted-foreground p-2 border-b bg-muted/50">
-              🔧 {debugInfo}
-            </div>
-          )}
         
         {enableVirtual ? (
           // ✅ Виртуализированная таблица для больших данных
@@ -206,23 +200,9 @@ export function MapTemplatesTable({
                         key={header.id} 
                         style={{ width: header.getSize() }}
                       >
-                        {header.isPlaceholder ? null : (
-                          <div
-                            className={
-                              header.column.getCanSort() 
-                                ? 'cursor-pointer select-none flex items-center gap-2' 
-                                : ''
-                            }
-                            onClick={header.column.getToggleSortingHandler()}
-                          >
-                            {flexRender(header.column.columnDef.header, header.getContext())}
-                            {header.column.getIsSorted() && (
-                              <span className="text-xs">
-                                {header.column.getIsSorted() === 'desc' ? '↓' : '↑'}
-                              </span>
-                            )}
-                          </div>
-                        )}
+                        {header.isPlaceholder ? null : 
+                          flexRender(header.column.columnDef.header, header.getContext())
+                        }
                       </TableHead>
                     ))}
                   </TableRow>
@@ -271,23 +251,9 @@ export function MapTemplatesTable({
                       key={header.id} 
                       style={{ width: header.getSize() }}
                     >
-                      {header.isPlaceholder ? null : (
-                        <div
-                          className={
-                            header.column.getCanSort() 
-                              ? 'cursor-pointer select-none flex items-center gap-2' 
-                              : ''
-                          }
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          {header.column.getIsSorted() && (
-                            <span className="text-xs">
-                              {header.column.getIsSorted() === 'desc' ? '↓' : '↑'}
-                            </span>
-                          )}
-                        </div>
-                      )}
+                      {header.isPlaceholder ? null : 
+                        flexRender(header.column.columnDef.header, header.getContext())
+                      }
                     </TableHead>
                   ))}
                 </TableRow>

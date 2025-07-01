@@ -53,7 +53,6 @@ export function EntityTableActions({
     startTransition(async () => {
       try {
         await onArchive();
-        toast.success(`${entityType} успешно архивирован`);
       } catch (error) {
         toast.error(`Ошибка при архивации: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
       }
@@ -66,7 +65,6 @@ export function EntityTableActions({
     startTransition(async () => {
       try {
         await onRestore();
-        toast.success(`${entityType} успешно восстановлен`);
       } catch (error) {
         toast.error(`Ошибка при восстановлении: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
       }
