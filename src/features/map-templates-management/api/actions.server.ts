@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache';
 import { connectToDatabase } from '@/lib/db';
 import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
 import { createMapTemplateApiSchema, updateMapTemplateApiSchema } from '@/lib/api/schemas/map-templates/map-template-schemas';
-import { hasPermission, getCurrentAdminRole } from '@/shared/lib/permissions';
 
 // ✅ УНИФИЦИРОВАНО: Единый тип для всех действий
 export interface ActionResult {
@@ -20,17 +19,6 @@ export async function createMapTemplateAction(
   formData: FormData
 ): Promise<ActionResult> {
   try {
-    // ✅ ДОБАВЛЕНО: Проверка прав (пока через env, потом через сессию)
-    const currentRole = getCurrentAdminRole();
-    if (!currentRole) {
-      return {
-        success: false,
-        errors: { auth: 'Требуется аутентификация' }
-      };
-    }
-
-    // Примечание: Создание доступно всем админам, дополнительная проверка не нужна
-
     // ✅ ОБЯЗАТЕЛЬНО: подключение к БД
     await connectToDatabase();
 
@@ -82,17 +70,6 @@ export async function updateMapTemplateAction(
   formData: FormData
 ): Promise<ActionResult> {
   try {
-    // ✅ ДОБАВЛЕНО: Проверка прав (пока через env, потом через сессию)
-    const currentRole = getCurrentAdminRole();
-    if (!currentRole) {
-      return {
-        success: false,
-        errors: { auth: 'Требуется аутентификация' }
-      };
-    }
-
-    // Примечание: Редактирование доступно всем админам, дополнительная проверка не нужна
-
     // ✅ ОБЯЗАТЕЛЬНО: подключение к БД
     await connectToDatabase();
 
@@ -142,14 +119,6 @@ export async function updateMapTemplateAction(
  */
 export async function archiveMapTemplateAction(id: string): Promise<ActionResult> {
   try {
-    // ✅ ИСПРАВЛЕНО: Серверная валидация прав доступа
-    if (!hasPermission('archive')) {
-      return { 
-        success: false, 
-        errors: { permission: 'Недостаточно прав для архивации шаблона' }
-      };
-    }
-
     // ✅ ОБЯЗАТЕЛЬНО: подключение к БД
     await connectToDatabase();
 
@@ -174,14 +143,6 @@ export async function archiveMapTemplateAction(id: string): Promise<ActionResult
  */
 export async function restoreMapTemplateAction(id: string): Promise<ActionResult> {
   try {
-    // ✅ ИСПРАВЛЕНО: Серверная валидация прав доступа
-    if (!hasPermission('restore')) {
-      return { 
-        success: false, 
-        errors: { permission: 'Недостаточно прав для восстановления шаблона' }
-      };
-    }
-
     // ✅ ОБЯЗАТЕЛЬНО: подключение к БД
     await connectToDatabase();
 

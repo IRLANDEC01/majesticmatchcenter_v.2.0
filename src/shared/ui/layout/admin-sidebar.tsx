@@ -1,5 +1,9 @@
+'use client';
+
 import Link from 'next/link';
-import { LayoutDashboard, Newspaper, Trophy, Users, Sword, Library, Map, LucideIcon } from 'lucide-react';
+import { LayoutDashboard, Newspaper, Trophy, Users, Sword, Library, Map, Shield, LucideIcon } from 'lucide-react';
+import { useSession } from 'next-auth/react';
+import { can, type Role } from '@/shared/lib/permissions';
 
 interface NavItem {
   href: string;
@@ -8,14 +12,29 @@ interface NavItem {
 }
 
 const AdminSidebar = () => {
-  const navItems: NavItem[] = [
+  const { data: session } = useSession();
+  const role = session?.user?.role as Role | undefined;
+
+  // Базовые пункты меню (доступны всем админам)
+  const baseItems: NavItem[] = [
     { href: '/admin', label: 'Главная', icon: LayoutDashboard },
-    { href: '/admin/tournaments', label: 'Турниры', icon: Trophy },
-    { href: '/admin/players', label: 'Игроки', icon: Sword },
-    { href: '/admin/families', label: 'Семьи', icon: Users },
-    { href: '/admin/tournament-templates', label: 'Шаблоны турниров', icon: Library },
-    { href: '/admin/map-templates', label: 'Шаблоны карт', icon: Map },
-    { href: '/admin/news', label: 'Новости', icon: Newspaper },
+  ];
+
+  // Условные пункты меню на основе прав
+  const conditionalItems: (NavItem | false)[] = [
+    can(role, 'manageEntities') && { href: '/admin/tournaments', label: 'Турниры', icon: Trophy },
+    can(role, 'manageEntities') && { href: '/admin/players', label: 'Игроки', icon: Sword },
+    can(role, 'manageEntities') && { href: '/admin/families', label: 'Семьи', icon: Users },
+    can(role, 'manageEntities') && { href: '/admin/tournament-templates', label: 'Шаблоны турниров', icon: Library },
+    can(role, 'manageEntities') && { href: '/admin/map-templates', label: 'Шаблоны карт', icon: Map },
+    can(role, 'manageNews') && { href: '/admin/news', label: 'Новости', icon: Newspaper },
+    can(role, 'viewAudit') && { href: '/admin/audit', label: 'Аудит', icon: Shield },
+  ];
+
+  // Объединяем базовые и условные пункты, фильтруем false значения
+  const navItems: NavItem[] = [
+    ...baseItems,
+    ...conditionalItems.filter(Boolean) as NavItem[]
   ];
 
   return (

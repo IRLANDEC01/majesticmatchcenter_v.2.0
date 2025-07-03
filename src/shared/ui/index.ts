@@ -58,6 +58,8 @@ export { EntitySearch } from './entity-search';
 export { StatusFilter } from './status-filter';
 export { ErrorBoundary } from './error-boundary';
 export { PaginationControls } from './pagination-controls';
+export { AdminAuthGuard } from './admin-auth-guard';
+export { AuthErrorBoundary } from './auth-error-boundary';
 
 // 🎯 Универсальная виртуализация доступна через хук: useMaybeVirtualizer из '@/shared/hooks'
 
@@ -69,4 +71,5 @@ export { AspectRatio } from './aspect-ratio';
 // Новый экспорт
 export { Toaster } from './sonner';
 export { FileDropzone } from './file-dropzone';
-export { ConfirmationDialog, type ConfirmationDialogProps } from './confirmation-dialog'; 
+export { ConfirmationDialog, type ConfirmationDialogProps } from './confirmation-dialog';
+export { Skeleton } from './skeleton'; 

@@ -2,12 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
 import { handleApiError } from '@/lib/api/handle-api-error';
-import {
-  UpdateMapTemplateApiDto,
-  updateMapTemplateApiSchema,
-} from '@/lib/api/schemas/map-templates/map-template-schemas';
-import { revalidatePath } from 'next/cache';
-import mongoose from 'mongoose';
 
 /**
  * GET /api/admin/map-templates/{id}

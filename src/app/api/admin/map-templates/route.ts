@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { handleApiError } from '@/lib/api/handle-api-error';
+import { handleApiError } from '@/lib/api/handle-api-error.js';
 import {
   GetMapTemplatesDto,
   getMapTemplatesSchema,

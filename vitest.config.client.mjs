@@ -20,7 +20,10 @@ export default defineConfig({
     name: 'client',
     globals: true,
     environment: 'happy-dom',
-    include: ['src/components/**/*.test.{ts,tsx}'],
+    include: [
+      'src/components/**/*.test.{ts,tsx}',
+      'src/shared/ui/**/*.test.{ts,tsx}'
+    ],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

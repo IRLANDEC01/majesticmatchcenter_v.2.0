@@ -2,9 +2,10 @@
 
 import React, { useState, useCallback } from 'react';
 import { toast } from 'sonner';
+import { useSession } from 'next-auth/react';
+import { can, type Role } from '@/shared/lib/permissions';
 import { Button, ConfirmationDialog, StatusFilter } from "@/shared/ui";
 import { Plus, X } from "lucide-react";
-import { usePermissions } from "@/shared/hooks/use-permissions";
 import { useQueryClient } from '@tanstack/react-query';
 import {
   MapTemplatesTable, // ✅ ИЗМЕНЕНИЕ: Переходим на infinite scroll таблицу
@@ -16,15 +17,23 @@ import {
   useRestoreMapTemplateMutation,
   type MapTemplate,
 } from "@/entities/map-templates";
-import type { AdminRole, EntityStatus, EntityStatusOptional } from "@/shared/types/admin";
+import type { EntityStatus, EntityStatusOptional } from "@/shared/types/admin";
 import type { MapTemplateFormValues } from '@/lib/api/schemas/map-templates/map-template-schemas';
 
 interface MapTemplatesPageContentProps {
-  userRole: AdminRole;
+  // Роль теперь берется из сессии автоматически через useSession()
 }
 
-export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentProps) {
-  const permissions = usePermissions(userRole);
+export function MapTemplatesPageContent({}: MapTemplatesPageContentProps) {
+  // ✅ УПРОЩЕНО: Прямое использование useSession + can вместо usePermissions
+  const { data: session } = useSession();
+  const role = session?.user?.role as Role | undefined;
+  
+  // ✅ ИСПРАВЛЕНО: Упрощенные функции проверки прав (can() теперь работает с undefined)
+  const canViewArchived = can(role, 'viewArchived');
+  const canUnarchive = can(role, 'unarchive');
+  const canManageEntities = can(role, 'manageEntities');
+  
   const queryClient = useQueryClient();
   
   // ✅ ПОЛНАЯ ПУСТОТА: Никаких данных при заходе на страницу
@@ -271,7 +280,7 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
           <StatusFilter
             value={visualToggleStatus} // ✅ ИСПРАВЛЕНО: Используем визуальное состояние
             onChange={handleStatusChange}
-            canViewArchived={permissions.canViewArchived}
+            canViewArchived={canViewArchived} // ✅ УПРОЩЕНО: Прямая проверка
             size="sm"
           />
         </div>
@@ -314,9 +323,7 @@ export function MapTemplatesPageContent({ userRole }: MapTemplatesPageContentPro
             <h3 className="text-lg font-medium text-muted-foreground mb-2">
               Начните с поиска или выберите категорию
             </h3>
-            <p className="text-sm text-muted-foreground">
-              Введите название шаблона в поиск или нажмите "Активные", "Архивные" или "Все"
-            </p>
+           
           </div>
         </div>
       )}

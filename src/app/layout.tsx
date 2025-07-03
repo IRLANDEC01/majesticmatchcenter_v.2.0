@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-import GlobalHeader from "@/shared/ui/layout/global-header";
+import { GlobalHeader, Toaster } from "@/shared/ui";
 import { QueryProvider } from "@/shared/providers";
-import { Toaster } from "@/shared/ui";
+import { AuthProvider } from "@/shared/providers/auth-provider";
 import { initializeSharp } from "@/lib/image-processing/variants";
 
 // Инициализация Sharp с оптимальными настройками
@@ -28,12 +28,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           inter.className
         )}
       >
-        <QueryProvider>
-          <div className="relative flex min-h-screen flex-col bg-background">
-            <GlobalHeader />
-            <main className="flex-1">{children}</main>
-          </div>
-        </QueryProvider>
+        <AuthProvider>
+          <QueryProvider>
+            <div className="relative flex min-h-screen flex-col bg-background">
+              <GlobalHeader />
+              <main className="flex-1">{children}</main>
+            </div>
+          </QueryProvider>
+        </AuthProvider>
+        <Toaster />
       </body>
     </html>
   );

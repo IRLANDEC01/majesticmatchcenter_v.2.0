@@ -1,33 +1,14 @@
-import { Schema, model, models, type Document, type Model } from 'mongoose';
+import { Schema, model, models, type Document } from 'mongoose';
+import type { Role } from '@/shared/lib/permissions';
 
 /**
- * Роли администраторов в системе
- */
-export type AdminRole = 'super' | 'admin' | 'moderator' | 'pending';
-
-/**
- * Интерфейс администратора
+ * Интерфейс для администратора в системе
  */
 export interface IAdminUser extends Document {
-  /** Уникальный идентификатор пользователя в Яндекс ID */
-  yandexId: string;
-  /** Email адрес администратора - единственные PII-данные, которые храним */
-  email: string;
-  /** Роль в системе */
-  role: AdminRole;
-  /** Дата последнего входа */
-  lastLoginAt?: Date;
-  /** Метод обновления даты последнего входа */
-  updateLastLogin(): Promise<IAdminUser>;
-}
-
-/**
- * Интерфейс для статических методов модели
- */
-export interface IAdminUserModel extends Model<IAdminUser> {
-  findByYandexId(yandexId: string): Promise<IAdminUser | null>;
-  findByEmail(email: string): Promise<IAdminUser | null>;
-  findByRole(role: AdminRole): Promise<IAdminUser[]>;
+  yandexId: string;    // Уникальный ID из Yandex OAuth
+  email: string;       // Email администратора
+  role: Role;          // Роль: super | admin | moderator
+  lastLoginAt?: Date;  // Дата последнего входа
 }
 
 /**
@@ -38,7 +19,6 @@ const AdminUserSchema = new Schema<IAdminUser>({
     type: String,
     required: true,
     unique: true,
-    index: true,
     trim: true,
     description: 'Уникальный идентификатор пользователя в Яндекс ID (profile.sub)'
   },
@@ -51,8 +31,7 @@ const AdminUserSchema = new Schema<IAdminUser>({
   },
   role: {
     type: String,
-    enum: ['super', 'admin', 'moderator', 'pending'],
-    default: 'pending',
+    enum: ['super', 'admin', 'moderator'],
     required: true,
     description: 'Роль администратора в системе'
   },
@@ -66,17 +45,17 @@ const AdminUserSchema = new Schema<IAdminUser>({
   versionKey: false
 });
 
+
 // ✅ Индексы для производительности
 AdminUserSchema.index({ yandexId: 1 }, { unique: true });
 AdminUserSchema.index({ email: 1 });
 AdminUserSchema.index({ role: 1 });
-AdminUserSchema.index({ lastLoginAt: -1 }); // Для отчетов по активности
 
 /**
  * Виртуальные поля
  */
 AdminUserSchema.virtual('id').get(function() {
-  return this._id.toHexString();
+  return (this._id as any).toHexString();
 });
 
 // Убеждаемся, что виртуальные поля включены в JSON
@@ -92,25 +71,10 @@ AdminUserSchema.set('toJSON', {
 /**
  * Методы экземпляра
  */
-AdminUserSchema.methods.updateLastLogin = function(this: IAdminUser) {
+AdminUserSchema.methods.updateLastLogin = function() {
   this.lastLoginAt = new Date();
   return this.save();
 };
-
-/**
- * Статические методы - упрощенные для избежания TypeScript ошибок
- */
-// AdminUserSchema.statics.findByYandexId = function(yandexId: string) {
-//   return this.findOne({ yandexId });
-// };
-
-// AdminUserSchema.statics.findByEmail = function(email: string) {
-//   return this.findOne({ email: email.toLowerCase() });
-// };
-
-// AdminUserSchema.statics.findByRole = function(role: AdminRole) {
-//   return this.find({ role });
-// };
 
 /**
  * Middleware
@@ -126,6 +90,6 @@ AdminUserSchema.pre('save', function(next) {
 /**
  * Mongoose модель AdminUser
  */
-export const AdminUser = models.AdminUser || model<IAdminUser>('AdminUser', AdminUserSchema);
+const AdminUser = models.AdminUser || model<IAdminUser>('AdminUser', AdminUserSchema);
 
 export default AdminUser; 

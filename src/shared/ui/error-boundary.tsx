@@ -53,7 +53,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 /**
  * Дефолтный компонент ошибки
  */
-function DefaultErrorFallback({ 
+export function DefaultErrorFallback({ 
   error, 
   retry 
 }: { 

@@ -1,8 +1,5 @@
 // Переиспользуемые хуки
 
-// Хуки для работы с данными и состоянием
-export { usePermissions } from './use-permissions';
-
 // TanStack виртуализация - универсальный хук для любых таблиц
 export { 
   useMaybeVirtualizer, 
