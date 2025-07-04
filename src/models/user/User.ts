@@ -2,19 +2,19 @@ import { Schema, model, models, type Document } from 'mongoose';
 import type { Role } from '@/shared/lib/permissions';
 
 /**
- * Интерфейс для администратора в системе
+ * Интерфейс для пользователя системы (админ или обычный)
  */
-export interface IAdminUser extends Document {
+export interface IUser extends Document {
   yandexId: string;    // Уникальный ID из Yandex OAuth
-  email: string;       // Email администратора
-  role: Role;          // Роль: super | admin | moderator
+  email: string;       // Email пользователя
+  role: Role;          // Роль: super | admin | moderator | user
   lastLoginAt?: Date;  // Дата последнего входа
 }
 
 /**
- * Mongoose схема для администраторов
+ * Mongoose-схема для пользователей
  */
-const AdminUserSchema = new Schema<IAdminUser>({
+const UserSchema = new Schema<IUser>({
   yandexId: {
     type: String,
     required: true,
@@ -27,13 +27,14 @@ const AdminUserSchema = new Schema<IAdminUser>({
     required: true,
     lowercase: true,
     trim: true,
-    description: 'Email адрес администратора'
+    description: 'Email адрес пользователя'
   },
   role: {
     type: String,
-    enum: ['super', 'admin', 'moderator'],
+    enum: ['super', 'admin', 'moderator', 'user'],
     required: true,
-    description: 'Роль администратора в системе'
+    default: 'user',
+    description: 'Роль пользователя в системе'
   },
   lastLoginAt: {
     type: Date,
@@ -41,25 +42,24 @@ const AdminUserSchema = new Schema<IAdminUser>({
   }
 }, {
   timestamps: { createdAt: 'createdAt', updatedAt: false }, // Только createdAt, без updatedAt
-  collection: 'admin_users',
+  collection: 'users',
   versionKey: false
 });
 
-
 // ✅ Индексы для производительности
-AdminUserSchema.index({ yandexId: 1 }, { unique: true });
-AdminUserSchema.index({ email: 1 });
-AdminUserSchema.index({ role: 1 });
+UserSchema.index({ yandexId: 1 }, { unique: true });
+UserSchema.index({ email: 1 });
+UserSchema.index({ role: 1 });
 
 /**
  * Виртуальные поля
  */
-AdminUserSchema.virtual('id').get(function() {
+UserSchema.virtual('id').get(function() {
   return (this._id as any).toHexString();
 });
 
 // Убеждаемся, что виртуальные поля включены в JSON
-AdminUserSchema.set('toJSON', {
+UserSchema.set('toJSON', {
   virtuals: true,
   transform: function(doc, ret) {
     delete ret._id;
@@ -71,7 +71,7 @@ AdminUserSchema.set('toJSON', {
 /**
  * Методы экземпляра
  */
-AdminUserSchema.methods.updateLastLogin = function() {
+UserSchema.methods.updateLastLogin = function() {
   this.lastLoginAt = new Date();
   return this.save();
 };
@@ -79,7 +79,7 @@ AdminUserSchema.methods.updateLastLogin = function() {
 /**
  * Middleware
  */
-AdminUserSchema.pre('save', function(next) {
+UserSchema.pre('save', function(next) {
   // Нормализация email
   if (this.email) {
     this.email = this.email.toLowerCase().trim();
@@ -88,8 +88,8 @@ AdminUserSchema.pre('save', function(next) {
 });
 
 /**
- * Mongoose модель AdminUser
+ * Mongoose модель User
  */
-const AdminUser = models.AdminUser || model<IAdminUser>('AdminUser', AdminUserSchema);
+const User = models.User || model<IUser>('User', UserSchema);
 
-export default AdminUser; 
+export default User; 

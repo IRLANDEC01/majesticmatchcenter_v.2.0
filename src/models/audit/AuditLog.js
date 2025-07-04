@@ -3,7 +3,7 @@ import mongoose, { Schema } from 'mongoose';
 /**
  * @typedef {object} AuditLog
  * @property {mongoose.Types.ObjectId} adminId - ID администратора, совершившего действие.
- * @property {string} entity - Тип сущности (например, 'MapTemplate', 'AdminUser').
+ * @property {string} entity - Тип сущности (например, 'MapTemplate', 'User').
  * @property {mongoose.Types.ObjectId} entityId - ID конкретного документа.
  * @property {('create'|'update'|'archive'|'restore'|'delete'|'complete'|'rollback'|'owner_change'|'role_change'|'login'|'permission_grant'|'permission_revoke'|'ban'|'unban')} action - Тип действия.
  * @property {object} [changes] - Объект, описывающий изменения.
@@ -17,7 +17,7 @@ const auditLogSchema = new Schema({
   // ID администратора, который совершил действие
   adminId: {
     type: Schema.Types.ObjectId,
-    ref: 'AdminUser',
+    ref: 'User',
     required: true,
     index: true,
     comment: 'ID администратора, совершившего действие',

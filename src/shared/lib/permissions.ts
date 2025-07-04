@@ -10,7 +10,7 @@ export const PERMISSIONS = [
 export type Permission = typeof PERMISSIONS[number];
 
 /* ---------- Роли ---------- */
-export type Role = 'super' | 'admin' | 'moderator';
+export type Role = 'super' | 'admin' | 'moderator' | 'user';
 
 /* ---------- Автоматическая матрица из правил для ролей ---------- */
 function makeMatrix(
@@ -18,7 +18,7 @@ function makeMatrix(
 ): Record<Role, Record<Permission, boolean>> {
   const matrix = {} as Record<Role, Record<Permission, boolean>>;
   
-  const roles: Role[] = ['super', 'admin', 'moderator'];
+  const roles: Role[] = ['super', 'admin', 'moderator', 'user'];
   
   for (const role of roles) {
     matrix[role] = {} as Record<Permission, boolean>;
@@ -46,6 +46,9 @@ export const ROLE_MATRIX = makeMatrix({
   },
   moderator: { 
     manageNews: true 
+  },
+  user: {
+    // Обычный пользователь — без административных прав
   },
 });
 

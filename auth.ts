@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
 import Yandex from 'next-auth/providers/yandex';
 import { connectToDatabase } from '@/lib/db';
-import AdminUser from '@/models/admin/AdminUser';
+import User from '@/models/user/User';
 import { createRedisAdapter } from '@/lib/auth/redis-adapter';
 import type { Role } from '@/shared/lib/permissions';
 
@@ -48,33 +48,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user?.email) {
         await connectToDatabase();
         
-        // ✅ ИСПРАВЛЕНО: Ищем админа по yandexId (более надежно чем email)
-        const admin = user?.yandexId 
-          ? await AdminUser.findOne({ yandexId: user.yandexId })
-          : await AdminUser.findOne({ email: session.user.email }); // Fallback для совместимости
-        
-        if (admin) {
+        // ✅ Ищем пользователя по yandexId (основной ключ) или email
+        let dbUser = user?.yandexId
+          ? await User.findOne({ yandexId: user.yandexId })
+          : await User.findOne({ email: session.user.email }); // Fallback для совместимости
+
+        // ⛳ Автоматическое создание пользователя при первом логине
+        if (!dbUser && user?.yandexId && session.user?.email) {
+          dbUser = await User.create({
+            yandexId: user.yandexId,
+            email: session.user.email,
+            role: 'user',
+          });
+        }
+
+        if (dbUser) {
           // ✅ THROTTLING: Обновляем lastLoginAt максимум раз в 30 минут
           const now = new Date();
           const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
           
-          if (!admin.lastLoginAt || admin.lastLoginAt < thirtyMinutesAgo) {
-            await AdminUser.findByIdAndUpdate(admin._id, {
-              lastLoginAt: now
+          if (!dbUser.lastLoginAt || dbUser.lastLoginAt < thirtyMinutesAgo) {
+            await User.findByIdAndUpdate(dbUser._id, {
+              lastLoginAt: now,
             });
           }
           
-          // Добавляем данные админа в сессию
-          session.user.id = admin._id.toString();
-          session.user.yandexId = admin.yandexId;
-          session.user.role = admin.role as Role;
-          session.user.isAdmin = true;
-          session.user.adminId = admin._id.toString();
-        } else {
-          // ✅ ИСПРАВЛЕНО: Пользователь не администратор, но может войти
-          session.user.isAdmin = false;
-          session.user.role = undefined;
-          session.user.adminId = undefined;
+          // Заполняем сессию
+          session.user.id = dbUser._id.toString();
+          session.user.yandexId = dbUser.yandexId;
+          session.user.role = dbUser.role as Role;
+          session.user.isAdmin = dbUser.role !== 'user';
+          session.user.adminId = dbUser.role !== 'user' ? dbUser._id.toString() : undefined;
         }
       }
       

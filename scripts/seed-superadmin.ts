@@ -12,7 +12,7 @@
  */
 
 import { connectToDatabase } from '@/lib/db';
-import AdminUser from '@/models/admin/AdminUser';
+import User from '@/models/user/User';
 import AuditLog from '@/models/audit/AuditLog';
 
 async function createSuperAdmin() {
@@ -36,8 +36,8 @@ async function createSuperAdmin() {
     console.log('✅ Подключение к MongoDB установлено');
 
     // ✅ Проверка существующего пользователя
-    const existingAdmin = await AdminUser.findOne({ yandexId });
-    const existingSuperAdmin = await AdminUser.findOne({ role: 'super' });
+    const existingAdmin = await User.findOne({ yandexId });
+    const existingSuperAdmin = await User.findOne({ role: 'super' });
 
     // ✅ Подтверждение в production
     if (process.env.NODE_ENV === 'production') {
@@ -68,7 +68,7 @@ async function createSuperAdmin() {
         const needsUpdate = existingAdmin.email !== email || !existingAdmin.lastLoginAt;
         
         if (needsUpdate) {
-          adminUser = await AdminUser.findOneAndUpdate(
+          adminUser = await User.findOneAndUpdate(
             { yandexId },
             { 
               email, 
@@ -85,7 +85,7 @@ async function createSuperAdmin() {
         }
       } else {
         // Повышаем роль с audit логом
-        adminUser = await AdminUser.findOneAndUpdate(
+        adminUser = await User.findOneAndUpdate(
           { yandexId },
           { 
             email, 
@@ -99,7 +99,7 @@ async function createSuperAdmin() {
       }
     } else {
       // Создаем нового пользователя
-      adminUser = new AdminUser({
+      adminUser = new User({
         yandexId,
         email,
         role: 'super',
@@ -112,13 +112,13 @@ async function createSuperAdmin() {
 
     // ✅ Понижаем предыдущего super-admin если был другой
     if (existingSuperAdmin && existingSuperAdmin.yandexId !== yandexId) {
-      await AdminUser.findByIdAndUpdate(existingSuperAdmin._id, { role: 'admin' });
+      await User.findByIdAndUpdate(existingSuperAdmin._id, { role: 'admin' });
       console.log('✅ Предыдущий super-admin понижен до admin:', existingSuperAdmin.email);
 
       // Audit log для понижения
       await AuditLog.create({
         adminId: adminUser._id,
-        entity: 'AdminUser',
+        entity: 'User',
         entityId: existingSuperAdmin._id,
         action: 'role_change',
         changes: { role: { from: 'super', to: 'admin' } },
@@ -130,7 +130,7 @@ async function createSuperAdmin() {
     if (auditAction) {
       await AuditLog.create({
         adminId: adminUser._id,
-        entity: 'AdminUser', 
+        entity: 'User', 
         entityId: adminUser._id,
         action: auditAction,
         changes: { 

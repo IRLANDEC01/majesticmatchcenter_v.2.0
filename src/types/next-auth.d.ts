@@ -8,7 +8,7 @@ import type { Role } from '@/shared/lib/permissions';
  * Добавляет поля для:
  * - Yandex ID интеграции
  * - Ролевой модели администраторов
- * - Связи с AdminUser MongoDB коллекцией
+ * - Связи с User MongoDB коллекцией
  */
 declare module 'next-auth' {
   interface Session {
@@ -21,7 +21,7 @@ declare module 'next-auth' {
       yandexId?: string;        // Yandex profile.sub
       isAdmin?: boolean;        // Является ли пользователь администратором
       role?: Role;              // Роль администратора (super/admin/moderator)
-      adminId?: string;         // ObjectId AdminUser документа
+      adminId?: string;         // ObjectId User документа
     };
   }
 
@@ -50,6 +50,6 @@ declare module 'next-auth/jwt' {
     yandexId?: string;        // Yandex profile.sub
     isAdmin?: boolean;        // Является ли пользователь администратором
     role?: Role;              // Роль администратора
-    adminId?: string;         // ObjectId AdminUser документа
+    adminId?: string;         // ObjectId User документа
   }
 } 
