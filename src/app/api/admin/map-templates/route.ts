@@ -6,14 +6,22 @@ import {
 } from '@/lib/api/schemas/map-templates/map-template-schemas';
 import mapTemplateService from '@/lib/domain/map-templates/map-template-service';
 import { connectToDatabase } from '@/lib/db';
+import { authorize } from '@/shared/lib/authorize';
 
 /**
  * Обработчик GET-запроса для получения шаблонов карт.
+ * 🛡️ ЗАЩИЩЕНО: Требует право 'manageEntities'
  * @param {Request} request - Входящий запрос.
  * @returns {Promise<NextResponse>}
  */
 export async function GET(request: NextRequest) {
   try {
+    // 🛡️ Проверка прав доступа
+    const authResult = await authorize('manageEntities');
+    if (!authResult.success) {
+      return authResult.response;
+    }
+
     // Инициализируем подключение к базе данных
     await connectToDatabase();
     

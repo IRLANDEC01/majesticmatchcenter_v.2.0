@@ -18,7 +18,6 @@ const UserSchema = new Schema<IUser>({
   yandexId: {
     type: String,
     required: true,
-    unique: true,
     trim: true,
     description: 'Уникальный идентификатор пользователя в Яндекс ID (profile.sub)'
   },
@@ -47,10 +46,9 @@ const UserSchema = new Schema<IUser>({
 });
 
 // ✅ Индексы для производительности
-UserSchema.index({ yandexId: 1 }, { unique: true });
 UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
-
+UserSchema.index({ yandexId: 1 }, { unique: true });
 /**
  * Виртуальные поля
  */

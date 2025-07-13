@@ -1,80 +1,84 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/../auth';
-import { can, Permission, Role } from '@/shared/lib/permissions';
+import { can, type Permission, type Role } from './permissions';
 
 /**
- * Результат авторизации (успешный)
+ * Результат авторизации для API Routes
  */
-export interface AuthorizeSuccess {
-  adminId: string;
-  role: Role;
+export type AuthorizeResult = 
+  | { success: true; user: { id: string; role: Role; isAdmin: boolean } }
+  | { success: false; response: Response };
+
+/**
+ * HOF-гарда для Server Actions
+ * Проверяет права доступа и оборачивает целевую функцию
+ */
+export function must(permission: Permission) {
+  return function <T extends any[], R>(
+    target: (...args: T) => Promise<R>
+  ) {
+    return async (...args: T): Promise<R> => {
+      const session = await auth();
+      
+      // Проверка аутентификации
+      if (!session?.user?.isAdmin) {
+        throw new Error('Доступ запрещен: требуется административная роль');
+      }
+      
+      // Проверка права
+      if (!can(session.user.role as Role, permission)) {
+        throw new Error(`Доступ запрещен: требуется право "${permission}"`);
+      }
+      
+      return target(...args);
+    };
+  };
 }
 
 /**
- * ✅ ИСПРАВЛЕНО: Упрощенная типизация результата авторизации
- * Возвращаем либо успешный объект, либо NextResponse напрямую
+ * Гарда для API Routes
+ * Возвращает объект с результатом авторизации
  */
-export type AuthorizeResult = AuthorizeSuccess | NextResponse;
-
-/**
- * Серверный guard для проверки прав доступа в API routes
- * 
- * @param request - NextRequest объект
- * @param permission - одно право или массив прав для проверки
- * @returns объект с adminId и role при успехе, NextResponse с ошибкой при отказе
- * 
- * @example
- * ```typescript
- * // Проверка результата
- * const authCheck = await authorize(request, 'manageEntities');
- * if (authCheck instanceof NextResponse) return authCheck;
- * 
- * // Множественные права
- * const authCheck = await authorize(request, ['viewArchived', 'unarchive']);
- * if (authCheck instanceof NextResponse) return authCheck;
- * ```
- */
-export async function authorize(
-  request: NextRequest, 
-  permission: Permission | Permission[]
-): Promise<AuthorizeResult> {
-  const session = await auth();
-  
-  if (!session?.user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    );
+export async function authorize(permission: Permission): Promise<AuthorizeResult> {
+  try {
+    const session = await auth();
+    
+    // Проверка аутентификации
+    if (!session?.user?.isAdmin) {
+      return {
+        success: false,
+        response: new Response(
+          JSON.stringify({ error: 'Доступ запрещен: требуется административная роль' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        )
+      };
+    }
+    
+    // Проверка права
+    if (!can(session.user.role as Role, permission)) {
+      return {
+        success: false,
+        response: new Response(
+          JSON.stringify({ error: `Доступ запрещен: требуется право "${permission}"` }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        )
+      };
+    }
+    
+    return {
+      success: true,
+      user: {
+        id: session.user.id,
+        role: session.user.role as Role,
+        isAdmin: session.user.isAdmin
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      response: new Response(
+        JSON.stringify({ error: 'Ошибка авторизации' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      )
+    };
   }
-
-  const { role, adminId, isAdmin } = session.user as { role?: Role; adminId?: string; isAdmin?: boolean };
-  
-  // ✅ ИСПРАВЛЕНО: Проверяем что пользователь администратор и есть роль
-  if (!isAdmin || !role || !adminId) {
-    return NextResponse.json(
-      { error: 'Access denied. Admin privileges required.' },
-      { status: 403 }
-    );
-  }
-  
-  // Проверяем права: одно или массив
-  const hasPermission = Array.isArray(permission)
-    ? permission.every((perm) => can(role, perm))
-    : can(role, permission);
-  
-  if (!hasPermission) {
-    return NextResponse.json(
-      { error: 'Forbidden' },
-      { status: 403 }
-    );
-  }
-
-  return { adminId, role };
-}
-
-/**
- * ✅ ИСПРАВЛЕНО: Упрощенный type guard для проверки ошибки
- */
-export function isAuthError(result: AuthorizeResult): result is NextResponse {
-  return result instanceof NextResponse;
 } 

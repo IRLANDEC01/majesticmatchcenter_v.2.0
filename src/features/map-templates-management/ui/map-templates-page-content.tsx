@@ -286,13 +286,15 @@ export function MapTemplatesPageContent({}: MapTemplatesPageContentProps) {
         </div>
         
         {/* Кнопка создания */}
-        <Button 
-          onClick={handleCreateClick}
-          disabled={isMutating}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Создать шаблон
-        </Button>
+        {canManageEntities && (
+          <Button 
+            onClick={handleCreateClick}
+            disabled={isMutating}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Создать шаблон
+          </Button>
+        )}
       </div>
 
       {/* ✅ INFINITE SCROLL ТАБЛИЦА: Умная виртуализация + автозагрузка */}

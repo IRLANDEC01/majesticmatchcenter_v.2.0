@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { Shield } from 'lucide-react';
-import { Button } from '@/shared/ui/button';
-import { useSession, signIn, signOut } from 'next-auth/react';
+import Link from "next/link";
+import { Shield } from "lucide-react";
+import { Button } from "@/shared/ui/button";
+import { useSession, signIn, signOut } from "next-auth/react";
 
 /**
  * Глобальный хедер для всех страниц с авторизацией
@@ -11,8 +11,7 @@ import { useSession, signIn, signOut } from 'next-auth/react';
  */
 const GlobalHeader = () => {
   const { data: session } = useSession();
-  const role = session?.user?.role;
-  const isAdmin = !!role; // Если есть роль - значит админ
+  const isAdmin = session?.user?.isAdmin;
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -25,28 +24,25 @@ const GlobalHeader = () => {
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
           <nav className="flex items-center space-x-2">
-            {/* Показываем ссылку на админ-панель только для пользователей с ролью */}
             {isAdmin && (
-              <Button asChild variant="ghost">
-                <Link href="/admin">
-                  Админ-панель
-                </Link>
+              <Button
+                asChild
+                variant="ghost"
+                onClick={() => (window.location.href = "/admin")}
+              >
+                <a href="/admin">Админ-панель</a>
               </Button>
             )}
-            
-            {/* Кнопки авторизации */}
+
             {session ? (
-              <Button 
-                variant="outline" 
-                onClick={() => signOut()}
+              <Button
+                variant="outline"
+                onClick={() => signOut({ redirect: true, callbackUrl: "/" })}
               >
                 Выйти
               </Button>
             ) : (
-              <Button 
-                variant="default" 
-                onClick={() => signIn('yandex')}
-              >
+              <Button variant="default" onClick={() => signIn("yandex")}>
                 Войти
               </Button>
             )}
@@ -57,4 +53,4 @@ const GlobalHeader = () => {
   );
 };
 
-export default GlobalHeader; 
+export default GlobalHeader;

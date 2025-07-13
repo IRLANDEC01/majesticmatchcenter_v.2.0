@@ -70,7 +70,6 @@ function createClient(options: RedisOptions, clientType: 'API' | 'Worker' | 'Ses
   const client = new Redis(REDIS_URL, options);
 
   client.on('connect', () => {
-    console.log(`✅ [Redis:${clientType}] Клиент успешно подключен к ${client.options.host}:${client.options.port} (db=${client.options.db || 0})`);
     if (clientType === 'API') {
       consecutiveFailures = 0;
       if (circuitState !== 'CLOSED') {

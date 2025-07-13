@@ -13,15 +13,16 @@ import { getApiRedisClient } from '@/lib/redis-clients';
 import { revalidateTag } from 'next/cache';
 import { uploadImageVariants, deleteImageVariants } from '@/lib/s3/upload';
 import { IImageSet, IImageKeys } from '@/models/shared/image-set-schema';
+import mongoose from 'mongoose';
 
 export interface IMapTemplateService {
-  createMapTemplate(data: CreateMapTemplateApiDto): Promise<HydratedDocument<IMapTemplate>>;
+  createMapTemplate(data: CreateMapTemplateApiDto, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<IMapTemplate>>;
   getMapTemplates(options: GetMapTemplatesDto): Promise<IFindResult<IMapTemplate>>;
   getMapTemplatesByIds(ids: string[], options: { page: number; limit: number; status?: 'active' | 'archived' | 'all' }): Promise<IFindResult<IMapTemplate>>;
   getMapTemplateById(id: string): Promise<HydratedDocument<IMapTemplate>>;
-  updateMapTemplate(id: string, data: UpdateMapTemplateApiDto): Promise<HydratedDocument<IMapTemplate>>;
-  archiveMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>>;
-  restoreMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>>;
+  updateMapTemplate(id: string, data: UpdateMapTemplateApiDto, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<IMapTemplate>>;
+  archiveMapTemplate(id: string, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<IMapTemplate>>;
+  restoreMapTemplate(id: string, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<IMapTemplate>>;
 }
 
 /**
@@ -35,7 +36,7 @@ class MapTemplateService implements IMapTemplateService {
    * @param {CreateMapTemplateApiDto} data - Данные для создания шаблона.
    * @returns {Promise<HydratedDocument<IMapTemplate>>} - Созданный объект шаблона карты.
    */
-  async createMapTemplate(data: CreateMapTemplateApiDto): Promise<HydratedDocument<IMapTemplate>> {
+  async createMapTemplate(data: CreateMapTemplateApiDto, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<IMapTemplate>> {
     const existingTemplate = await this.repo.findOne({ name: data.name });
     if (existingTemplate) {
       throw new ConflictError(`Шаблон карты с именем "${data.name}" уже существует.`);
@@ -54,7 +55,7 @@ class MapTemplateService implements IMapTemplateService {
     const newTemplate = await this.repo.create({
       ...data,
       ...imagePayload,
-    });
+    }, adminId);
 
     // Инвалидация кэша списков
     await cache.incrementListRevision(cacheKeys.mapTemplatesRev());
@@ -273,7 +274,7 @@ class MapTemplateService implements IMapTemplateService {
    * @param {UpdateMapTemplateApiDto} data - Данные для обновления.
    * @returns {Promise<HydratedDocument<IMapTemplate>>} - Обновленный объект.
    */
-  async updateMapTemplate(id: string, data: UpdateMapTemplateApiDto): Promise<HydratedDocument<IMapTemplate>> {
+  async updateMapTemplate(id: string, data: UpdateMapTemplateApiDto, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<IMapTemplate>> {
     const templateToUpdate = await this.getMapTemplateById(id);
 
     if (data.name && data.name !== templateToUpdate.name) {
@@ -298,7 +299,7 @@ class MapTemplateService implements IMapTemplateService {
       }
     }
     
-    const updatedTemplate = await this.repo.save(templateToUpdate);
+    const updatedTemplate = await this.repo.save(templateToUpdate, adminId);
 
     if (!updatedTemplate) {
       throw new ConflictError('Не удалось обновить шаблон карты.');
@@ -334,7 +335,7 @@ class MapTemplateService implements IMapTemplateService {
    * @param {string} id - ID шаблона для архивации.
    * @returns {Promise<HydratedDocument<IMapTemplate>>} - Архивированный шаблон.
    */
-  async archiveMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>> {
+  async archiveMapTemplate(id: string, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<IMapTemplate>> {
     const template = await this.repo.findById(id, { includeArchived: true });
 
     if (!template) {
@@ -344,7 +345,7 @@ class MapTemplateService implements IMapTemplateService {
       throw new ConflictError('Этот шаблон уже находится в архиве.');
     }
     
-    const archivedTemplate = await this.repo.archive(id);
+    const archivedTemplate = await this.repo.archive(id, adminId);
 
     // Инвалидация кэша
     await cache.invalidateByTags([cacheTags.mapTemplate(id), cacheTags.mapTemplatesList()]);
@@ -376,7 +377,7 @@ class MapTemplateService implements IMapTemplateService {
    * @param {string} id - ID шаблона для восстановления.
    * @returns {Promise<HydratedDocument<IMapTemplate>>} - Восстановленный шаблон.
    */
-  async restoreMapTemplate(id: string): Promise<HydratedDocument<IMapTemplate>> {
+  async restoreMapTemplate(id: string, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<IMapTemplate>> {
     const template = await this.repo.findById(id, { includeArchived: true });
 
     if (!template) {
@@ -386,7 +387,7 @@ class MapTemplateService implements IMapTemplateService {
       throw new ConflictError('Этот шаблон не находится в архиве.');
     }
 
-    const restoredTemplate = await this.repo.restore(id);
+    const restoredTemplate = await this.repo.restore(id, adminId);
     
     // Инвалидация кэша
     await cache.invalidateByTags([cacheTags.mapTemplate(id), cacheTags.mapTemplatesList()]);

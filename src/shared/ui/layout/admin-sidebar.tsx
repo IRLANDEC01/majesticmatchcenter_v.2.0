@@ -15,6 +15,9 @@ const AdminSidebar = () => {
   const { data: session } = useSession();
   const role = session?.user?.role as Role | undefined;
 
+  // Проверяем право manageEntities напрямую через матрицу ролей
+  const hasManage = can(role, 'manageEntities');
+
   // Базовые пункты меню (доступны всем админам)
   const baseItems: NavItem[] = [
     { href: '/admin', label: 'Главная', icon: LayoutDashboard },
@@ -22,11 +25,11 @@ const AdminSidebar = () => {
 
   // Условные пункты меню на основе прав
   const conditionalItems: (NavItem | false)[] = [
-    can(role, 'manageEntities') && { href: '/admin/tournaments', label: 'Турниры', icon: Trophy },
-    can(role, 'manageEntities') && { href: '/admin/players', label: 'Игроки', icon: Sword },
-    can(role, 'manageEntities') && { href: '/admin/families', label: 'Семьи', icon: Users },
-    can(role, 'manageEntities') && { href: '/admin/tournament-templates', label: 'Шаблоны турниров', icon: Library },
-    can(role, 'manageEntities') && { href: '/admin/map-templates', label: 'Шаблоны карт', icon: Map },
+    hasManage && { href: '/admin/tournaments', label: 'Турниры', icon: Trophy },
+    hasManage && { href: '/admin/players', label: 'Игроки', icon: Sword },
+    hasManage && { href: '/admin/families', label: 'Семьи', icon: Users },
+    hasManage && { href: '/admin/tournament-templates', label: 'Шаблоны турниров', icon: Library },
+    hasManage && { href: '/admin/map-templates', label: 'Шаблоны карт', icon: Map },
     can(role, 'manageNews') && { href: '/admin/news', label: 'Новости', icon: Newspaper },
     can(role, 'viewAudit') && { href: '/admin/audit', label: 'Аудит', icon: Shield },
   ];

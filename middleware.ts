@@ -1,5 +1,7 @@
 import { auth } from './auth';
 import { NextResponse } from 'next/server';
+import { can, type Role } from '@/shared/lib/permissions';
+import { ROUTE_PERMISSION_PREFIXES } from '@/shared/lib/route-permissions';
 
 /**
  * NextAuth.js v5 Middleware 
@@ -24,9 +26,18 @@ export default auth((req) => {
     }
     
     // Проверяем, что пользователь является администратором
-    if (!req.auth.user?.isAdmin || !req.auth.user?.role) {
+    if (!req.auth.user?.isAdmin) {
       // Обычных пользователей редиректим на главную страницу
       return NextResponse.redirect(new URL('/', req.url));
+    }
+
+    // Дополнительная проверка конкретных прав для маршрута
+    for (const [prefix, permission] of ROUTE_PERMISSION_PREFIXES) {
+      if (pathname.startsWith(prefix)) {
+        if (!can(req.auth.user.role as Role, permission)) {
+          return NextResponse.redirect(new URL('/admin', req.url));
+        }
+      }
     }
   }
   
@@ -39,11 +50,23 @@ export default auth((req) => {
       );
     }
     
-    if (!req.auth.user?.isAdmin || !req.auth.user?.role) {
+    if (!req.auth.user?.isAdmin) {
       return NextResponse.json(
         { error: 'Access denied. Admin privileges required.' }, 
         { status: 403 }
       );
+    }
+
+    // Проверка конкретных прав
+    for (const [prefix, permission] of ROUTE_PERMISSION_PREFIXES) {
+      if (pathname.startsWith(prefix)) {
+        if (!can(req.auth.user.role as Role, permission)) {
+          return NextResponse.json(
+            { error: 'Access denied. Missing permission.' },
+            { status: 403 }
+          );
+        }
+      }
     }
   }
   
@@ -58,6 +81,7 @@ export default auth((req) => {
  */
 export const config = {
   matcher: [
+    '/admin',
     '/admin/:path*',
     '/api/admin/:path*'
   ]

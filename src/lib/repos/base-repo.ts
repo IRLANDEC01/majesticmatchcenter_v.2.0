@@ -31,14 +31,14 @@ export interface IFindResult<T> {
 }
 
 export interface IBaseRepo<T> {
-  create(data: Partial<T>): Promise<HydratedDocument<T>>;
+  create(data: Partial<T>, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<T>>;
   find(options?: IFindParams<T>): Promise<IFindResult<T>>;
   findById(id: string, options?: { includeArchived?: boolean }): Promise<HydratedDocument<T> | null>;
   findOne(query: FilterQuery<T>, options?: { includeArchived?: boolean }): Promise<HydratedDocument<T> | null>;
-  save(doc: HydratedDocument<T>): Promise<HydratedDocument<T>>;
-  archive(id: string): Promise<HydratedDocument<T>>;
-  restore(id: string): Promise<HydratedDocument<T>>;
-  update(id: string, updateData: Partial<T>): Promise<HydratedDocument<T>>;
+  save(doc: HydratedDocument<T>, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<T>>;
+  archive(id: string, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<T>>;
+  restore(id: string, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<T>>;
+  update(id: string, updateData: Partial<T>, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<T>>;
 }
 
 /**
@@ -146,15 +146,15 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     return this.model.findOne(query).exec();
   }
 
-  async create(data: Partial<T>): Promise<HydratedDocument<T>> {
+  async create(data: Partial<T>, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<T>> {
     const newDoc = new this.model(data);
     await newDoc.save();
-    await this._logAction('create', newDoc.id, newDoc.toObject());
+    await this._logAction('create', newDoc.id, newDoc.toObject(), adminId);
     await invalidate(this.getCacheKey(newDoc.id));
     return newDoc;
   }
 
-  async update(id: string, updateData: Partial<T>): Promise<HydratedDocument<T>> {
+  async update(id: string, updateData: Partial<T>, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<T>> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new NotFoundError(`Документ с невалидным ID ${id} не может быть обновлен.`);
     }
@@ -170,14 +170,14 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
       await doc.save();
       const updatedObject = doc.toObject();
       const changes = diff(originalObject, updatedObject);
-      await this._logAction('update', doc.id, changes);
+      await this._logAction('update', doc.id, changes, adminId);
     }
 
     await invalidate(this.getCacheKey(id));
     return doc;
   }
 
-  async archive(id: string): Promise<HydratedDocument<T>> {
+  async archive(id: string, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<T>> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new NotFoundError(`Документ с невалидным ID ${id} не может быть архивирован.`);
     }
@@ -192,13 +192,13 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
 
     await this._logAction('archive', doc.id, {
       archivedAt: { from: originalArchivedAt, to: doc.archivedAt },
-    });
+    }, adminId);
 
     await invalidate(this.getCacheKey(id));
     return doc;
   }
 
-  async restore(id: string): Promise<HydratedDocument<T>> {
+  async restore(id: string, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<T>> {
     const doc = await this.findById(id, { includeArchived: true });
     if (!doc) {
       throw new NotFoundError(`Документ с ID ${id} не найден для восстановления.`);
@@ -210,7 +210,7 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
 
     await this._logAction('restore', doc.id, {
       archivedAt: { from: originalArchivedAt, to: null },
-    });
+    }, adminId);
 
     await invalidate(this.getCacheKey(id));
     return doc;
@@ -227,15 +227,15 @@ abstract class BaseRepo<T extends IArchivable> implements IBaseRepo<T> {
     return this.model.findOne(finalQuery).exec();
   }
 
-  async save(doc: HydratedDocument<T>): Promise<HydratedDocument<T>> {
+  async save(doc: HydratedDocument<T>, adminId?: mongoose.Types.ObjectId): Promise<HydratedDocument<T>> {
     const isNew = doc.isNew;
     await doc.save();
     if (isNew) {
-      await this._logAction('create', doc.id, doc.toObject());
+      await this._logAction('create', doc.id, doc.toObject(), adminId);
     } else {
       // Логируем только если были реальные изменения.
       // Метод toObject() вернет чистый объект для лога.
-      await this._logAction('update', doc.id, doc.toObject());
+      await this._logAction('update', doc.id, doc.toObject(), adminId);
     }
     await invalidate(this.getCacheKey(doc.id));
     return doc; 
